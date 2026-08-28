@@ -38,33 +38,29 @@
     .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 12px; color: #ddd; }
     .checks label { margin: 0; display: flex; gap: 6px; align-items: center; color: #ddd; }
     .checks input { width: auto; }
+    body.embed { background:#050508; }
+    body.embed header, body.embed .phone { display:none; }
+    body.embed .desk { display:block; margin:0; padding:0; max-width:none; }
+    body.embed .monitor { border:0; border-radius:0; box-shadow:none; background:#050508; }
+    body.embed .bezel { aspect-ratio:auto; height:100vh; }
   </style>
 </head>
 <body>
   <header>
     <a href="index.html">← Proyecto</a>
-    <p class="hint">Haz rápido: al pasar por un avión lo pinta y actualiza posición. Filtros al estilo FlightWall.</p>
+    <p class="hint">Vista previa en vivo. Cambiá las opciones a la derecha y el monitor se actualiza antes de guardar.</p>
   </header>
   <div class="desk">
     <div class="monitor"><div class="bezel">
-      <div class="setup" id="boot">
-        <h1>RADAR</h1>
-        <p>Conectate a RADAR-A3F2</p>
-        <p>Clave radarpico</p>
-        <p>http://192.168.4.1</p>
-        <img class="qr" alt="QR" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://00tino.github.io/pico-vga-radar/setup.html">
-      </div>
+      <div class="setup" id="boot" style="display:none"></div>
       <canvas id="radar"></canvas>
       <div class="wall" id="wall"></div>
       <div class="scan"></div>
     </div></div>
     <div class="phone">
       <div class="notch"></div>
-      <div class="wifi-banner" id="banner">Wi-Fi: RADAR-A3F2 · sin internet</div>
+      <div class="wifi-banner" id="banner">Preview · no guarda en el Pico</div>
       <form id="f">
-        <label>Wi-Fi de casa (2.4 GHz)</label>
-        <input name="ssid" value="Casa-2.4">
-        <input name="pass" type="password" value="********">
         <label>Zona</label>
         <select id="preset">
           <option value="AEP">Aeroparque (AEP)</option>
@@ -96,12 +92,14 @@
         <input id="max" type="number" value="16" min="4" max="24">
         <label>Incluir en tierra</label>
         <select id="ground"><option value="0">No</option><option value="1">Sí</option></select>
-        <button>Guardar y ver tráfico</button>
+        <button>Aplicar en preview</button>
         <p id="status"></p>
       </form>
     </div>
   </div>
 <script>
+const EMBED = new URLSearchParams(location.search).has('embed');
+if (EMBED) document.body.classList.add('embed');
 const CENTERS = { AEP:[-34.559,-58.416], EZE:[-34.822,-58.536], FDO:[-34.453,-58.590] };
 const AIR = {
   ARG:['AR','Aerolineas','#74acdf'], LAN:['LA','LATAM','#e0021a'], LPE:['LA','LATAM','#e0021a'],
@@ -111,14 +109,12 @@ const AIR = {
   GLG:['AV','Avianca','#ee2a24'], TAM:['JJ','LATAM BR','#e0021a'], AZU:['AD','Azul','#0033a0'],
   AFR:['AF','Air France','#051e3e'], KLM:['KL','KLM','#00a1de'], DLH:['LH','Lufthansa','#05164d'],
   BAW:['BA','British','#075aaa'], UAE:['EK','Emirates','#d71a21'], AMX:['AM','Aeromexico','#000'],
-  SKU:['H2','Sky','#e30613'], ACA:['AC','Air Canada','#f01428'], QTR:['QR','Qatar','#5c0632'],
-  ETH:['ET','Ethiopian','#5b8c3e'], BOV:['OB','Boliviana','#007a3d'], LCO:['LA','LATAM Cargo','#e0021a']
+  SKU:['H2','Sky','#e30613'], LCO:['LA','LATAM Cargo','#e0021a']
 };
-const TYPES = { B738:'737-800', B38M:'737 MAX 8', A320:'A320', A20N:'A320neo', A21N:'A321neo', A359:'A350-900', E190:'E190', C208:'Caravan', LJ60:'Learjet 60', C56X:'Citation XLS', BE20:'King Air', P46T:'Meridian', SIRA:'Sirius', ECHO:'Echo', NG5:'Savage', C172:'C172' };
+const TYPES = { B738:'737-800', B38M:'737 MAX 8', A320:'A320', A20N:'A320neo', A21N:'A321neo', A359:'A350-900', E190:'E190', C208:'Caravan', LJ60:'Learjet 60', C56X:'Citation XLS', BE20:'King Air', P46T:'Meridian' };
 const HELI = /^(R44|R66|B06|B407|B429|B212|A109|A139|EC20|EC30|EC35|EC45|H160|S76|AS50|AS55|MI8|H125|H135|H145)/;
 const BIZ = /^(LJ|C25|C50|C55|C56|C68|C70|CL30|CL60|GLF|GLEX|GL5T|BE20|BE40|HA4T|FA5|P46T|EA50)/;
 const AIRL = /^(A3|A2|B7|B38|E1|E19|E29|AT7|CRJ|DH8)/;
-
 function airlineOf(cs) {
   const raw = (cs||'').toUpperCase();
   const letters = raw.replace(/[^A-Z]/g,'');
@@ -145,24 +141,15 @@ function logoHTML(a) {
   const [iata, name, color] = airlineOf(a.flight);
   const fb = `<div class="fb" style="background:${color}">${(iata||name||'GA').slice(0,2)}</div>`;
   if (!iata) return fb;
-  const u1 = `https://images.kiwi.com/airlines/64/${iata}.png`;
-  const u2 = `https://content.airhex.com/content/logos/airlines_${iata}_75_75_s.png`;
-  return `<img alt="${iata}" src="${u1}" onerror="if(!this.dataset.b){this.dataset.b=1;this.src='${u2}';}else{this.outerHTML=this.dataset.fb;}" data-fb='${fb}'>`;
+  return `<img alt="${iata}" src="https://images.kiwi.com/airlines/64/${iata}.png" onerror="this.outerHTML=this.dataset.fb" data-fb='${fb}'>`;
 }
-
 const radar = document.getElementById('radar');
 const wall = document.getElementById('wall');
-let RAW=[], AC=[], running=false, view='hybrid', theme='crt_amber';
+let RAW=[], AC=[], running=false, looping=false, view='hybrid', theme='crt_amber';
 let center=CENTERS.AEP, includeGround=false, radiusKm=80, maxN=16;
 let beam=-Math.PI/2, lastSweep=0, loading=false, want={air:true,ga:true,biz:true,heli:true};
-
 function readWant() {
-  want = {
-    air: document.getElementById('fAir').checked,
-    ga: document.getElementById('fGa').checked,
-    biz: document.getElementById('fBiz').checked,
-    heli: document.getElementById('fHeli').checked
-  };
+  want = { air:fAir.checked, ga:fGa.checked, biz:fBiz.checked, heli:fHeli.checked };
 }
 function applyFilters() {
   AC = RAW.filter(a => {
@@ -179,11 +166,12 @@ async function loadLive() {
   try {
     const res = await fetch('live.json?t=' + Date.now());
     const data = await res.json();
-    const prev = Object.fromEntries(AC.map(a => [a.hex, {paint:a.paint, lat:a.lat, lon:a.lon}]));
+    const prev = Object.fromEntries(AC.map(a => [a.hex, a.paint]));
     RAW = data.ac || [];
     applyFilters();
-    AC.forEach(a => { if (prev[a.hex]) a.paint = prev[a.hex].paint; });
-    document.getElementById('status').textContent = AC.length + ' aeronaves · filtros activos';
+    AC.forEach(a => { if (prev[a.hex] != null) a.paint = prev[a.hex]; });
+    const st = document.getElementById('status');
+    if (st) st.textContent = AC.length + ' aeronaves · preview';
     renderWall();
   } finally { loading = false; }
 }
@@ -200,7 +188,8 @@ function ping(a) {
 function grabForm() {
   view = document.getElementById('mode').value;
   theme = document.getElementById('theme').value;
-  center = CENTERS[document.getElementById('preset').value];
+  const p = document.getElementById('preset').value;
+  center = CENTERS[p] || CENTERS.AEP;
   includeGround = document.getElementById('ground').value === '1';
   radiusKm = Number(document.getElementById('radius').value) || 80;
   maxN = Math.max(4, Math.min(24, Number(document.getElementById('max').value)||16));
@@ -209,24 +198,31 @@ function grabForm() {
   wall.style.display = view==='radar' ? 'none' : 'block';
   wall.classList.toggle('full', view==='wall');
 }
-
-document.getElementById('f').addEventListener('submit', async e => {
-  e.preventDefault();
-  grabForm();
-  document.getElementById('banner').textContent = 'Wi-Fi: Casa-2.4 · en línea';
-  document.getElementById('boot').style.display = 'none';
-  await loadLive();
+function applyIncoming(c) {
+  if (c.preset && CENTERS[c.preset]) document.getElementById('preset').value = c.preset;
+  if (c.mode) document.getElementById('mode').value = c.mode;
+  if (c.theme) document.getElementById('theme').value = c.theme;
+  if (c.radius_km) document.getElementById('radius').value = c.radius_km;
+  if (c.max_aircraft) document.getElementById('max').value = c.max_aircraft;
+  document.getElementById('ground').value = c.include_ground ? '1' : '0';
+  if ('f_air' in c) fAir.checked = !!c.f_air;
+  if ('f_ga' in c) fGa.checked = !!c.f_ga;
+  if ('f_biz' in c) fBiz.checked = !!c.f_biz;
+  if ('f_heli' in c) fHeli.checked = !!c.f_heli;
+  grabForm(); applyFilters(); renderWall();
   running = true;
-  if (view !== 'wall') loop();
-});
+  if (view !== 'wall' && !looping) loop();
+}
+const fAir=document.getElementById('fAir'), fGa=document.getElementById('fGa'), fBiz=document.getElementById('fBiz'), fHeli=document.getElementById('fHeli');
+document.getElementById('f').addEventListener('submit', e => { e.preventDefault(); grabForm(); applyFilters(); renderWall(); running=true; if(view!=='wall'&&!looping) loop(); });
 ['preset','radius','max','ground','mode','theme','fAir','fGa','fBiz','fHeli'].forEach(id => {
   document.getElementById(id).addEventListener('change', () => {
-    if (!running) return;
     grabForm(); applyFilters(); renderWall();
-    if (view !== 'wall') loop();
+    running = true;
+    if (view !== 'wall' && !looping) loop();
   });
 });
-
+window.addEventListener('message', ev => { if (ev.data && ev.data.type==='config') applyIncoming(ev.data); });
 function colors() {
   if (theme==='crt_green') return {fg:'#7dff7a',bg:'#031105'};
   if (theme==='atc_dark') return {fg:'#7ec8e3',bg:'#07090c'};
@@ -241,11 +237,10 @@ function renderWall() {
       <div class="metrics">Alt · ${fmtAlt(a.alt)}, Spd · ${ktToMph(a.gs)}<br>Trk · ${a.track==null?'—':Math.round(a.track)+'deg'}, Vr · ${fmtVr(a.vr)}</div></div>`;
   }).join('');
 }
-function angDiff(a,b) {
-  let d=a-b; while(d>Math.PI)d-=Math.PI*2; while(d<-Math.PI)d+=Math.PI*2; return d;
-}
+function angDiff(a,b) { let d=a-b; while(d>Math.PI)d-=Math.PI*2; while(d<-Math.PI)d+=Math.PI*2; return d; }
 function loop() {
-  if (!running || view==='wall') return;
+  if (!running || view==='wall') { looping=false; return; }
+  looping = true;
   const ctx = radar.getContext('2d');
   const w = radar.width = radar.clientWidth || 640;
   const h = radar.height = radar.clientHeight || 480;
@@ -276,9 +271,7 @@ function loop() {
     const x = cx + ((a.lon-center[1])/span)*R;
     const y = cy - ((a.lat-center[0])/span)*R;
     const az = Math.atan2(y-cy, x-cx);
-    if (Math.abs(angDiff(az, beam)) < 0.09) {
-      if (!a.hit) { a.hit = true; ping(a); }
-    } else a.hit = false;
+    if (Math.abs(angDiff(az, beam)) < 0.09) { if (!a.hit) { a.hit = true; ping(a); } } else a.hit = false;
     a.paint = Math.max(0, (a.paint||0) - 0.006);
     ctx.globalAlpha = 0.16 + a.paint*0.84;
     ctx.fillStyle = fg;
@@ -290,6 +283,8 @@ function loop() {
   });
   requestAnimationFrame(loop);
 }
+grabForm();
+loadLive().then(() => { running = true; if (view !== 'wall') loop(); });
 </script>
 </body>
 </html>
