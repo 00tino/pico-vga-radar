@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pico VGA Radar</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="wrap">
+    <p class="kicker">Pico 2 W · VGA · ADS-B</p>
+    <h1>Tu ventana al cielo, en un monitor viejo.</h1>
+    <p>Un radar de vuelos en vivo. Se configura desde el celular, como The FlightWall, pero con una web. Sin app y sin abono.</p>
+    <div class="preview" aria-hidden="true">
+      <span class="dot" style="left:38%;top:42%;transform:rotate(40deg)"></span>
+      <span class="dot" style="left:58%;top:28%;transform:rotate(210deg)"></span>
+      <span class="dot" style="left:62%;top:61%;transform:rotate(95deg)"></span>
+    </div>
+    <p><a class="btn" href="setup.html">Abrir wizard de configuracion</a></p>
+    <p><a class="btn ghost" href="https://github.com/00tino/pico-vga-radar">Ver el repo en GitHub</a></p>
+    <div class="card">
+      <h2>Como arranca</h2>
+      <ol>
+        <li>Prendes el Pico. Si no hay Wi-Fi, crea la red <code>RADAR-XXXX</code>.</li>
+        <li>El monitor muestra la clave y un QR a <code>http://192.168.4.1</code>.</li>
+        <li>Desde el celular elegis zona, filtros y estilo.</li>
+        <li>Guarda, reinicia y empieza a pintar trafico.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h2>Datos</h2>
+      <p>adsb.lol de principal. OpenSky de respaldo. Poll cada 15–30 s. Todo gratis para uso personal.</p>
+    </div>
+  </div>
+</body>
+</html>

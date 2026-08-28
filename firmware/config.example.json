@@ -1,0 +1,21 @@
+{
+  "wifi": { "ssid": "", "pass": "" },
+  "location": {
+    "preset": "AEP",
+    "lat": -34.559,
+    "lon": -58.416,
+    "radius_km": 40
+  },
+  "mode": "hybrid",
+  "theme": "crt_amber",
+  "units": "metric",
+  "filters": {
+    "alt_min_ft": 0,
+    "alt_max_ft": 45000,
+    "include_ground": false,
+    "types": ["adsb", "ga"],
+    "max_aircraft": 8
+  },
+  "track": { "enabled": false, "idents": [] },
+  "poll_s": 20
+}

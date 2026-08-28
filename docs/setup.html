@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Configurar radar</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="wrap">
+    <nav><a href="index.html">Inicio</a></nav>
+    <p class="kicker">Setup</p>
+    <h1>Configurar el radar</h1>
+    <p class="hint">En el Pico esta pagina vive en 192.168.4.1. Aca es una demo: guarda en este navegador.</p>
+    <form id="f">
+      <div class="card">
+        <label>Wi-Fi de casa (solo 2.4 GHz)</label>
+        <input name="ssid" placeholder="Nombre de la red" required>
+        <input name="pass" type="password" placeholder="Clave" autocomplete="new-password">
+      </div>
+      <div class="card">
+        <label>Zona</label>
+        <select name="preset" id="preset">
+          <option value="AEP">Aeroparque (AEP)</option>
+          <option value="EZE">Ezeiza (EZE)</option>
+          <option value="FDO">San Fernando (FDO)</option>
+          <option value="custom">Coordenadas</option>
+        </select>
+        <div class="row" id="custom" style="display:none">
+          <div><label>Lat</label><input name="lat" value="-34.559"></div>
+          <div><label>Lon</label><input name="lon" value="-58.416"></div>
+        </div>
+        <label>Radio (km)</label>
+        <input name="radius_km" type="number" value="40" min="5" max="150">
+      </div>
+      <div class="card">
+        <label>Vista</label>
+        <select name="mode">
+          <option value="hybrid">Radar + lista</option>
+          <option value="radar">Solo radar</option>
+          <option value="wall">Solo lista (FlightWall)</option>
+        </select>
+        <label>Estilo</label>
+        <select name="theme">
+          <option value="crt_amber">CRT ambar</option>
+          <option value="crt_green">CRT verde</option>
+          <option value="atc_dark">ATC oscuro</option>
+        </select>
+        <label>Unidades</label>
+        <select name="units">
+          <option value="metric">Metricas</option>
+          <option value="imperial">Imperiales</option>
+        </select>
+      </div>
+      <div class="card">
+        <div class="row">
+          <div><label>Alt min (ft)</label><input name="alt_min_ft" type="number" value="0"></div>
+          <div><label>Alt max (ft)</label><input name="alt_max_ft" type="number" value="45000"></div>
+        </div>
+        <label>Max. aviones en pantalla</label>
+        <input name="max_aircraft" type="number" value="8" min="1" max="20">
+        <label><input name="include_ground" type="checkbox" style="width:auto;display:inline"> Incluir en tierra</label>
+      </div>
+      <button type="submit">Guardar</button>
+      <p class="ok" id="msg" hidden>Configuracion guardada en este navegador.</p>
+    </form>
+  </div>
+  <script>
+    const PRESETS = {
+      AEP: { lat: -34.559, lon: -58.416 },
+      EZE: { lat: -34.822, lon: -58.536 },
+      FDO: { lat: -34.453, lon: -58.590 }
+    };
+    const f = document.getElementById('f');
+    const custom = document.getElementById('custom');
+    document.getElementById('preset').addEventListener('change', e => {
+      custom.style.display = e.target.value === 'custom' ? 'grid' : 'none';
+      const p = PRESETS[e.target.value];
+      if (p) { f.lat.value = p.lat; f.lon.value = p.lon; }
+    });
+    const saved = localStorage.getItem('picoRadarConfig');
+    if (saved) {
+      const c = JSON.parse(saved);
+      Object.entries(c).forEach(([k,v]) => {
+        if (f[k] && f[k].type === 'checkbox') f[k].checked = !!v;
+        else if (f[k]) f[k].value = v;
+      });
+      if (c.preset === 'custom') custom.style.display = 'grid';
+    }
+    f.addEventListener('submit', e => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(f).entries());
+      data.include_ground = f.include_ground.checked;
+      data.max_aircraft = Number(data.max_aircraft);
+      data.radius_km = Number(data.radius_km);
+      localStorage.setItem('picoRadarConfig', JSON.stringify(data));
+      document.getElementById('msg').hidden = false;
+    });
+  </script>
+</body>
+</html>
