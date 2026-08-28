@@ -33,9 +33,7 @@
     }
     .setup h1 { margin: 0 0 12px; font-size: clamp(18px, 3vw, 28px); letter-spacing: .2em; }
     .setup p { margin: 6px 0; font-size: clamp(12px, 2vw, 16px); }
-    .qr {
-      margin-top: 16px; width: 34%; max-width: 160px; background: #fff; padding: 6px;
-    }
+    .qr { margin-top: 16px; width: 34%; max-width: 160px; background: #fff; padding: 6px; }
     canvas#radar { width: 100%; height: 100%; display: none; }
     .wall {
       display: none; position: absolute; right: 8px; top: 8px; bottom: 8px; width: 38%;
@@ -78,7 +76,7 @@
             <p>Conectate a &nbsp; RADAR-A3F2</p>
             <p>Clave &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; radarpico</p>
             <p>Abrí &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; http://192.168.4.1</p>
-            <img class="qr" alt="QR setup" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&amp;data=https://00tino.github.io/pico-vga-radar/setup.html">
+            <img class="qr" alt="QR setup" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://00tino.github.io/pico-vga-radar/setup.html">
           </div>
           <canvas id="radar"></canvas>
           <div class="wall" id="wall"></div>
@@ -119,30 +117,40 @@
     </div>
   </div>
 <script>
-const FLIGHTS = [
-  { cs:'ARG1450', rte:'AEP-COR', alt:9200, spd:420, trk:310, x:.42, y:.38 },
-  { cs:'LPE2451', rte:'EZE-SCL', alt:11200, spd:780, trk:250, x:.62, y:.48 },
-  { cs:'JES123', rte:'FDO-MVD', alt:3400, spd:280, trk:90, x:.55, y:.62 },
-  { cs:'FBZ811', rte:'AEP-USH', alt:7600, spd:510, trk:185, x:.33, y:.55 },
-  { cs:'GLO2080', rte:'GRU-EZE', alt:2800, spd:390, trk:20, x:.7, y:.3 }
-];
+const CALLS = ['ARG1450','LPE2451','JES123','FBZ811','GLO2080','AAL946','IBE6843','CMP234'];
+const RTES = ['AEP-COR','EZE-SCL','FDO-MVD','AEP-USH','GRU-EZE','EZE-MIA','AEP-IGR','EZE-MAD'];
+function spawn(i) {
+  const ang = (i / 8) * Math.PI * 2 + Math.random() * 0.4;
+  const dist = 0.18 + Math.random() * 0.28;
+  return {
+    cs: CALLS[i % CALLS.length],
+    rte: RTES[i % RTES.length],
+    alt: 2500 + Math.floor(Math.random()*10000),
+    spd: 280 + Math.floor(Math.random()*500),
+    trk: (ang * 180 / Math.PI + 90) % 360,
+    ang, dist,
+    turn: (Math.random() - 0.5) * 0.003
+  };
+}
+let FLIGHTS = CALLS.slice(0,5).map((_,i) => spawn(i));
 const boot = document.getElementById('boot');
 const radar = document.getElementById('radar');
 const wall = document.getElementById('wall');
 const phone = document.getElementById('phone');
-let running = false, theme = 'crt_amber';
+let running = false, theme = 'crt_amber', view = 'hybrid';
 
 document.getElementById('f').addEventListener('submit', e => {
   e.preventDefault();
-  const mode = document.getElementById('mode').value;
+  view = document.getElementById('mode').value;
   theme = e.target.theme.value;
+  FLIGHTS = CALLS.slice(0,5).map((_,i) => spawn(i));
   boot.style.display = 'none';
-  radar.style.display = (mode === 'wall') ? 'none' : 'block';
-  wall.style.display = (mode === 'radar') ? 'none' : 'block';
-  phone.innerHTML = '<div class="notch"></div><div class="wifi-banner">Wi-Fi: Casa-2.4 · en línea</div><p class="hint">El Pico reinició y ya está en tu red. El monitor pasó a modo tráfico.</p><p class="hint">Esta simulación usa vuelos de ejemplo alrededor de Buenos Aires.</p>';
+  radar.style.display = (view === 'wall') ? 'none' : 'block';
+  wall.style.display = (view === 'radar') ? 'none' : 'block';
+  phone.innerHTML = '<div class="notch"></div><div class="wifi-banner">Wi-Fi: Casa-2.4 · en línea</div><p class="hint">El Pico reinició. Los aviones se mantienen en el radio; si salen, entra otro.</p>';
   renderWall();
   running = true;
-  if (mode !== 'wall') loop();
+  if (view !== 'wall') loop();
 });
 
 function colors() {
@@ -154,31 +162,45 @@ function renderWall() {
   const c = colors();
   wall.style.color = c.fg;
   wall.innerHTML = FLIGHTS.slice(0,4).map(f =>
-    `<div class="card-f" style="border-color:${c.fg}44"><b>${f.cs}</b>${f.rte}<br>Alt ${f.alt} ft · ${f.spd} km/h · ${f.trk}°</div>`
+    `<div class="card-f" style="border-color:${c.fg}44"><b>${f.cs}</b>${f.rte}<br>Alt ${f.alt} ft · ${f.spd} km/h · ${Math.round(f.trk)}°</div>`
   ).join('');
 }
-function loop() {
+let lastWall = 0;
+function loop(t) {
   if (!running) return;
   const ctx = radar.getContext('2d');
-  const w = radar.width = radar.clientWidth;
-  const h = radar.height = radar.clientHeight;
+  const w = radar.width = radar.clientWidth || 640;
+  const h = radar.height = radar.clientHeight || 480;
   const { fg, bg } = colors();
   ctx.fillStyle = bg; ctx.fillRect(0,0,w,h);
-  const cx = w * 0.38, cy = h * 0.55;
-  ctx.strokeStyle = fg + '55'; ctx.lineWidth = 1;
-  [0.18,0.32,0.46].forEach(r => { ctx.beginPath(); ctx.arc(cx,cy,Math.min(w,h)*r,0,Math.PI*2); ctx.stroke(); });
-  ctx.beginPath(); ctx.moveTo(cx, 8); ctx.lineTo(cx, h-8); ctx.moveTo(8, cy); ctx.lineTo(w-8, cy); ctx.stroke();
-  ctx.fillStyle = fg; ctx.font = '12px monospace';
-  ctx.fillText('N', cx-4, 16); ctx.fillText('AEP', cx+8, cy-8);
-  FLIGHTS.forEach(f => {
-    const x = f.x * w, y = f.y * h;
-    ctx.save(); ctx.translate(x,y); ctx.rotate(f.trk*Math.PI/180);
-    ctx.beginPath(); ctx.moveTo(0,-7); ctx.lineTo(5,6); ctx.lineTo(-5,6); ctx.closePath(); ctx.fill();
-    ctx.restore();
-    ctx.fillText(f.cs, x+8, y-4);
-    f.x += Math.sin(f.trk*Math.PI/180)*0.0008;
-    f.y -= Math.cos(f.trk*Math.PI/180)*0.0008;
+  const left = view === 'hybrid' ? 0.62 : 1;
+  const cx = w * left * 0.5, cy = h * 0.52;
+  const R = Math.min(cx, cy) * 0.86;
+  ctx.strokeStyle = fg + '66'; ctx.lineWidth = 1;
+  [0.33, 0.66, 1].forEach(r => {
+    ctx.beginPath(); ctx.arc(cx, cy, R * r, 0, Math.PI * 2); ctx.stroke();
   });
+  ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R);
+  ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
+  ctx.fillStyle = fg; ctx.font = '12px monospace';
+  ctx.fillText('N', cx - 4, cy - R + 14);
+  ctx.fillText('AEP', cx + 6, cy - 6);
+  FLIGHTS.forEach((f, i) => {
+    f.ang += f.turn;
+    f.dist += 0.00035;
+    if (f.dist > 0.95) {
+      FLIGHTS[i] = spawn((i + 3) % CALLS.length);
+      f = FLIGHTS[i];
+    }
+    f.trk = (f.ang * 180 / Math.PI + 90 + f.turn * 800) % 360;
+    const x = cx + Math.cos(f.ang) * f.dist * R;
+    const y = cy + Math.sin(f.ang) * f.dist * R;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(f.trk * Math.PI / 180);
+    ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(5, 6); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    ctx.fillText(f.cs, x + 8, y - 4);
+  });
+  if (!lastWall || t - lastWall > 1500) { renderWall(); lastWall = t; }
   requestAnimationFrame(loop);
 }
 </script>
