@@ -5,96 +5,126 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Configurar radar</title>
   <link rel="stylesheet" href="styles.css">
+  <style>
+    .wrap { max-width: 1120px; }
+    .layout { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(280px, 1.1fr); gap: 22px; align-items: start; }
+    @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+    .monitor-frame { background: #111; border: 8px solid #2b2b2b; border-bottom-width: 22px; border-radius: 8px; }
+    .monitor-frame iframe { display: block; width: 100%; aspect-ratio: 4/3; border: 0; background: #050508; }
+    .caption { font-size: 12px; color: #9a958b; margin: 8px 0 0; }
+    .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 13px; color: #ddd; }
+    .checks label { color: #ddd; display: flex; gap: 8px; align-items: center; margin: 0; }
+    .checks input { width: auto; margin: 0; }
+  </style>
 </head>
 <body>
   <div class="wrap">
-    <nav><a href="index.html">Inicio</a></nav>
+    <nav><a href="index.html">Inicio</a> <a href="sim.html">Simulador</a></nav>
     <p class="kicker">Setup</p>
     <h1>Configurar el radar</h1>
-    <p class="hint">En el Pico esta pagina vive en 192.168.4.1. Aca es una demo: guarda en este navegador.</p>
-    <form id="f">
-      <div class="card">
-        <label>Wi-Fi de casa (solo 2.4 GHz)</label>
-        <input name="ssid" placeholder="Nombre de la red" required>
-        <input name="pass" type="password" placeholder="Clave" autocomplete="new-password">
-      </div>
-      <div class="card">
-        <label>Zona</label>
-        <select name="preset" id="preset">
-          <option value="AEP">Aeroparque (AEP)</option>
-          <option value="EZE">Ezeiza (EZE)</option>
-          <option value="FDO">San Fernando (FDO)</option>
-          <option value="custom">Coordenadas</option>
-        </select>
-        <div class="row" id="custom" style="display:none">
-          <div><label>Lat</label><input name="lat" value="-34.559"></div>
-          <div><label>Lon</label><input name="lon" value="-58.416"></div>
+    <p class="hint">La pantalla de la derecha es una vista previa. Cambiá opciones y se actualiza antes de guardar.</p>
+    <div class="layout">
+      <form id="f">
+        <div class="card">
+          <label>Wi-Fi de casa (solo 2.4 GHz)</label>
+          <input name="ssid" placeholder="Nombre de la red" required>
+          <input name="pass" type="password" placeholder="Clave" autocomplete="new-password">
         </div>
-        <label>Radio (km)</label>
-        <input name="radius_km" type="number" value="40" min="5" max="150">
-      </div>
-      <div class="card">
-        <label>Vista</label>
-        <select name="mode">
-          <option value="hybrid">Radar + lista</option>
-          <option value="radar">Solo radar</option>
-          <option value="wall">Solo lista (FlightWall)</option>
-        </select>
-        <label>Estilo</label>
-        <select name="theme">
-          <option value="crt_amber">CRT ambar</option>
-          <option value="crt_green">CRT verde</option>
-          <option value="atc_dark">ATC oscuro</option>
-        </select>
-        <label>Unidades</label>
-        <select name="units">
-          <option value="metric">Metricas</option>
-          <option value="imperial">Imperiales</option>
-        </select>
-      </div>
-      <div class="card">
-        <div class="row">
-          <div><label>Alt min (ft)</label><input name="alt_min_ft" type="number" value="0"></div>
-          <div><label>Alt max (ft)</label><input name="alt_max_ft" type="number" value="45000"></div>
+        <div class="card">
+          <label>Zona</label>
+          <select name="preset" id="preset">
+            <option value="AEP">Aeroparque (AEP)</option>
+            <option value="EZE">Ezeiza (EZE)</option>
+            <option value="FDO">San Fernando (FDO)</option>
+            <option value="custom">Coordenadas</option>
+          </select>
+          <div class="row" id="custom" style="display:none">
+            <div><label>Lat</label><input name="lat" value="-34.559"></div>
+            <div><label>Lon</label><input name="lon" value="-58.416"></div>
+          </div>
+          <label>Radio (km)</label>
+          <input name="radius_km" type="number" value="80" min="5" max="200">
         </div>
-        <label>Max. aviones en pantalla</label>
-        <input name="max_aircraft" type="number" value="8" min="1" max="20">
-        <label><input name="include_ground" type="checkbox" style="width:auto;display:inline"> Incluir en tierra</label>
+        <div class="card">
+          <label>Vista</label>
+          <select name="mode">
+            <option value="hybrid">Radar + lista</option>
+            <option value="radar">Solo radar</option>
+            <option value="wall">Solo lista (FlightWall)</option>
+          </select>
+          <label>Estilo</label>
+          <select name="theme">
+            <option value="crt_amber">CRT ambar</option>
+            <option value="crt_green">CRT verde</option>
+            <option value="atc_dark">ATC oscuro</option>
+          </select>
+        </div>
+        <div class="card">
+          <label>Qué mostrar</label>
+          <div class="checks">
+            <label><input name="f_air" type="checkbox" checked> Aerolíneas</label>
+            <label><input name="f_ga" type="checkbox" checked> Gral. aviación</label>
+            <label><input name="f_biz" type="checkbox" checked> Jets ejecutivos</label>
+            <label><input name="f_heli" type="checkbox" checked> Helicópteros</label>
+          </div>
+          <label style="margin-top:12px">Máx. aviones</label>
+          <input name="max_aircraft" type="number" value="16" min="1" max="24">
+          <label><input name="include_ground" type="checkbox" style="width:auto;display:inline"> Incluir en tierra</label>
+        </div>
+        <button type="submit">Guardar</button>
+        <p class="ok" id="msg" hidden>Guardado. En el Pico esto reinicia y aplica en el monitor.</p>
+      </form>
+      <div>
+        <div class="monitor-frame">
+          <iframe id="prev" title="Vista previa del monitor" src="sim.html?embed=1"></iframe>
+        </div>
+        <p class="caption">Vista previa del VGA. No es el Pico; usa el mismo tráfico ADS-B de ejemplo en vivo.</p>
       </div>
-      <button type="submit">Guardar</button>
-      <p class="ok" id="msg" hidden>Configuracion guardada en este navegador.</p>
-    </form>
+    </div>
   </div>
   <script>
-    const PRESETS = {
-      AEP: { lat: -34.559, lon: -58.416 },
-      EZE: { lat: -34.822, lon: -58.536 },
-      FDO: { lat: -34.453, lon: -58.590 }
-    };
+    const PRESETS = { AEP:{lat:-34.559,lon:-58.416}, EZE:{lat:-34.822,lon:-58.536}, FDO:{lat:-34.453,lon:-58.590} };
     const f = document.getElementById('f');
     const custom = document.getElementById('custom');
+    const frame = document.getElementById('prev');
+    function cfg() {
+      const data = Object.fromEntries(new FormData(f).entries());
+      data.include_ground = f.include_ground.checked;
+      data.f_air = f.f_air.checked;
+      data.f_ga = f.f_ga.checked;
+      data.f_biz = f.f_biz.checked;
+      data.f_heli = f.f_heli.checked;
+      data.max_aircraft = Number(data.max_aircraft);
+      data.radius_km = Number(data.radius_km);
+      data.type = 'config';
+      return data;
+    }
+    function push() {
+      try { frame.contentWindow.postMessage(cfg(), '*'); } catch (e) {}
+    }
     document.getElementById('preset').addEventListener('change', e => {
       custom.style.display = e.target.value === 'custom' ? 'grid' : 'none';
       const p = PRESETS[e.target.value];
       if (p) { f.lat.value = p.lat; f.lon.value = p.lon; }
+      push();
     });
+    f.addEventListener('input', push);
+    frame.addEventListener('load', () => setTimeout(push, 400));
     const saved = localStorage.getItem('picoRadarConfig');
     if (saved) {
       const c = JSON.parse(saved);
       Object.entries(c).forEach(([k,v]) => {
-        if (f[k] && f[k].type === 'checkbox') f[k].checked = !!v;
-        else if (f[k]) f[k].value = v;
+        if (!f[k]) return;
+        if (f[k].type === 'checkbox') f[k].checked = !!v;
+        else f[k].value = v;
       });
       if (c.preset === 'custom') custom.style.display = 'grid';
     }
     f.addEventListener('submit', e => {
       e.preventDefault();
-      const data = Object.fromEntries(new FormData(f).entries());
-      data.include_ground = f.include_ground.checked;
-      data.max_aircraft = Number(data.max_aircraft);
-      data.radius_km = Number(data.radius_km);
-      localStorage.setItem('picoRadarConfig', JSON.stringify(data));
+      localStorage.setItem('picoRadarConfig', JSON.stringify(cfg()));
       document.getElementById('msg').hidden = false;
+      push();
     });
   </script>
 </body>
