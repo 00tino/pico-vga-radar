@@ -1,0 +1,38 @@
+name: Refresh live traffic
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+permissions:
+  contents: write
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch adsb.lol
+        run: |
+          curl -sS "https://api.adsb.lol/v2/lat/-34.559/lon/-58.416/dist/70" -o /tmp/raw.json
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/raw.json'))
+          out=[]
+          for a in d.get('ac') or []:
+              if a.get('lat') is None: continue
+              out.append({
+                'hex': a.get('hex'),
+                'flight': (a.get('flight') or '').strip() or a.get('r') or a.get('hex'),
+                'r': a.get('r'), 't': a.get('t'),
+                'lat': a.get('lat'), 'lon': a.get('lon'),
+                'alt': a.get('alt_baro'), 'gs': a.get('gs'),
+                'track': a.get('track'),
+                'vr': a.get('baro_rate') or a.get('geom_rate'),
+                'dst': a.get('dst')
+              })
+          json.dump({'ts': d.get('now'), 'ac': out}, open('docs/live.json','w'))
+          print(len(out), 'aircraft')
+          PY
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Actualizar trafico ADS-B en vivo"
+          file_pattern: docs/live.json
