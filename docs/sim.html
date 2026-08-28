@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simulador — Pico VGA Radar</title>
+  <style>
+    :root { --amber:#e8b86d; --accent:#f2542d; --crt:#0a0805; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: #1a1714; color: #f4f1ea;
+      font: 15px/1.45 ui-sans-serif, system-ui, sans-serif;
+    }
+    header { padding: 16px 20px 0; max-width: 1200px; margin: 0 auto; }
+    header a { color: var(--amber); }
+    .desk {
+      display: grid; grid-template-columns: 1.4fr .8fr; gap: 24px;
+      max-width: 1200px; margin: 0 auto; padding: 16px 20px 40px;
+    }
+    @media (max-width: 900px) { .desk { grid-template-columns: 1fr; } }
+    .monitor {
+      background: #111; border: 10px solid #2b2b2b; border-bottom-width: 28px;
+      border-radius: 8px 8px 4px 4px; box-shadow: 0 20px 50px #0008;
+    }
+    .bezel { background: var(--crt); aspect-ratio: 4/3; position: relative; overflow: hidden;
+      font-family: ui-monospace, Menlo, Consolas, monospace; }
+    .scan { pointer-events: none; position: absolute; inset: 0;
+      background: repeating-linear-gradient(transparent 0 2px, #0003 3px);
+      mix-blend-mode: multiply; }
+    .setup {
+      color: var(--amber); padding: 8% 8%; height: 100%;
+      text-shadow: 0 0 8px #e8b86d88;
+    }
+    .setup h1 { margin: 0 0 12px; font-size: clamp(18px, 3vw, 28px); letter-spacing: .2em; }
+    .setup p { margin: 6px 0; font-size: clamp(12px, 2vw, 16px); }
+    .qr {
+      margin-top: 16px; width: 34%; max-width: 160px; background: #fff; padding: 6px;
+    }
+    canvas#radar { width: 100%; height: 100%; display: none; }
+    .wall {
+      display: none; position: absolute; right: 8px; top: 8px; bottom: 8px; width: 38%;
+      color: var(--amber); font-size: 11px; overflow: hidden;
+    }
+    .card-f { border: 1px solid #e8b86d44; padding: 6px 8px; margin-bottom: 6px; }
+    .card-f b { display: block; font-size: 13px; }
+    .phone {
+      background: #0e0e10; border: 8px solid #2a2a2e; border-radius: 28px;
+      min-height: 520px; box-shadow: 0 16px 40px #0006; padding: 18px 14px 24px;
+    }
+    .notch { width: 80px; height: 8px; background: #222; border-radius: 8px; margin: 0 auto 12px; }
+    label { display: block; font-size: 11px; color: #9a958b; margin: 8px 0 4px; }
+    input, select {
+      width: 100%; padding: 9px; border-radius: 8px; border: 1px solid #333;
+      background: #16161a; color: #eee;
+    }
+    button {
+      width: 100%; margin-top: 14px; padding: 12px; border: 0; border-radius: 10px;
+      background: var(--accent); color: #fff; font-weight: 700; cursor: pointer;
+    }
+    .hint { font-size: 12px; color: #9a958b; }
+    .wifi-banner {
+      background: #1c1810; border: 1px solid #e8b86d33; color: var(--amber);
+      padding: 8px 10px; border-radius: 8px; font-size: 12px; margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="index.html">← Proyecto</a>
+    <p class="hint">Simulación: izquierda = monitor VGA, derecha = celular conectado a RADAR-A3F2</p>
+  </header>
+  <div class="desk">
+    <div>
+      <div class="monitor">
+        <div class="bezel" id="screen">
+          <div class="setup" id="boot">
+            <h1>RADAR</h1>
+            <p>Conectate a &nbsp; RADAR-A3F2</p>
+            <p>Clave &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; radarpico</p>
+            <p>Abrí &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; http://192.168.4.1</p>
+            <img class="qr" alt="QR setup" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&amp;data=https://00tino.github.io/pico-vga-radar/setup.html">
+          </div>
+          <canvas id="radar"></canvas>
+          <div class="wall" id="wall"></div>
+          <div class="scan"></div>
+        </div>
+      </div>
+    </div>
+    <div class="phone" id="phone">
+      <div class="notch"></div>
+      <div class="wifi-banner">Wi-Fi: RADAR-A3F2 &middot; sin internet</div>
+      <p class="hint">Esta es la web que sirve el Pico en 192.168.4.1</p>
+      <form id="f">
+        <label>Wi-Fi de casa (2.4 GHz)</label>
+        <input name="ssid" value="Casa-2.4" required>
+        <input name="pass" type="password" value="********">
+        <label>Zona</label>
+        <select name="preset">
+          <option value="AEP">Aeroparque (AEP)</option>
+          <option value="EZE">Ezeiza (EZE)</option>
+          <option value="FDO">San Fernando (FDO)</option>
+        </select>
+        <label>Radio (km)</label>
+        <input name="radius_km" type="number" value="40">
+        <label>Vista</label>
+        <select name="mode" id="mode">
+          <option value="hybrid">Radar + lista</option>
+          <option value="radar">Solo radar</option>
+          <option value="wall">Solo lista</option>
+        </select>
+        <label>Estilo</label>
+        <select name="theme">
+          <option value="crt_amber">CRT ámbar</option>
+          <option value="crt_green">CRT verde</option>
+          <option value="atc_dark">ATC oscuro</option>
+        </select>
+        <button>Guardar y reiniciar</button>
+      </form>
+    </div>
+  </div>
+<script>
+const FLIGHTS = [
+  { cs:'ARG1450', rte:'AEP-COR', alt:9200, spd:420, trk:310, x:.42, y:.38 },
+  { cs:'LPE2451', rte:'EZE-SCL', alt:11200, spd:780, trk:250, x:.62, y:.48 },
+  { cs:'JES123', rte:'FDO-MVD', alt:3400, spd:280, trk:90, x:.55, y:.62 },
+  { cs:'FBZ811', rte:'AEP-USH', alt:7600, spd:510, trk:185, x:.33, y:.55 },
+  { cs:'GLO2080', rte:'GRU-EZE', alt:2800, spd:390, trk:20, x:.7, y:.3 }
+];
+const boot = document.getElementById('boot');
+const radar = document.getElementById('radar');
+const wall = document.getElementById('wall');
+const phone = document.getElementById('phone');
+let running = false, theme = 'crt_amber';
+
+document.getElementById('f').addEventListener('submit', e => {
+  e.preventDefault();
+  const mode = document.getElementById('mode').value;
+  theme = e.target.theme.value;
+  boot.style.display = 'none';
+  radar.style.display = (mode === 'wall') ? 'none' : 'block';
+  wall.style.display = (mode === 'radar') ? 'none' : 'block';
+  phone.innerHTML = '<div class="notch"></div><div class="wifi-banner">Wi-Fi: Casa-2.4 · en línea</div><p class="hint">El Pico reinició y ya está en tu red. El monitor pasó a modo tráfico.</p><p class="hint">Esta simulación usa vuelos de ejemplo alrededor de Buenos Aires.</p>';
+  renderWall();
+  running = true;
+  if (mode !== 'wall') loop();
+});
+
+function colors() {
+  if (theme === 'crt_green') return { fg:'#7dff7a', bg:'#031105' };
+  if (theme === 'atc_dark') return { fg:'#7ec8e3', bg:'#07090c' };
+  return { fg:'#e8b86d', bg:'#0a0805' };
+}
+function renderWall() {
+  const c = colors();
+  wall.style.color = c.fg;
+  wall.innerHTML = FLIGHTS.slice(0,4).map(f =>
+    `<div class="card-f" style="border-color:${c.fg}44"><b>${f.cs}</b>${f.rte}<br>Alt ${f.alt} ft · ${f.spd} km/h · ${f.trk}°</div>`
+  ).join('');
+}
+function loop() {
+  if (!running) return;
+  const ctx = radar.getContext('2d');
+  const w = radar.width = radar.clientWidth;
+  const h = radar.height = radar.clientHeight;
+  const { fg, bg } = colors();
+  ctx.fillStyle = bg; ctx.fillRect(0,0,w,h);
+  const cx = w * 0.38, cy = h * 0.55;
+  ctx.strokeStyle = fg + '55'; ctx.lineWidth = 1;
+  [0.18,0.32,0.46].forEach(r => { ctx.beginPath(); ctx.arc(cx,cy,Math.min(w,h)*r,0,Math.PI*2); ctx.stroke(); });
+  ctx.beginPath(); ctx.moveTo(cx, 8); ctx.lineTo(cx, h-8); ctx.moveTo(8, cy); ctx.lineTo(w-8, cy); ctx.stroke();
+  ctx.fillStyle = fg; ctx.font = '12px monospace';
+  ctx.fillText('N', cx-4, 16); ctx.fillText('AEP', cx+8, cy-8);
+  FLIGHTS.forEach(f => {
+    const x = f.x * w, y = f.y * h;
+    ctx.save(); ctx.translate(x,y); ctx.rotate(f.trk*Math.PI/180);
+    ctx.beginPath(); ctx.moveTo(0,-7); ctx.lineTo(5,6); ctx.lineTo(-5,6); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    ctx.fillText(f.cs, x+8, y-4);
+    f.x += Math.sin(f.trk*Math.PI/180)*0.0008;
+    f.y -= Math.cos(f.trk*Math.PI/180)*0.0008;
+  });
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
