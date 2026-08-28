@@ -5,72 +5,58 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Simulador — Pico VGA Radar</title>
   <style>
-    :root { --amber:#e8b86d; --accent:#f2542d; --crt:#0a0805; }
+    :root { --amber:#e8b86d; --accent:#f2542d; --crt:#050508; }
     * { box-sizing: border-box; }
-    body {
-      margin: 0; background: #1a1714; color: #f4f1ea;
-      font: 15px/1.45 ui-sans-serif, system-ui, sans-serif;
-    }
+    body { margin: 0; background: #1a1714; color: #f4f1ea; font: 15px/1.45 ui-sans-serif, system-ui, sans-serif; }
     header { padding: 16px 20px 0; max-width: 1200px; margin: 0 auto; }
     header a { color: var(--amber); }
-    .desk {
-      display: grid; grid-template-columns: 1.4fr .8fr; gap: 24px;
-      max-width: 1200px; margin: 0 auto; padding: 16px 20px 40px;
-    }
+    .desk { display: grid; grid-template-columns: 1.4fr .8fr; gap: 24px; max-width: 1200px; margin: 0 auto; padding: 16px 20px 40px; }
     @media (max-width: 900px) { .desk { grid-template-columns: 1fr; } }
-    .monitor {
-      background: #111; border: 10px solid #2b2b2b; border-bottom-width: 28px;
-      border-radius: 8px 8px 4px 4px; box-shadow: 0 20px 50px #0008;
-    }
-    .bezel { background: var(--crt); aspect-ratio: 4/3; position: relative; overflow: hidden;
-      font-family: ui-monospace, Menlo, Consolas, monospace; }
-    .scan { pointer-events: none; position: absolute; inset: 0;
-      background: repeating-linear-gradient(transparent 0 2px, #0003 3px);
-      mix-blend-mode: multiply; }
-    .setup {
-      color: var(--amber); padding: 8% 8%; height: 100%;
-      text-shadow: 0 0 8px #e8b86d88;
-    }
-    .setup h1 { margin: 0 0 12px; font-size: clamp(18px, 3vw, 28px); letter-spacing: .2em; }
-    .setup p { margin: 6px 0; font-size: clamp(12px, 2vw, 16px); }
+    .monitor { background: #111; border: 10px solid #2b2b2b; border-bottom-width: 28px; border-radius: 8px 8px 4px 4px; box-shadow: 0 20px 50px #0008; }
+    .bezel { background: #050508; aspect-ratio: 4/3; position: relative; overflow: hidden; font-family: ui-monospace, Menlo, Consolas, monospace; }
+    .scan { pointer-events: none; position: absolute; inset: 0; background: repeating-linear-gradient(transparent 0 2px, #0003 3px); }
+    .setup { color: var(--amber); padding: 8%; height: 100%; text-shadow: 0 0 8px #e8b86d88; }
+    .setup h1 { margin: 0 0 12px; letter-spacing: .2em; }
     .qr { margin-top: 16px; width: 34%; max-width: 160px; background: #fff; padding: 6px; }
     canvas#radar { width: 100%; height: 100%; display: none; }
     .wall {
-      display: none; position: absolute; right: 8px; top: 8px; bottom: 8px; width: 38%;
-      color: var(--amber); font-size: 11px; overflow: auto;
+      display: none; position: absolute; right: 6px; top: 6px; bottom: 6px; width: 42%;
+      overflow: auto; padding: 2px;
     }
-    .card-f { border: 1px solid #e8b86d44; padding: 6px 8px; margin-bottom: 6px; }
-    .card-f b { display: block; font-size: 13px; }
-    .phone {
-      background: #0e0e10; border: 8px solid #2a2a2e; border-radius: 28px;
-      min-height: 520px; box-shadow: 0 16px 40px #0006; padding: 18px 14px 24px;
+    .wall.full { left: 6px; width: auto; }
+    .fw {
+      background: #000; color: #e8eef2; margin-bottom: 7px; padding: 6px 7px 5px;
+      display: grid; grid-template-columns: 42px 1fr; grid-template-rows: auto auto; gap: 2px 8px;
+      border: 1px solid #1a1a1a;
     }
+    .logo {
+      grid-row: 1 / 2; width: 42px; height: 42px;
+      background: #123a8a; display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+    }
+    .meta { font-size: 12px; line-height: 1.2; color: #f2f5f7; }
+    .meta .al { font-weight: 700; }
+    .metrics {
+      grid-column: 1 / -1; color: #7fd7ea; font-size: 10px; letter-spacing: .02em; margin-top: 3px;
+    }
+    .phone { background: #0e0e10; border: 8px solid #2a2a2e; border-radius: 28px; min-height: 520px; padding: 18px 14px 24px; }
     .notch { width: 80px; height: 8px; background: #222; border-radius: 8px; margin: 0 auto 12px; }
     label { display: block; font-size: 11px; color: #9a958b; margin: 8px 0 4px; }
-    input, select {
-      width: 100%; padding: 9px; border-radius: 8px; border: 1px solid #333;
-      background: #16161a; color: #eee;
-    }
-    button {
-      width: 100%; margin-top: 14px; padding: 12px; border: 0; border-radius: 10px;
-      background: var(--accent); color: #fff; font-weight: 700; cursor: pointer;
-    }
+    input, select { width: 100%; padding: 9px; border-radius: 8px; border: 1px solid #333; background: #16161a; color: #eee; }
+    button { width: 100%; margin-top: 14px; padding: 12px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font-weight: 700; cursor: pointer; }
     .hint { font-size: 12px; color: #9a958b; }
-    .wifi-banner {
-      background: #1c1810; border: 1px solid #e8b86d33; color: var(--amber);
-      padding: 8px 10px; border-radius: 8px; font-size: 12px; margin-bottom: 10px;
-    }
+    .wifi-banner { background: #1c1810; border: 1px solid #e8b86d33; color: var(--amber); padding: 8px 10px; border-radius: 8px; font-size: 12px; margin-bottom: 10px; }
   </style>
 </head>
 <body>
   <header>
     <a href="index.html">← Proyecto</a>
-    <p class="hint">Simulación: izquierda = monitor VGA, derecha = celular conectado a RADAR-A3F2</p>
+    <p class="hint">Los aviones de esta página son de ejemplo. El Pico real va a usar ADS-B en vivo.</p>
   </header>
   <div class="desk">
     <div>
       <div class="monitor">
-        <div class="bezel" id="screen">
+        <div class="bezel">
           <div class="setup" id="boot">
             <h1>RADAR</h1>
             <p>Conectate a &nbsp; RADAR-A3F2</p>
@@ -87,7 +73,7 @@
     <div class="phone" id="phone">
       <div class="notch"></div>
       <div class="wifi-banner">Wi-Fi: RADAR-A3F2 &middot; sin internet</div>
-      <p class="hint">Esta es la web que sirve el Pico en 192.168.4.1</p>
+      <p class="hint">Web del Pico en 192.168.4.1</p>
       <form id="f">
         <label>Wi-Fi de casa (2.4 GHz)</label>
         <input name="ssid" value="Casa-2.4" required>
@@ -104,9 +90,9 @@
         <select name="mode" id="mode">
           <option value="hybrid">Radar + lista</option>
           <option value="radar">Solo radar</option>
-          <option value="wall">Solo lista</option>
+          <option value="wall">Solo lista (FlightWall)</option>
         </select>
-        <label>Estilo</label>
+        <label>Estilo radar</label>
         <select name="theme">
           <option value="crt_amber">CRT ámbar</option>
           <option value="crt_green">CRT verde</option>
@@ -119,19 +105,41 @@
     </div>
   </div>
 <script>
-const PREFIX = ['ARG','LPE','JES','FBZ','GLO','AAL','IBE','CMP','AVA','AZU','TAM','UAE','BAW','KLM','AFR','DLH','AMX','LAN','SKU','WJA','UAL','DAL'];
-const RTES = ['AEP-COR','EZE-SCL','FDO-MVD','AEP-USH','GRU-EZE','EZE-MIA','AEP-IGR','EZE-MAD','AEP-BRC','EZE-LIM','FDO-AEP','EZE-GRU'];
+const AIR = [
+  { p:'ARG', name:'Aerolineas', color:'#74acdf', type:'A330-200', rte:'AEP-COR' },
+  { p:'LPE', name:'LATAM', color:'#e0021a', type:'A320neo', rte:'EZE-SCL' },
+  { p:'JES', name:'Jetsmart', color:'#ff6600', type:'A320', rte:'AEP-MDZ' },
+  { p:'FBZ', name:'Flybondi', color:'#ffd100', type:'B737-800', rte:'AEP-BRC' },
+  { p:'GLO', name:'Gol', color:'#ff6900', type:'B737-8', rte:'GRU-EZE' },
+  { p:'AAL', name:'American', color:'#c30021', type:'B787-9', rte:'EZE-MIA' },
+  { p:'IBE', name:'Iberia', color:'#d4092d', type:'A350-900', rte:'EZE-MAD' },
+  { p:'CMP', name:'Copa', color:'#0032a0', type:'B737-800', rte:'EZE-PTY' },
+  { p:'UAL', name:'United', color:'#0033a0', type:'A321neo', rte:'EZE-IAH' },
+  { p:'DAL', name:'Delta', color:'#c8102e', type:'A330-900', rte:'EZE-ATL' },
+  { p:'TAM', name:'LATAM BR', color:'#e0021a', type:'A321neo', rte:'GRU-AEP' },
+  { p:'AZU', name:'Azul', color:'#0033a0', type:'E195-E2', rte:'VCP-EZE' },
+  { p:'AVA', name:'Avianca', color:'#ee2a24', type:'A320neo', rte:'BOG-EZE' },
+  { p:'KLM', name:'KLM', color:'#00a1de', type:'B777-300', rte:'EZE-AMS' },
+  { p:'AFR', name:'Air France', color:'#051e3e', type:'B777-200', rte:'EZE-CDG' },
+  { p:'DLH', name:'Lufthansa', color:'#05164d', type:'A350-900', rte:'EZE-FRA' },
+  { p:'BAW', name:'British', color:'#075aaa', type:'B787-9', rte:'EZE-LHR' },
+  { p:'UAE', name:'Emirates', color:'#d71a21', type:'A380-800', rte:'EZE-DXB' },
+  { p:'AMX', name:'Aeromexico', color:'#000000', type:'B787-8', rte:'EZE-MEX' },
+  { p:'SKU', name:'Sky', color:'#e30613', type:'A320neo', rte:'SCL-AEP' }
+];
 function spawn(i) {
+  const a = AIR[i % AIR.length];
   const n = Number(document.getElementById('max')?.value) || 16;
-  const ang = (i / n) * Math.PI * 2 + Math.random() * 0.35;
-  const dist = 0.12 + Math.random() * 0.72;
+  const ang = (i / n) * Math.PI * 2 + Math.random() * 0.3;
+  const vr = Math.floor((Math.random() - 0.45) * 40);
   return {
-    cs: PREFIX[i % PREFIX.length] + (1200 + i * 7),
-    rte: RTES[i % RTES.length],
-    alt: 1800 + Math.floor(Math.random()*12000),
-    spd: 240 + Math.floor(Math.random()*560),
+    ...a,
+    cs: a.p + (1400 + i * 11),
+    altFt: 1800 + Math.floor(Math.random() * 36000),
+    spdMph: 220 + Math.floor(Math.random() * 320),
+    vr,
     trk: (ang * 180 / Math.PI + 90) % 360,
-    ang, dist,
+    ang, dist: 0.12 + Math.random() * 0.72,
     turn: (Math.random() - 0.5) * 0.004
   };
 }
@@ -139,6 +147,9 @@ function fleet() {
   const n = Math.max(4, Math.min(24, Number(document.getElementById('max').value) || 16));
   return Array.from({ length: n }, (_, i) => spawn(i));
 }
+function fmtAlt(ft) { return ft >= 1000 ? (ft/1000).toFixed(1) + 'k ft' : ft + ' ft'; }
+function fmtVr(v) { return (v >= 0 ? '+' : '') + v + 'ft/s'; }
+
 let FLIGHTS = [];
 const boot = document.getElementById('boot');
 const radar = document.getElementById('radar');
@@ -154,7 +165,8 @@ document.getElementById('f').addEventListener('submit', e => {
   boot.style.display = 'none';
   radar.style.display = (view === 'wall') ? 'none' : 'block';
   wall.style.display = (view === 'radar') ? 'none' : 'block';
-  phone.innerHTML = '<div class="notch"></div><div class="wifi-banner">Wi-Fi: Casa-2.4 · en línea</div><p class="hint">' + FLIGHTS.length + ' aviones en el radio. Recargá la página para configurar de nuevo.</p>';
+  wall.classList.toggle('full', view === 'wall');
+  phone.innerHTML = '<div class="notch"></div><div class="wifi-banner">Wi-Fi: Casa-2.4 · en línea</div><p class="hint">Simulación. Callsigns y rutas inventados para ver el layout.</p>';
   renderWall();
   running = true;
   if (view !== 'wall') loop();
@@ -166,11 +178,20 @@ function colors() {
   return { fg:'#e8b86d', bg:'#0a0805' };
 }
 function renderWall() {
-  const c = colors();
-  wall.style.color = c.fg;
-  wall.innerHTML = FLIGHTS.slice(0, 6).map(f =>
-    `<div class="card-f" style="border-color:${c.fg}44"><b>${f.cs}</b>${f.rte}<br>Alt ${f.alt} ft · ${f.spd} km/h · ${Math.round(f.trk)}°</div>`
-  ).join('');
+  const shown = view === 'wall' ? FLIGHTS.slice(0, 5) : FLIGHTS.slice(0, 4);
+  wall.innerHTML = shown.map(f => `
+    <div class="fw">
+      <div class="logo" style="background:${f.color}">${f.p}</div>
+      <div class="meta">
+        <div class="al">${f.name}</div>
+        <div>${f.rte}</div>
+        <div>${f.type}</div>
+      </div>
+      <div class="metrics">
+        Alt · ${fmtAlt(f.altFt)}, Spd · ${f.spdMph}mph<br>
+        Trk · ${Math.round(f.trk)}deg, Vr · ${fmtVr(f.vr)}
+      </div>
+    </div>`).join('');
 }
 let lastWall = 0;
 function loop(t) {
@@ -180,26 +201,18 @@ function loop(t) {
   const h = radar.height = radar.clientHeight || 480;
   const { fg, bg } = colors();
   ctx.fillStyle = bg; ctx.fillRect(0,0,w,h);
-  const left = view === 'hybrid' ? 0.62 : 1;
+  const left = view === 'hybrid' ? 0.58 : 1;
   const cx = w * left * 0.5, cy = h * 0.52;
   const R = Math.min(cx, cy) * 0.86;
   ctx.strokeStyle = fg + '66'; ctx.lineWidth = 1;
-  [0.33, 0.66, 1].forEach(r => {
-    ctx.beginPath(); ctx.arc(cx, cy, R * r, 0, Math.PI * 2); ctx.stroke();
-  });
-  ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R);
-  ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
+  [0.33, 0.66, 1].forEach(r => { ctx.beginPath(); ctx.arc(cx, cy, R * r, 0, Math.PI * 2); ctx.stroke(); });
+  ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
   ctx.fillStyle = fg; ctx.font = '11px monospace';
-  ctx.fillText('N', cx - 4, cy - R + 14);
-  ctx.fillText('AEP', cx + 6, cy - 6);
+  ctx.fillText('N', cx - 4, cy - R + 14); ctx.fillText('AEP', cx + 6, cy - 6);
   FLIGHTS.forEach((f, i) => {
-    f.ang += f.turn;
-    f.dist += 0.00028;
-    if (f.dist > 0.96) {
-      FLIGHTS[i] = spawn(i + 11);
-      f = FLIGHTS[i];
-    }
-    f.trk = (f.ang * 180 / Math.PI + 90 + f.turn * 800) % 360;
+    f.ang += f.turn; f.dist += 0.00028;
+    if (f.dist > 0.96) { FLIGHTS[i] = spawn(i + 9); f = FLIGHTS[i]; }
+    f.trk = (f.ang * 180 / Math.PI + 90) % 360;
     const x = cx + Math.cos(f.ang) * f.dist * R;
     const y = cy + Math.sin(f.ang) * f.dist * R;
     ctx.save(); ctx.translate(x, y); ctx.rotate(f.trk * Math.PI / 180);
