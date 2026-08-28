@@ -37,7 +37,7 @@
     canvas#radar { width: 100%; height: 100%; display: none; }
     .wall {
       display: none; position: absolute; right: 8px; top: 8px; bottom: 8px; width: 38%;
-      color: var(--amber); font-size: 11px; overflow: hidden;
+      color: var(--amber); font-size: 11px; overflow: auto;
     }
     .card-f { border: 1px solid #e8b86d44; padding: 6px 8px; margin-bottom: 6px; }
     .card-f b { display: block; font-size: 13px; }
@@ -112,27 +112,34 @@
           <option value="crt_green">CRT verde</option>
           <option value="atc_dark">ATC oscuro</option>
         </select>
+        <label>Aviones en radar</label>
+        <input name="max_aircraft" id="max" type="number" value="16" min="4" max="24">
         <button>Guardar y reiniciar</button>
       </form>
     </div>
   </div>
 <script>
-const CALLS = ['ARG1450','LPE2451','JES123','FBZ811','GLO2080','AAL946','IBE6843','CMP234'];
-const RTES = ['AEP-COR','EZE-SCL','FDO-MVD','AEP-USH','GRU-EZE','EZE-MIA','AEP-IGR','EZE-MAD'];
+const PREFIX = ['ARG','LPE','JES','FBZ','GLO','AAL','IBE','CMP','AVA','AZU','TAM','UAE','BAW','KLM','AFR','DLH','AMX','LAN','SKU','WJA','UAL','DAL'];
+const RTES = ['AEP-COR','EZE-SCL','FDO-MVD','AEP-USH','GRU-EZE','EZE-MIA','AEP-IGR','EZE-MAD','AEP-BRC','EZE-LIM','FDO-AEP','EZE-GRU'];
 function spawn(i) {
-  const ang = (i / 8) * Math.PI * 2 + Math.random() * 0.4;
-  const dist = 0.18 + Math.random() * 0.28;
+  const n = Number(document.getElementById('max')?.value) || 16;
+  const ang = (i / n) * Math.PI * 2 + Math.random() * 0.35;
+  const dist = 0.12 + Math.random() * 0.72;
   return {
-    cs: CALLS[i % CALLS.length],
+    cs: PREFIX[i % PREFIX.length] + (1200 + i * 7),
     rte: RTES[i % RTES.length],
-    alt: 2500 + Math.floor(Math.random()*10000),
-    spd: 280 + Math.floor(Math.random()*500),
+    alt: 1800 + Math.floor(Math.random()*12000),
+    spd: 240 + Math.floor(Math.random()*560),
     trk: (ang * 180 / Math.PI + 90) % 360,
     ang, dist,
-    turn: (Math.random() - 0.5) * 0.003
+    turn: (Math.random() - 0.5) * 0.004
   };
 }
-let FLIGHTS = CALLS.slice(0,5).map((_,i) => spawn(i));
+function fleet() {
+  const n = Math.max(4, Math.min(24, Number(document.getElementById('max').value) || 16));
+  return Array.from({ length: n }, (_, i) => spawn(i));
+}
+let FLIGHTS = [];
 const boot = document.getElementById('boot');
 const radar = document.getElementById('radar');
 const wall = document.getElementById('wall');
@@ -143,11 +150,11 @@ document.getElementById('f').addEventListener('submit', e => {
   e.preventDefault();
   view = document.getElementById('mode').value;
   theme = e.target.theme.value;
-  FLIGHTS = CALLS.slice(0,5).map((_,i) => spawn(i));
+  FLIGHTS = fleet();
   boot.style.display = 'none';
   radar.style.display = (view === 'wall') ? 'none' : 'block';
   wall.style.display = (view === 'radar') ? 'none' : 'block';
-  phone.innerHTML = '<div class="notch"></div><div class="wifi-banner">Wi-Fi: Casa-2.4 · en línea</div><p class="hint">El Pico reinició. Los aviones se mantienen en el radio; si salen, entra otro.</p>';
+  phone.innerHTML = '<div class="notch"></div><div class="wifi-banner">Wi-Fi: Casa-2.4 · en línea</div><p class="hint">' + FLIGHTS.length + ' aviones en el radio. Recargá la página para configurar de nuevo.</p>';
   renderWall();
   running = true;
   if (view !== 'wall') loop();
@@ -161,7 +168,7 @@ function colors() {
 function renderWall() {
   const c = colors();
   wall.style.color = c.fg;
-  wall.innerHTML = FLIGHTS.slice(0,4).map(f =>
+  wall.innerHTML = FLIGHTS.slice(0, 6).map(f =>
     `<div class="card-f" style="border-color:${c.fg}44"><b>${f.cs}</b>${f.rte}<br>Alt ${f.alt} ft · ${f.spd} km/h · ${Math.round(f.trk)}°</div>`
   ).join('');
 }
@@ -182,23 +189,23 @@ function loop(t) {
   });
   ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R);
   ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
-  ctx.fillStyle = fg; ctx.font = '12px monospace';
+  ctx.fillStyle = fg; ctx.font = '11px monospace';
   ctx.fillText('N', cx - 4, cy - R + 14);
   ctx.fillText('AEP', cx + 6, cy - 6);
   FLIGHTS.forEach((f, i) => {
     f.ang += f.turn;
-    f.dist += 0.00035;
-    if (f.dist > 0.95) {
-      FLIGHTS[i] = spawn((i + 3) % CALLS.length);
+    f.dist += 0.00028;
+    if (f.dist > 0.96) {
+      FLIGHTS[i] = spawn(i + 11);
       f = FLIGHTS[i];
     }
     f.trk = (f.ang * 180 / Math.PI + 90 + f.turn * 800) % 360;
     const x = cx + Math.cos(f.ang) * f.dist * R;
     const y = cy + Math.sin(f.ang) * f.dist * R;
     ctx.save(); ctx.translate(x, y); ctx.rotate(f.trk * Math.PI / 180);
-    ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(5, 6); ctx.lineTo(-5, 6); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(4, 5); ctx.lineTo(-4, 5); ctx.closePath(); ctx.fill();
     ctx.restore();
-    ctx.fillText(f.cs, x + 8, y - 4);
+    ctx.fillText(f.cs, x + 7, y - 3);
   });
   if (!lastWall || t - lastWall > 1500) { renderWall(); lastWall = t; }
   requestAnimationFrame(loop);
