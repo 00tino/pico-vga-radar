@@ -211,7 +211,14 @@ function findAirline(q) {
   const up = s.toUpperCase();
   const exact = ALINES.find((a) => a[0] === up || a[1] === up);
   if (exact) return exact;
+  const toks = up.replace(/[^A-Z0-9]+/g, " ").trim().split(/\s+/);
+  for (let i = toks.length - 1; i >= 0; i--) {
+    const tok = toks[i];
+    const hit = ALINES.find((a) => a[0] === tok || (a[1] && a[1] === tok));
+    if (hit) return hit;
+  }
   const f = rewrite(s);
+  if (!f) return null;
   return ALINES.find((a) => fold(a.join(" ")).includes(f) || fold(a[2]).startsWith(f)) || null;
 }
 function hhmm(ts) {
