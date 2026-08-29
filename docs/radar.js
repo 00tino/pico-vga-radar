@@ -1,4 +1,4 @@
-/* Pico Radar v19 — GitHub Pages CRT. Pistas finas 120km, logos kiwi locales. */
+/* Pico Radar v20 — GitHub Pages CRT. Cielo vivo via proxy, pistas finas, logos kiwi. */
 const PUBLIC_SKY = "https://pico-vga-radar-sky.vercel.app/api";
 const SKY_API = (function () {
   const q = new URLSearchParams(location.search).get("api");
@@ -137,6 +137,10 @@ function isReg(s) {
   const c = compactId(s);
   return /^(N[0-9]{1,5}[A-Z]{0,3}|LV[A-Z]{3}|LV[A-Z]?\d{3,}|VH[A-Z]{3}|CC[A-Z]{3}|HK\d{4}|PR[A-Z]{3}|PT[A-Z]{3}|G[A-Z]{4}|F[A-Z]{4}|XA[A-Z]{3}|C[A-Z]{4})$/.test(c);
 }
+function isFlightNumber(s) {
+  const c = compactId(s);
+  return /^[A-Z]{2,3}\d{1,4}[A-Z]?$/.test(c) && !isReg(c);
+}
 function displayId(a) {
   const cs = compactId(a.flight);
   if (cs && /^[A-Z]{2,3}\d/.test(cs) && !isReg(cs)) return (a.flight || "").trim() || cs;
@@ -148,9 +152,9 @@ function displayId(a) {
   return a.hex;
 }
 function airlineOf(cs) {
-  if (isReg(cs)) return ["", compactId(cs), "#334155"];
-  const L = letters(cs);
   const compact = compactId(cs);
+  if (!compact || isReg(compact) || !isFlightNumber(compact)) return ["", compact || "GA", "#334155"];
+  const L = letters(cs);
   const hit = ALINES.find((a) => a[0] === L.slice(0, 3));
   if (hit) return [hit[1] || hit[0].slice(0, 2), hit[2], "#334155"];
   if (/^[A-Z]{2}\d/.test(compact)) {
@@ -164,13 +168,16 @@ function kindOf(a) {
   const cs = (a.flight || "").toUpperCase().trim();
   const compact = compactId(cs);
   const L = letters(cs);
-  const known = ALINES.some((x) => x[0] === L.slice(0, 3));
+  const flightNo = isFlightNumber(compact);
+  const known = flightNo && ALINES.some((x) => x[0] === L.slice(0, 3) || (x[1] && x[1].length === 2 && L.startsWith(x[1]) && /^\d/.test(L.slice(2))));
   if (/^(R44|R66|B06|B407|H125|H135)/.test(t) || /^(RSCU|HEMS)/.test(compact)) return "heli";
-  if (t === "TWR" || /^SSM\d/.test(compact)) return "ga";
-  if (isReg(compact) && !known) return "ga";
-  if (/^(LJ|C25|C56|GLF|GLEX)/.test(t) && !known) return "biz";
-  if (known || /^(A3|A2|B7|B38|E1|E19|CRJ)/.test(t)) return "air";
-  if (/^[A-Z]{3}\d/.test(compact) || (/^[A-Z]{2}\d/.test(compact) && compact[0] !== "N")) return "air";
+  if (t === "TWR" || /^SSM\d/.test(compact) || /^SAETTA/.test(compact) || /^@+$/.test(cs)) return "ga";
+  if (isReg(compact) || !flightNo) {
+    if (/^(LJ|C25|C56|GLF|GLEX)/.test(t)) return "biz";
+    if (/^(A3|A2|B7|B38|E1|E19|CRJ)/.test(t)) return "air";
+    return "ga";
+  }
+  if (known || flightNo) return "air";
   if (cs.startsWith("LV") && !known) return "ga";
   return "ga";
 }
@@ -202,7 +209,7 @@ function distNmOf(a) {
 function looksAir(a) {
   const cs = compactId(a.flight);
   const t = (a.t || "").toUpperCase();
-  if (t === "TWR" || /^(RSCU|HEMS|SSM)/.test(cs)) return false;
+  if (t === "TWR" || /^(RSCU|HEMS|SSM|SAETTA)/.test(cs) || isReg(cs) || !isFlightNumber(cs)) return false;
   return kindOf(a) === "air";
 }
 function phaseOf(a) {
@@ -223,7 +230,7 @@ function pillClass(st) {
 }
 function matchAirline(flight, al) {
   const L = letters(flight);
-  if (!al || !L) return false;
+  if (!al || !L || isReg(flight) || !isFlightNumber(flight)) return false;
   if (al[0] && L.startsWith(al[0])) return true;
   if (al[1] && al[1].length === 2 && L.startsWith(al[1]) && /^\d/.test(L.slice(2))) return true;
   return false;
@@ -401,7 +408,7 @@ function enrich(a) {
   const gnd = isGnd(a);
   if (gnd) {
     a.status = "EN TIERRA"; a.depKind = "EST"; a.arrKind = "EST";
-    a.depAt = now + 25 * 60000; a.arrAt = a.depAt + 80 * 60000; a.pct = 6;
+    a.depAt = null; a.arrAt = null; a.pct = 6;
     return a;
   }
   a.status = phaseOf(a); a.depKind = "EST"; a.arrKind = "EST";
@@ -429,19 +436,15 @@ function applyFilters() {
   const alQ = (document.getElementById("followAl").value || "").trim();
   const alHit = findAirline(alQ);
   AC = RAW.filter((a) => {
-    if (!includeGround && isGnd(a)) return false;
     if (distNmOf(a) > radiusNm * 1.08) return false;
     const k = kindOf(a);
-    if (!(want[k] || (includeGround && isGnd(a)))) return false;
+    if (!want[k]) return false;
+    if (isGnd(a) && !includeGround) return false;
     if (alHit && !matchAirline(a.flight, alHit)) return false;
-    if (followFlt && !compactId(a.flight).includes(compactId(followFlt))) return false;
+    if (followFlt && !compactId(a.flight).includes(compactId(followFlt)) && compactId(a.r || "").indexOf(compactId(followFlt)) < 0) return false;
     return a.lat != null;
-  }).sort((a, b) => distNmOf(a) - distNmOf(b)).slice(0, maxN);
+  }).sort((a, b) => (looksAir(b) - looksAir(a)) || (distNmOf(a) - distNmOf(b))).slice(0, maxN);
   AC.forEach(enrich);
-  if (!AC.length && RAW.length && !alQ && !followFlt) {
-    AC = RAW.slice().sort((a, b) => distNmOf(a) - distNmOf(b)).slice(0, maxN);
-    AC.forEach(enrich);
-  }
   setMeta();
 }
 async function pullJson(url, ms) {
@@ -455,9 +458,7 @@ async function pullJson(url, ms) {
 }
 function skyUrls(lat, lon, nm) {
   const urls = [];
-  if (SKY_API && SKY_API.indexOf("vercel.app") < 0) {
-    urls.push(SKY_API + "/sky?lat=" + lat + "&lon=" + lon + "&dist=" + nm);
-  }
+  if (SKY_API) urls.push(SKY_API + "/sky?lat=" + lat + "&lon=" + lon + "&dist=" + nm);
   urls.push(
     "https://opendata.adsb.fi/api/v2/lat/" + lat + "/lon/" + lon + "/dist/" + nm,
     "https://api.adsb.lol/v2/lat/" + lat + "/lon/" + lon + "/dist/" + nm,
@@ -520,8 +521,8 @@ async function fetchSky(lat, lon, nm) {
   const urls = skyUrls(lat, lon, nm);
   for (let i = 0; i < urls.length; i++) {
     const u = urls[i];
-    const src = u.indexOf("adsb.fi") >= 0 ? "adsb.fi" : u.indexOf("adsb.lol") >= 0 ? "adsb.lol" : "vivo";
-    await ingest(u, src, src === "vivo" ? 2500 : 8000);
+    const src = u.indexOf("adsb.fi") >= 0 ? "adsb.fi" : u.indexOf("adsb.lol") >= 0 ? "adsb.lol" : u.indexOf("vercel.app") >= 0 ? "proxy" : "vivo";
+    await ingest(u, src, src === "vivo" ? 2500 : 9000);
     if (Object.keys(byHex).length >= 8 && commercialN() >= 2) break;
   }
   const wide = Math.min(250, Math.max(nm, 200));
@@ -634,7 +635,7 @@ async function loadLive(showOverlay) {
       const airN = AC.filter((a) => looksAir(a) && !isGnd(a)).length;
       statusEl.textContent = RAW.length + " aeronaves · " + apt[0] + " · " + srcLabel + (gndN ? " · " + gndN + " en tierra" : "") + (airN === 0 && RAW.length ? " · poca cobertura comercial" : "");
     }
-    foot.textContent = "ADS-B en vivo · " + srcLabel;
+    foot.textContent = (srcLabel === "snapshot" ? "ADS-B (copia local) · " : "ADS-B en vivo · ") + srcLabel;
   } catch (e) {
     if (lastOk && Date.now() - lastOk.at < 15 * 60 * 1000) {
       srcLabel = lastOk.src + " (cache)";
@@ -662,9 +663,10 @@ function displayPos(a) {
   return { lat: p.lat + Math.cos(rad) * km / 111, lon: p.lon + Math.sin(rad) * km / (111 * Math.cos(p.lat * Math.PI / 180)) };
 }
 function logoHTML(a) {
+  const id = displayId(a);
   const pair = airlineOf(a.flight);
-  const iata = pair[0];
-  const name = pair[1];
+  const iata = isReg(id) ? "" : pair[0];
+  const name = isReg(id) ? id : pair[1];
   const fb = '<div class="fb">' + (iata || name || "GA").slice(0, 2) + "</div>";
   if (!iata) return fb;
   return '<img alt="' + iata + '" src="logos/' + iata + '.png" onerror="this.outerHTML=this.dataset.fb" data-fb=\'' + fb + "'>";
