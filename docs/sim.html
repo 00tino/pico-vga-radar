@@ -37,16 +37,29 @@ canvas#radar{width:100%;height:100%;display:block}
 .fa-top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
 .fa-id{font-weight:700;font-family:var(--mono);font-size:15px}
 .fa-st{font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.75}
+.pill{display:inline-flex;align-items:center;border-radius:99px;border:1px solid color-mix(in srgb, var(--scope-fg) 35%, transparent);padding:2px 8px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+.pill.gnd{background:#ffffff18}
+.pill.aprox{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb, var(--accent) 18%, transparent)}
 .fa-air{font-size:11px;opacity:.7;margin-top:2px}
 .fa-route{display:flex;align-items:center;gap:8px;margin:8px 0 6px;font-weight:700;font-size:13px}
 .bar{flex:1;height:3px;background:#ffffff22;position:relative;overflow:hidden;border-radius:99px}
 .bar>i{position:absolute;inset:0 auto 0 0;background:var(--scope-fg)}
 .fa-times{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:11px;opacity:.85}
-.fa-times b{display:block;font-size:13px}
+.fa-times b{display:block;font-size:15px;font-family:var(--mono)}
 .lbl{font-size:9px;letter-spacing:.08em;text-transform:uppercase;opacity:.55}
-.fa-met{margin-top:8px;font-size:11px;opacity:.8}
-.carousel-wrap{height:100%;display:flex;align-items:stretch}
-.carousel-wrap .fa-card{flex:1;display:flex;flex-direction:column;justify-content:center;padding:28px;margin:0}
+.metrics{display:grid;grid-template-columns:1.1fr 1.1fr 1.4fr;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid #ffffff18}
+.metrics .lbl{margin-bottom:2px}
+.metrics b{display:block;font-size:16px;font-family:var(--mono);font-weight:700}
+.fa-foot{display:flex;justify-content:space-between;align-items:flex-end;gap:8px;margin-top:10px;font-size:12px;opacity:.85}
+.carousel-wrap{height:100%;display:grid;gap:10px;align-items:stretch}
+.carousel-wrap .fa-card{margin:0;height:100%;display:flex;flex-direction:column;justify-content:space-between;padding:20px}
+.hdg{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.hdg .arr{display:inline-block;width:12px;height:12px;flex-shrink:0;background:currentColor;clip-path:polygon(50% 6%, 86% 90%, 50% 70%, 14% 90%);transform-origin:center center}
+.wall.full{padding:24px 32px}
+.wall.full .carousel-wrap .fa-card{padding:28px 32px}
+.wall.full .fa-id{font-size:22px}
+.wall.full .metrics b{font-size:18px}
+.wall.full .fa-times b{font-size:20px}
 .fids{width:100%;border-collapse:collapse;font-size:12px;color:var(--scope-fg)}
 .fids th{text-align:left;font-size:10px;letter-spacing:.08em;padding:6px;border-bottom:1px solid color-mix(in srgb, var(--scope-fg) 25%, transparent);opacity:.7}
 .fids td{padding:8px 6px;border-bottom:1px solid #ffffff14;white-space:nowrap}
@@ -121,7 +134,7 @@ a{color:var(--radar)}
           </div>
         </div>
         <div class="field"><span id="radLbl">Radio 150 km</span>
-          <input id="radius" type="range" min="40" max="250" step="10" value="150">
+          <input id="radius" type="range" min="40" max="400" step="10" value="150">
         </div>
         <div class="field"><span>Filtros</span>
           <div class="checks">
@@ -151,13 +164,24 @@ a{color:var(--radar)}
         </div>
         <div class="field"><span>Tema</span>
           <div class="seg" style="grid-template-columns:1fr 1fr 1fr">
-            <button type="button" class="on" data-theme="crt_amber">CRT ambar</button>
+            <button type="button" class="on" data-theme="crt_amber">CRT ámbar</button>
             <button type="button" data-theme="crt_green">CRT verde</button>
+            <button type="button" data-theme="phosphor">Fósforo</button>
             <button type="button" data-theme="atc_dark">ATC</button>
             <button type="button" data-theme="navy">Navy</button>
+            <button type="button" data-theme="violet">Violeta</button>
+            <button type="button" data-theme="magenta">Magenta</button>
             <button type="button" data-theme="red">Rojo</button>
+            <button type="button" data-theme="orange">Naranja</button>
+            <button type="button" data-theme="gold">Oro</button>
             <button type="button" data-theme="ice">Hielo</button>
+            <button type="button" data-theme="cyan">Cian</button>
+            <button type="button" data-theme="olive">Oliva</button>
+            <button type="button" data-theme="rose">Rosa</button>
           </div>
+        </div>
+        <div class="field" id="carField" hidden><span id="carLbl">Carrusel: 2 vuelos</span>
+          <input id="carN" type="range" min="1" max="4" value="2">
         </div>
         <div class="field"><span>Seguir aerolínea</span>
           <div class="sug">
@@ -184,6 +208,6 @@ a{color:var(--radar)}
     </div>
   </aside>
 </div>
-<script src="radar.js?v=15"></script>
+<script src="radar.js?v=16"></script>
 </body>
 </html>
