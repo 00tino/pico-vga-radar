@@ -57,7 +57,7 @@ body.embed .monitor{border:0;border-radius:0}
 body.embed .bezel{aspect-ratio:auto;height:100vh}
 </style></head>
 <body>
-<header><a href="index.html">← Proyecto</a><p class="hint">Abrir ?v=7</p></header>
+<header><a href="index.html">← Proyecto</a><p class="hint">Abrir ?v=8</p></header>
 <div class="desk">
 <div class="monitor"><div class="bezel">
 <canvas id="radar"></canvas>
@@ -91,7 +91,29 @@ body.embed .bezel{aspect-ratio:auto;height:100vh}
 <label><input type="checkbox" id="fHeli"> Helicopteros</label>
 </div>
 <label>Seguir aerolinea</label>
-<input id="followAl" placeholder="Delta, United, Qantas">
+<select id="followAl">
+<option value="">Todas</option>
+<option value="ARG">Aerolineas Argentinas</option>
+<option value="JES">JetSMART</option>
+<option value="FBZ">Flybondi</option>
+<option value="LAN">LATAM</option>
+<option value="GLO">GOL</option>
+<option value="UAL">United</option>
+<option value="DAL">Delta</option>
+<option value="AAL">American</option>
+<option value="QFA">Qantas</option>
+<option value="JST">Jetstar</option>
+<option value="UAE">Emirates</option>
+<option value="IBE">Iberia</option>
+<option value="BAW">British Airways</option>
+<option value="AFR">Air France</option>
+<option value="KLM">KLM</option>
+<option value="DLH">Lufthansa</option>
+<option value="JBU">JetBlue</option>
+<option value="SWA">Southwest</option>
+<option value="CMP">Copa</option>
+<option value="AVA">Avianca</option>
+</select>
 <div id="hubs" class="hint"></div>
 <label>Seguir vuelo</label>
 <input id="followFlt" placeholder="DL1390">
