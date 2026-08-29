@@ -22,7 +22,7 @@
     <nav><a href="index.html">Inicio</a> <a href="sim.html">Simulador</a></nav>
     <p class="kicker">Setup</p>
     <h1>Configurar el radar</h1>
-    <p class="hint">La pantalla de la derecha es una vista previa. Cambiá opciones y se actualiza antes de guardar.</p>
+    <p class="hint">La pantalla de la derecha es una vista previa. Esta web puede ser pesada; al Pico solo le llega un JSON chico.</p>
     <div class="layout">
       <form id="f">
         <div class="card">
@@ -50,9 +50,16 @@
           <select name="mode">
             <option value="hybrid">Radar + lista</option>
             <option value="radar">Solo radar</option>
-            <option value="wall">Solo lista (FlightWall)</option>
+            <option value="wall">Solo lista</option>
           </select>
-          <label>Estilo</label>
+          <label>Formato de lista</label>
+          <select name="list_style">
+            <option value="fa">FlightAware (tarjeta con horarios)</option>
+            <option value="carousel">Un vuelo por vez</option>
+          </select>
+          <label>Rotar lista cada (s)</label>
+          <input name="rotate_s" type="number" value="7" min="3" max="30">
+          <label>Estilo radar</label>
           <select name="theme">
             <option value="crt_amber">CRT ambar</option>
             <option value="crt_green">CRT verde</option>
@@ -69,6 +76,8 @@
           </div>
           <label style="margin-top:12px">Máx. aviones</label>
           <input name="max_aircraft" type="number" value="16" min="1" max="24">
+          <label>Etiquetas en el mapa</label>
+          <input name="map_labels" type="number" value="4" min="2" max="8">
           <label><input name="include_ground" type="checkbox" style="width:auto;display:inline"> Incluir en tierra</label>
         </div>
         <button type="submit">Guardar</button>
@@ -78,7 +87,7 @@
         <div class="monitor-frame">
           <iframe id="prev" title="Vista previa del monitor" src="sim.html?embed=1"></iframe>
         </div>
-        <p class="caption">Vista previa del VGA. No es el Pico; usa el mismo tráfico ADS-B de ejemplo en vivo.</p>
+        <p class="caption">Vista previa del VGA. La lista rota para no repetir siempre los mismos cuatro.</p>
       </div>
     </div>
   </div>
@@ -96,6 +105,8 @@
       data.f_heli = f.f_heli.checked;
       data.max_aircraft = Number(data.max_aircraft);
       data.radius_km = Number(data.radius_km);
+      data.rotate_s = Number(data.rotate_s);
+      data.map_labels = Number(data.map_labels);
       data.type = 'config';
       return data;
     }

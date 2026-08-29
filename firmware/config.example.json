@@ -4,18 +4,17 @@
     "preset": "AEP",
     "lat": -34.559,
     "lon": -58.416,
-    "radius_km": 40
+    "radius_km": 80
   },
   "mode": "hybrid",
+  "list_style": "fa",
   "theme": "crt_amber",
+  "rotate_s": 7,
+  "map_labels": 4,
   "units": "metric",
   "filters": {
-    "alt_min_ft": 0,
-    "alt_max_ft": 45000,
     "include_ground": false,
-    "types": ["adsb", "ga"],
-    "max_aircraft": 8
+    "max_aircraft": 16
   },
-  "track": { "enabled": false, "idents": [] },
   "poll_s": 20
 }
