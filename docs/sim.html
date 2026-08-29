@@ -60,13 +60,27 @@ canvas#radar{width:100%;height:100%;display:block}
 .wall.full .fa-id{font-size:22px}
 .wall.full .metrics b{font-size:18px}
 .wall.full .fa-times b{font-size:20px}
-.fids{width:100%;border-collapse:collapse;font-size:12px;color:var(--scope-fg)}
+.carousel-wrap.hero .fa-id, .wall.hero .fa-id, .wall.full.hero .fa-id{font-size:44px}
+.carousel-wrap.hero .fa-times b, .wall.hero .fa-times b, .wall.full.hero .fa-times b{font-size:36px}
+.carousel-wrap.hero .metrics b, .wall.hero .metrics b, .wall.full.hero .metrics b{font-size:28px}
+.carousel-wrap.hero .fa-route, .wall.hero .fa-route{font-size:22px}
+.carousel-wrap.hero .logo, .wall.hero .logo{width:72px;height:72px}
+.carousel-wrap.hero .fa-card{padding:32px}
+.carousel-wrap.lg .fa-id{font-size:28px}
+.carousel-wrap.lg .fa-times b{font-size:26px}
+.carousel-wrap.lg .metrics b{font-size:22px}
+.carousel-wrap.lg .fa-route{font-size:18px}
+.carousel-wrap.lg .logo{width:56px;height:56px}
+.wall.full .fa-id{font-size:26px}
+.wall.full .metrics b{font-size:20px}
+.wall.full .fa-times b{font-size:24px}
+.wall.full .logo{width:52px;height:52px}
+#load{display:none;position:absolute;inset:0;z-index:4;background:#000000c4;color:var(--scope-fg);align-items:center;justify-content:center;letter-spacing:.2em;font-size:18px;font-weight:700}
+#load.on{display:grid}
 .fids th{text-align:left;font-size:10px;letter-spacing:.08em;padding:6px;border-bottom:1px solid color-mix(in srgb, var(--scope-fg) 25%, transparent);opacity:.7}
 .fids td{padding:8px 6px;border-bottom:1px solid #ffffff14;white-space:nowrap}
 .empty{margin:auto;max-width:280px;text-align:center;border:1px solid color-mix(in srgb, var(--scope-fg) 20%, transparent);border-radius:12px;padding:20px 18px;background:#0000004d}
 #overCard{display:none;position:absolute;left:12px;bottom:12px;max-width:42%;z-index:3}
-#load{display:none;position:absolute;inset:0;z-index:4;background:#00000073;color:var(--scope-fg);align-items:center;justify-content:center;letter-spacing:.2em;font-size:14px}
-#load.on{display:grid}
 aside.panel{width:100%;border-top:1px solid var(--border);background:var(--surface)}
 @media(min-width:960px){aside.panel{width:340px;border-top:0;border-left:1px solid var(--border);flex-shrink:0}}
 .panel-in{padding:24px 20px 40px}
@@ -196,7 +210,7 @@ a{color:var(--radar)}
           <input id="max" type="range" min="4" max="24" value="16">
         </div>
         <div class="field"><span id="rotLbl">Rotación 7s</span>
-          <input id="rotate" type="range" min="3" max="20" value="7">
+          <input id="rotate" type="range" min="4" max="20" value="8">
         </div>
         <label class="toggle">Casa / sobrevuelo <input type="checkbox" id="house"></label>
         <div class="row2">
@@ -208,6 +222,6 @@ a{color:var(--radar)}
     </div>
   </aside>
 </div>
-<script src="radar.js?v=17"></script>
+<script src="radar.js?v=18"></script>
 </body>
 </html>
