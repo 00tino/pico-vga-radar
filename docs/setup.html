@@ -19,10 +19,10 @@
 </head>
 <body>
   <div class="wrap">
-    <nav><a href="index.html">Inicio</a> <a href="sim.html">Simulador</a></nav>
+    <nav><a href="index.html">Inicio</a> <a href="sim.html?v=4">Simulador</a></nav>
     <p class="kicker">Setup</p>
     <h1>Configurar el radar</h1>
-    <p class="hint">La pantalla de la derecha es una vista previa. Esta web puede ser pesada; al Pico solo le llega un JSON chico.</p>
+    <p class="hint">Vista previa a la derecha. Esta web puede ser pesada; al Pico le llega un JSON chico.</p>
     <div class="layout">
       <form id="f">
         <div class="card">
@@ -31,19 +31,15 @@
           <input name="pass" type="password" placeholder="Clave" autocomplete="new-password">
         </div>
         <div class="card">
-          <label>Zona</label>
-          <select name="preset" id="preset">
-            <option value="AEP">Aeroparque (AEP)</option>
-            <option value="EZE">Ezeiza (EZE)</option>
-            <option value="FDO">San Fernando (FDO)</option>
-            <option value="custom">Coordenadas</option>
-          </select>
-          <div class="row" id="custom" style="display:none">
-            <div><label>Lat</label><input name="lat" value="-34.559"></div>
-            <div><label>Lon</label><input name="lon" value="-58.416"></div>
+          <label>Aeropuerto (IATA)</label>
+          <input name="airport" value="AEP" placeholder="AEP, LGA, DXB, JFK...">
+          <label>O coordenadas de tu casa</label>
+          <div class="row">
+            <div><label>Lat</label><input name="lat" placeholder="-34.55"></div>
+            <div><label>Lon</label><input name="lon" placeholder="-58.44"></div>
           </div>
           <label>Radio (km)</label>
-          <input name="radius_km" type="number" value="80" min="5" max="200">
+          <input name="radius_km" type="number" value="80" min="5" max="400">
         </div>
         <div class="card">
           <label>Vista</label>
@@ -54,7 +50,8 @@
           </select>
           <label>Formato de lista</label>
           <select name="list_style">
-            <option value="fa">FlightAware (tarjeta con horarios)</option>
+            <option value="fa">Tarjetas FlightAware</option>
+            <option value="fids">Pantalla de aeropuerto</option>
             <option value="carousel">Un vuelo por vez</option>
           </select>
           <label>Rotar lista cada (s)</label>
@@ -67,34 +64,34 @@
           </select>
         </div>
         <div class="card">
-          <label>Qué mostrar</label>
+          <label>Que mostrar</label>
           <div class="checks">
-            <label><input name="f_air" type="checkbox" checked> Aerolíneas</label>
-            <label><input name="f_ga" type="checkbox" checked> Gral. aviación</label>
-            <label><input name="f_biz" type="checkbox" checked> Jets ejecutivos</label>
-            <label><input name="f_heli" type="checkbox" checked> Helicópteros</label>
+            <label><input name="f_air" type="checkbox" checked> Aerolineas</label>
+            <label><input name="f_ga" type="checkbox"> Gral. aviacion</label>
+            <label><input name="f_biz" type="checkbox"> Jets ejecutivos</label>
+            <label><input name="f_heli" type="checkbox"> Helicopteros</label>
           </div>
-          <label style="margin-top:12px">Máx. aviones</label>
+          <label>Seguir aerolinea</label>
+          <input name="follow_airline" placeholder="JetSMART o JES">
+          <label>Seguir vuelo</label>
+          <input name="follow_flight" placeholder="JA3166">
+          <label>Max. aviones</label>
           <input name="max_aircraft" type="number" value="16" min="1" max="24">
-          <label>Etiquetas en el mapa</label>
-          <input name="map_labels" type="number" value="4" min="2" max="8">
           <label><input name="include_ground" type="checkbox" style="width:auto;display:inline"> Incluir en tierra</label>
         </div>
         <button type="submit">Guardar</button>
-        <p class="ok" id="msg" hidden>Guardado. En el Pico esto reinicia y aplica en el monitor.</p>
+        <p class="ok" id="msg" hidden>Guardado. En el Pico esto reinicia y aplica.</p>
       </form>
       <div>
         <div class="monitor-frame">
-          <iframe id="prev" title="Vista previa del monitor" src="sim.html?embed=1"></iframe>
+          <iframe id="prev" title="Vista previa" src="sim.html?embed=1&v=4"></iframe>
         </div>
-        <p class="caption">Vista previa del VGA. La lista rota para no repetir siempre los mismos cuatro.</p>
+        <p class="caption">Solo se muestran tarjetas enteras. La lista rota.</p>
       </div>
     </div>
   </div>
   <script>
-    const PRESETS = { AEP:{lat:-34.559,lon:-58.416}, EZE:{lat:-34.822,lon:-58.536}, FDO:{lat:-34.453,lon:-58.590} };
     const f = document.getElementById('f');
-    const custom = document.getElementById('custom');
     const frame = document.getElementById('prev');
     function cfg() {
       const data = Object.fromEntries(new FormData(f).entries());
@@ -106,19 +103,10 @@
       data.max_aircraft = Number(data.max_aircraft);
       data.radius_km = Number(data.radius_km);
       data.rotate_s = Number(data.rotate_s);
-      data.map_labels = Number(data.map_labels);
       data.type = 'config';
       return data;
     }
-    function push() {
-      try { frame.contentWindow.postMessage(cfg(), '*'); } catch (e) {}
-    }
-    document.getElementById('preset').addEventListener('change', e => {
-      custom.style.display = e.target.value === 'custom' ? 'grid' : 'none';
-      const p = PRESETS[e.target.value];
-      if (p) { f.lat.value = p.lat; f.lon.value = p.lon; }
-      push();
-    });
+    function push() { try { frame.contentWindow.postMessage(cfg(), '*'); } catch (e) {} }
     f.addEventListener('input', push);
     frame.addEventListener('load', () => setTimeout(push, 400));
     const saved = localStorage.getItem('picoRadarConfig');
@@ -129,7 +117,6 @@
         if (f[k].type === 'checkbox') f[k].checked = !!v;
         else f[k].value = v;
       });
-      if (c.preset === 'custom') custom.style.display = 'grid';
     }
     f.addEventListener('submit', e => {
       e.preventDefault();
