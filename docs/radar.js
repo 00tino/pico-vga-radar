@@ -1,4 +1,11 @@
-/* Pico Radar v13 — GitHub Pages, estilo preview CRT, EZE por defecto */
+/* Pico Radar v14 — GitHub Pages CRT. Proxy CORS + catálogo local. */
+const PUBLIC_SKY = "https://pico-vga-radar-sky.vercel.app/api";
+const SKY_API = (function () {
+  const q = new URLSearchParams(location.search).get("api");
+  if (q) return q.replace(/\/$/, "");
+  if (location.hostname === "localhost" || location.hostname === "127.0.0.1") return location.origin + "/api";
+  return PUBLIC_SKY;
+})();
 const THEMES = {
   crt_amber: { fg: "#e8b86d", bg: "#0a0805" },
   crt_green: { fg: "#7dff7a", bg: "#031105" },
@@ -104,6 +111,12 @@ function hay(a) {
 }
 function letters(s) { return (s || "").toUpperCase().replace(/[^A-Z]/g, ""); }
 function compactId(s) { return (s || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); }
+function viewLabel() {
+  return view === "hybrid" ? "Hibrido" : view === "radar" ? "Radar" : "Pared";
+}
+function setMeta() {
+  monMeta.textContent = AC.length + " · " + radiusKm + " km · " + viewLabel();
+}
 function airlineOf(cs) {
   const L = letters(cs);
   const hit = ALINES.find((a) => a[0] === L.slice(0, 3));
@@ -147,12 +160,12 @@ function setLoad(show, msg) {
   loadEl.classList.toggle("on", !!show);
 }
 function applyTheme() {
-  const { fg, bg } = THEMES[theme] || THEMES.crt_amber;
+  const pair = THEMES[theme] || THEMES.crt_amber;
   const mon = document.getElementById("monitor");
-  mon.style.setProperty("--scope-fg", fg);
-  mon.style.setProperty("--scope-bg", bg);
-  mon.style.background = bg;
-  mon.style.color = fg;
+  mon.style.setProperty("--scope-fg", pair.fg);
+  mon.style.setProperty("--scope-bg", pair.bg);
+  mon.style.background = pair.bg;
+  mon.style.color = pair.fg;
 }
 function currentApt() {
   const q = document.getElementById("preset").value || "EZE";
@@ -200,7 +213,7 @@ bindSuggest(
   document.getElementById("preset"),
   document.getElementById("sugAp"),
   () => AIRPORTS,
-  (r) => "<b>" + r[0] + "</b>" + (r[1] || r[5]) + " · " + (r[4] || ""),
+  (r) => "<b>" + r[0] + "</b> " + (r[1] || r[5]) + " · " + (r[4] || ""),
   (code) => {
     const a = AIRPORTS.find((x) => x[0] === code) || SEED_AP[0];
     document.getElementById("preset").value = a[0] + " — " + a[1] + " · " + a[4];
@@ -253,7 +266,6 @@ function enrich(a) {
   return a;
 }
 function applyFilters() {
-  const apt = currentApt();
   const radiusNm = radiusKm / 1.852;
   const alQ = (document.getElementById("followAl").value || "").trim();
   const alHit = alQ ? ALINES.find((a) => fold(a.join(" ")).includes(rewrite(alQ)) || a[0] === alQ.toUpperCase().slice(0, 3)) : null;
@@ -271,7 +283,7 @@ function applyFilters() {
     AC = RAW.slice().sort((a, b) => (a.dst || 99) - (b.dst || 99)).slice(0, maxN);
     AC.forEach(enrich);
   }
-  monMeta.textContent = AC.length + " · " + radiusKm + " km · " + (view === "hybrid" ? "Híbrido" : view === "radar" ? "Radar" : "Pared");
+  setMeta();
 }
 async function pullJson(url, ms) {
   const ctrl = new AbortController();
@@ -285,8 +297,14 @@ async function pullJson(url, ms) {
 function skyUrls(lat, lon, nm) {
   const a = "https://opendata.adsb.fi/api/v2/lat/" + lat + "/lon/" + lon + "/dist/" + nm;
   const b = "https://api.adsb.lol/v2/lat/" + lat + "/lon/" + lon + "/dist/" + nm;
-  const wrap = (u) => [u, "https://corsproxy.io/?" + encodeURIComponent(u), "https://api.allorigins.win/raw?url=" + encodeURIComponent(u)];
-  return wrap(a).concat(wrap(b));
+  return [
+    SKY_API + "/sky?lat=" + lat + "&lon=" + lon + "&dist=" + nm,
+    a,
+    b,
+    "https://corsproxy.io/?" + encodeURIComponent(a),
+    "https://api.allorigins.win/raw?url=" + encodeURIComponent(a),
+    "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(a),
+  ];
 }
 function normList(data) {
   const list = data && (data.ac || data.aircraft);
@@ -296,10 +314,10 @@ async function fetchSky(lat, lon, nm) {
   let lastErr;
   for (const u of skyUrls(lat, lon, nm)) {
     try {
-      const data = await pullJson(u, u.includes("adsb.lol") && !u.includes("proxy") ? 6000 : 10000);
+      const data = await pullJson(u, u.indexOf("vercel.app") >= 0 ? 12000 : 8000);
       const list = normList(data);
       if (data && Array.isArray(list)) {
-        const src = u.includes("adsb.fi") ? "adsb.fi" : u.includes("adsb.lol") && !u.includes("proxy") ? "adsb.lol" : "vivo proxy";
+        const src = data.source || (u.indexOf("adsb.fi") >= 0 ? "adsb.fi" : u.indexOf("adsb.lol") >= 0 ? "adsb.lol" : "vivo");
         return { list, src };
       }
     } catch (e) { lastErr = e; }
@@ -334,17 +352,17 @@ async function loadLive(showOverlay) {
   if (showOverlay) setLoad(true, "Cargando " + apt[0]);
   const nm = Math.max(25, Math.round(radiusKm / 1.852) + 8);
   try {
-    const { list, src } = await fetchSky(center[0], center[1], nm);
-    srcLabel = src;
-    lastOk = { list, src, at: Date.now() };
-    RAW = list.map(norm).filter((a) => a.lat != null && a.hex);
+    const got = await fetchSky(center[0], center[1], nm);
+    srcLabel = got.src;
+    lastOk = { list: got.list, src: got.src, at: Date.now() };
+    RAW = got.list.map(norm).filter((a) => a.lat != null && a.hex);
     applyFilters();
     renderWall();
     fillRoutes(AC).then(() => { applyFilters(); renderWall(); });
     const now = performance.now();
     AC.forEach((a) => { POS[a.hex] = { lat: a.lat, lon: a.lon, t: now, gs: a.gs, track: a.track }; });
     lastSweep = now;
-    if (!RAW.length) statusEl.textContent = "0 aeronaves en " + apt[0] + " (radio " + radiusKm + " km). No hay cobertura ADS-B o no hay tráfico ahora.";
+    if (!RAW.length) statusEl.textContent = "0 aeronaves en " + apt[0] + " (radio " + radiusKm + " km). No hay cobertura ADS-B o no hay trafico ahora.";
     else if (followAl && !AC.length) statusEl.textContent = RAW.length + " aviones en zona, 0 de " + followAl;
     else statusEl.textContent = RAW.length + " aeronaves · " + apt[0] + " · " + srcLabel;
     foot.textContent = "ADS-B en vivo · " + srcLabel;
@@ -356,7 +374,7 @@ async function loadLive(showOverlay) {
       statusEl.textContent = RAW.length + " aeronaves · " + apt[0] + " · " + srcLabel;
     } else {
       RAW = []; AC = []; renderWall();
-      statusEl.textContent = "No pude leer el cielo de " + apt[0] + ". Reintentá.";
+      statusEl.textContent = "No pude leer el cielo de " + apt[0] + ". Reintenta.";
       foot.textContent = "ADS-B en vivo · error";
     }
   } finally {
@@ -373,22 +391,40 @@ function displayPos(a) {
   return { lat: p.lat + Math.cos(rad) * km / 111, lon: p.lon + Math.sin(rad) * km / (111 * Math.cos(p.lat * Math.PI / 180)) };
 }
 function logoHTML(a) {
-  const [iata, name] = airlineOf(a.flight);
+  const pair = airlineOf(a.flight);
+  const iata = pair[0];
+  const name = pair[1];
   const fb = '<div class="fb">' + (iata || name || "GA").slice(0, 2) + "</div>";
   if (!iata) return fb;
-  return '<img alt="' + iata + '" src="https://pics.avs.io/64/64/' + iata + '.png" onerror="this.outerHTML=this.dataset.fb" data-fb=\'' + fb + "'>";
+  return '<img alt="' + iata + '" src="' + SKY_API + "/logo?code=" + iata + '" onerror="this.outerHTML=this.dataset.fb" data-fb=\'' + fb + "'>";
 }
 function cardHTML(a) {
-  const [, name] = airlineOf(a.flight);
+  const name = airlineOf(a.flight)[1];
   const pct = a.pct != null ? a.pct : 18;
   const origin = a.origin || currentApt()[0];
   const dest = a.dest || "---";
-  return '<div class="fa-card"><div class="fa-row"><div class="logo">' + logoHTML(a) + '</div><div><div class="fa-top"><span class="fa-id">' + (a.flight || a.hex) + '</span><span class="fa-st">' + a.status + '</span></div><div class="fa-air">' + name + " · " + (a.t || a.r || "-") + '</div></div></div><div class="fa-route"><span>' + origin + '</span><span class="bar"><i style="width:' + pct + '%"></i></span><span>' + dest + '</span></div><div class="fa-times"><div><span class="lbl">Despegue ' + a.depKind + "</span><b>" + hhmm(a.depAt) + "</b></div><div><span class="lbl">Aterrizaje " + a.arrKind + "</span><b>" + hhmm(a.arrAt) + "</b></div></div><div class=\"fa-met\">" + (a.status === "EN TIERRA" ? "Preparandose para el despegue" : "Alt " + fmtAlt(a.alt) + " · " + ktToMph(a.gs) + (a.arrAt ? " · llega en " + Math.max(0, Math.round((a.arrAt - Date.now()) / 60000)) + " min" : "")) + "</div></div>";
+  const met = a.status === "EN TIERRA"
+    ? "Preparandose para el despegue"
+    : "Alt " + fmtAlt(a.alt) + " · " + ktToMph(a.gs) + (a.arrAt ? " · llega en " + Math.max(0, Math.round((a.arrAt - Date.now()) / 60000)) + " min" : "");
+  return (
+    '<div class="fa-card">' +
+      '<div class="fa-row"><div class="logo">' + logoHTML(a) + "</div><div>" +
+        '<div class="fa-top"><span class="fa-id">' + (a.flight || a.hex) + '</span><span class="fa-st">' + a.status + "</span></div>" +
+        '<div class="fa-air">' + name + " · " + (a.t || a.r || "-") + "</div>" +
+      "</div></div>" +
+      '<div class="fa-route"><span>' + origin + '</span><span class="bar"><i style="width:' + pct + '%"></i></span><span>' + dest + "</span></div>" +
+      '<div class="fa-times">' +
+        '<div><span class="lbl">Despegue ' + a.depKind + "</span><b>" + hhmm(a.depAt) + "</b></div>" +
+        '<div><span class="lbl">Aterrizaje ' + a.arrKind + "</span><b>" + hhmm(a.arrAt) + "</b></div>" +
+      "</div>" +
+      '<div class="fa-met">' + met + "</div>" +
+    "</div>"
+  );
 }
 function clipCards() {
   if (listStyle === "carousel" || listStyle === "fids") return;
   const box = wall.getBoundingClientRect();
-  [...wall.querySelectorAll(".fa-card")].forEach((c) => {
+  [].slice.call(wall.querySelectorAll(".fa-card")).forEach((c) => {
     const r = c.getBoundingClientRect();
     if (r.bottom > box.bottom + 2 || r.top < box.top - 2) c.style.display = "none";
   });
@@ -425,13 +461,13 @@ function renderWall() {
   wall.classList.toggle("hybrid", view === "hybrid");
   wall.classList.toggle("full", view === "wall");
   if (!AC.length) {
-    wall.innerHTML = '<div class="empty"><div>' + (loading ? "Cargando el cielo…" : "Sin vuelos en este radio") + "</div><p class=\"fa-air\">" + (statusEl.textContent || "") + "</p></div>";
+    wall.innerHTML = '<div class="empty"><div>' + (loading ? "Cargando el cielo…" : "Sin vuelos en este radio") + '</div><p class="fa-air">' + (statusEl.textContent || "") + "</p></div>";
     return;
   }
   const list = visibleList();
   if (listStyle === "fids") {
     wall.innerHTML = '<table class="fids"><thead><tr><th></th><th>VUELO</th><th>RUTA</th><th>DEP</th><th>ARR</th><th>ESTADO</th></tr></thead><tbody>' +
-      list.map((a) => "<tr><td><div class=\"logo\" style=\"width:28px;height:28px;font-size:10px\">" + logoHTML(a) + "</div></td><td>" + (a.flight || "") + "</td><td>" + (a.origin || "") + " → " + (a.dest || "") + "</td><td>" + hhmm(a.depAt) + "</td><td>" + hhmm(a.arrAt) + "</td><td>" + (a.status === "EN TIERRA" ? "EN TIERRA" : "EN VUELO") + "</td></tr>").join("") +
+      list.map((a) => '<tr><td><div class="logo" style="width:28px;height:28px;font-size:10px">' + logoHTML(a) + "</div></td><td>" + (a.flight || "") + "</td><td>" + (a.origin || "") + " → " + (a.dest || "") + "</td><td>" + hhmm(a.depAt) + "</td><td>" + hhmm(a.arrAt) + "</td><td>" + (a.status === "EN TIERRA" ? "EN TIERRA" : "EN VUELO") + "</td></tr>").join("") +
       "</tbody></table>";
   } else if (listStyle === "carousel") {
     wall.innerHTML = '<div class="carousel-wrap">' + (list[0] ? cardHTML(list[0]) : "") + "</div>";
@@ -454,19 +490,19 @@ function loop() {
   const w = radar.clientWidth || 640, h = radar.clientHeight || 480;
   radar.width = w * dpr; radar.height = h * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const { fg, bg } = THEMES[theme] || THEMES.crt_amber;
-  ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+  const pair = THEMES[theme] || THEMES.crt_amber;
+  ctx.fillStyle = pair.bg; ctx.fillRect(0, 0, w, h);
   const left = view === "hybrid" ? 0.54 : 1;
   const cx = w * left * 0.5, cy = h * 0.52;
   const R = Math.min(cx, cy) * 0.86;
-  ctx.strokeStyle = fg + "28"; ctx.lineWidth = 1;
+  ctx.strokeStyle = pair.fg + "28"; ctx.lineWidth = 1;
   [0.25, 0.5, 0.75, 1].forEach((r) => { ctx.beginPath(); ctx.arc(cx, cy, R * r, 0, Math.PI * 2); ctx.stroke(); });
   ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
   beam += 0.012; if (beam > Math.PI * 3) beam -= Math.PI * 2;
   if (performance.now() - lastSweep > 55000) { lastSweep = performance.now(); loadLive(false); }
   if (performance.now() - lastRot > rotateS * 1000) { lastRot = performance.now(); page++; renderWall(); }
-  ctx.strokeStyle = fg; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(beam) * R, cy + Math.sin(beam) * R); ctx.stroke();
-  ctx.fillStyle = fg; ctx.font = "11px ui-monospace, monospace";
+  ctx.strokeStyle = pair.fg; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(beam) * R, cy + Math.sin(beam) * R); ctx.stroke();
+  ctx.fillStyle = pair.fg; ctx.font = "11px ui-monospace, monospace";
   ctx.fillText(currentApt()[0], 10, 18);
   const span = Math.max(0.25, radiusKm / 111);
   const labeled = new Set(visibleList().map((a) => a.hex));
@@ -476,7 +512,7 @@ function loop() {
     const y = cy - ((pos.lat - center[0]) / span) * R;
     if (Math.abs(angDiff(Math.atan2(y - cy, x - cx), beam)) < 0.08) a.paint = 1;
     a.paint = Math.max(0.32, (a.paint || 0.32) - 0.0024);
-    ctx.globalAlpha = a.paint; ctx.fillStyle = fg;
+    ctx.globalAlpha = a.paint; ctx.fillStyle = pair.fg;
     ctx.save(); ctx.translate(x, y); ctx.rotate(((a.track || 0) * Math.PI) / 180);
     ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(3.6, 5); ctx.lineTo(-3.6, 5); ctx.closePath(); ctx.fill(); ctx.restore();
     if (labeled.has(a.hex) || view === "radar") ctx.fillText((a.flight || "").slice(0, 8), x + 8, y - 6);
@@ -490,9 +526,12 @@ function loop() {
   requestAnimationFrame(loop);
 }
 function grabForm() {
-  view = document.querySelector("[data-view].on")?.dataset.view || "hybrid";
-  theme = document.querySelector("[data-theme].on")?.dataset.theme || "crt_amber";
-  listStyle = document.querySelector("[data-list].on")?.dataset.list || "fa";
+  const vBtn = document.querySelector("[data-view].on");
+  const tBtn = document.querySelector("[data-theme].on");
+  const lBtn = document.querySelector("[data-list].on");
+  view = (vBtn && vBtn.dataset.view) || "hybrid";
+  theme = (tBtn && tBtn.dataset.theme) || "crt_amber";
+  listStyle = (lBtn && lBtn.dataset.list) || "fa";
   const apt = currentApt();
   center = [apt[2], apt[3]];
   followAl = document.getElementById("followAl").value.trim();
@@ -501,20 +540,26 @@ function grabForm() {
   radiusKm = Number(document.getElementById("radius").value) || 150;
   maxN = Math.max(4, Math.min(24, Number(document.getElementById("max").value) || 16));
   rotateS = Math.max(3, Math.min(30, Number(document.getElementById("rotate").value) || 7));
-  want = { air: document.getElementById("fAir").checked, ga: document.getElementById("fGa").checked, biz: document.getElementById("fBiz").checked, heli: document.getElementById("fHeli").checked };
+  want = {
+    air: document.getElementById("fAir").checked,
+    ga: document.getElementById("fGa").checked,
+    biz: document.getElementById("fBiz").checked,
+    heli: document.getElementById("fHeli").checked,
+  };
   document.getElementById("radLbl").textContent = "Radio " + radiusKm + " km";
-  document.getElementById("maxLbl").textContent = "Máx. " + maxN + " vuelos";
-  document.getElementById("rotLbl").textContent = "Rotación " + rotateS + "s";
+  document.getElementById("maxLbl").textContent = "Max. " + maxN + " vuelos";
+  document.getElementById("rotLbl").textContent = "Rotacion " + rotateS + "s";
   document.querySelectorAll(".checks label").forEach((l) => l.classList.toggle("on", l.querySelector("input").checked));
   applyTheme();
+  setMeta();
 }
-document.getElementById("tabMon").onclick = () => {
+document.getElementById("tabMon").onclick = function () {
   document.getElementById("tabMon").classList.add("on");
   document.getElementById("tabCfg").classList.remove("on");
   document.getElementById("paneMon").hidden = false;
   document.getElementById("paneCfg").hidden = true;
 };
-document.getElementById("tabCfg").onclick = () => {
+document.getElementById("tabCfg").onclick = function () {
   document.getElementById("tabCfg").classList.add("on");
   document.getElementById("tabMon").classList.remove("on");
   document.getElementById("paneMon").hidden = true;
@@ -532,10 +577,22 @@ document.querySelectorAll("[data-view],[data-list],[data-theme]").forEach((b) =>
 ["fAir", "fGa", "fBiz", "fHeli", "ground", "house", "followFlt", "max", "rotate"].forEach((id) => {
   document.getElementById(id).addEventListener("change", () => { grabForm(); applyFilters(); renderWall(); });
 });
-document.getElementById("radius").addEventListener("input", () => { document.getElementById("radLbl").textContent = "Radio " + document.getElementById("radius").value + " km"; });
+document.getElementById("radius").addEventListener("input", () => {
+  radiusKm = Number(document.getElementById("radius").value) || 150;
+  document.getElementById("radLbl").textContent = "Radio " + radiusKm + " km";
+  setMeta();
+});
 document.getElementById("radius").addEventListener("change", () => { grabForm(); loadLive(true); });
-document.getElementById("refreshBtn").onclick = () => { grabForm(); loadLive(true); running = true; if (view !== "wall" && !looping) loop(); };
-document.getElementById("geo").onclick = () => {
+document.getElementById("max").addEventListener("input", () => {
+  document.getElementById("maxLbl").textContent = "Max. " + document.getElementById("max").value + " vuelos";
+});
+document.getElementById("rotate").addEventListener("input", () => {
+  document.getElementById("rotLbl").textContent = "Rotacion " + document.getElementById("rotate").value + "s";
+});
+document.getElementById("refreshBtn").onclick = function () {
+  grabForm(); loadLive(true); running = true; if (view !== "wall" && !looping) loop();
+};
+document.getElementById("geo").onclick = function () {
   navigator.geolocation.getCurrentPosition((pos) => {
     home = [pos.coords.latitude, pos.coords.longitude];
     document.getElementById("preset").value = "CASA";
@@ -543,49 +600,37 @@ document.getElementById("geo").onclick = () => {
     grabForm(); loadLive(true);
   });
 };
-document.getElementById("demoHouse").onclick = () => {
+document.getElementById("demoHouse").onclick = function () {
   document.getElementById("house").checked = true;
   demoOver = true;
   if (!home) home = center.slice();
   grabForm(); running = true; if (!looping) loop(); updateOver();
 };
-function parseCsv(text) {
-  const rows = []; let row = [], cell = "", q = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (q) { if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') q = false; else cell += c; }
-    else if (c === '"') q = true;
-    else if (c === ",") { row.push(cell); cell = ""; }
-    else if (c === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; }
-    else if (c !== "\r") cell += c;
-  }
-  if (cell || row.length) { row.push(cell); rows.push(row); }
-  return rows;
+
+async function loadCatalogs() {
+  try {
+    const [ap, al] = await Promise.all([
+      pullJson("airports.json", 8000),
+      pullJson("airlines.json", 8000),
+    ]);
+    if (Array.isArray(ap) && ap.length > 20) {
+      const seed = {};
+      SEED_AP.forEach((a) => { seed[a[0]] = 1; });
+      AIRPORTS = SEED_AP.concat(ap.filter((a) => a && a[0] && !seed[a[0]]));
+    }
+    if (Array.isArray(al) && al.length > 20) {
+      const seen = {};
+      SEED_AL.forEach((a) => { seen[a[0]] = 1; });
+      ALINES = SEED_AL.concat(al.filter((a) => a && a[0] && !seen[a[0]]));
+    }
+  } catch (e) { /* seed is enough for EZE/Tokio/Cabo */ }
 }
+
 async function boot() {
   grabForm();
   running = true; if (view !== "wall") loop();
   loadLive(true);
-  try {
-    const [apTxt, alTxt] = await Promise.all([
-      fetch("https://cdn.jsdelivr.net/gh/jpatokal/openflights@master/data/airports.dat").then((r) => r.text()),
-      fetch("https://cdn.jsdelivr.net/gh/jpatokal/openflights@master/data/airlines.dat").then((r) => r.text()),
-    ]);
-    const ap = parseCsv(apTxt).map((r) => {
-      const iata = (r[4] || "").trim();
-      if (iata.length !== 3 || iata === "\\N") return null;
-      return [iata, r[2] || r[1], +r[6], +r[7], r[3] || "", r[1] || ""];
-    }).filter(Boolean);
-    const seed = new Set(SEED_AP.map((a) => a[0]));
-    AIRPORTS = SEED_AP.concat(ap.filter((a) => !seed.has(a[0])));
-    const al = parseCsv(alTxt).map((r) => {
-      const icao = (r[4] || "").trim(), iata = (r[3] || "").trim(), active = r[7];
-      if (icao.length !== 3 || icao === "\\N" || active === "N") return null;
-      return [icao, iata === "\\N" || iata === "-" ? "" : iata, r[1] || icao, r[6] || ""];
-    }).filter(Boolean);
-    const seen = new Set(SEED_AL.map((a) => a[0]));
-    ALINES = SEED_AL.concat(al.filter((a) => !seen.has(a[0])));
-  } catch (e) { /* seed is enough */ }
+  await loadCatalogs();
 }
 boot();
 setInterval(() => { if (view !== "wall") return; if (performance.now() - lastRot > rotateS * 1000) { lastRot = performance.now(); page++; renderWall(); } }, 400);
