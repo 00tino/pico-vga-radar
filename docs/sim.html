@@ -3,114 +3,186 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Simulador</title>
+<title>Pico Radar</title>
 <style>
-:root{--amber:#e8b86d;--accent:#f2542d;--list:#e8b86d;--ink:#e8eef6;--bg:#050508;--card:#0b1018}
+:root{
+  --bg:#0a0a0b;--surface:#121214;--elevated:#1a1a1e;--fg:#eceae4;--muted:#9a958b;--subtle:#6f6a62;
+  --border:#2a2926;--accent:#f2542d;--accent-fg:#fff7f4;--paper:#fbfaf7;--ink:#14161a;
+  --radar:#e8b86d;--scope-fg:#e8b86d;--scope-bg:#0a0805;
+  --sans:"Segoe UI",ui-sans-serif,system-ui,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
 *{box-sizing:border-box}
-body{margin:0;background:#14110e;color:#f4f1ea;font:15px/1.45 ui-sans-serif,system-ui,sans-serif}
-header{padding:16px 20px 0;max-width:1240px;margin:0 auto}header a{color:var(--amber)}
-.desk{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(280px,.86fr);gap:22px;max-width:1240px;margin:0 auto;padding:16px 20px 48px}
-@media(max-width:920px){.desk{grid-template-columns:1fr}}
-.monitor{background:#1a1a1a;border:10px solid #2c2c2c;border-bottom-width:28px;border-radius:10px}
-.bezel{background:var(--bg);position:relative;overflow:hidden;font-family:ui-monospace,Menlo,monospace;height:min(62vh,720px);min-height:320px}
-.scan{pointer-events:none;position:absolute;inset:0;background:repeating-linear-gradient(transparent 0 2px,#0003 3px)}
-canvas#radar{width:100%;height:100%;display:none}
-.wall{display:none;position:absolute;right:10px;top:12px;bottom:12px;width:46%;overflow:hidden;flex-direction:column;justify-content:center;align-items:stretch;gap:6px}
-.wall.full{left:10px;right:10px;width:auto}
-#overCard{display:none;position:absolute;left:10px;bottom:12px;max-width:46%;z-index:3}
-#load{display:none;position:absolute;inset:0;z-index:4;background:#0008;color:var(--list);align-items:center;justify-content:center;font:700 18px ui-monospace,monospace;letter-spacing:.12em}
-#load.on{display:flex}
-.sug{position:relative}
-.sug-list{display:none;position:absolute;left:0;right:0;top:100%;z-index:8;background:#16161a;border:1px solid #444;border-radius:8px;max-height:220px;overflow:auto}
-.sug-list button{display:block;width:100%;text-align:left;background:none;color:#eee;padding:8px 10px;margin:0;border-radius:0;font-weight:500;font-size:13px}
-.sug-list button:hover{background:#2a2a30}
-.logo{width:40px;height:40px;background:#111;display:flex;align-items:center;justify-content:center;overflow:hidden;flex:0 0 40px}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);font:15px/1.45 var(--sans)}
+button, [role=button]{cursor:pointer}
+button{font:inherit;color:inherit}
+input,select{font:inherit;color:inherit}
+.app{display:flex;min-height:100dvh;flex-direction:column}
+@media(min-width:960px){.app{flex-direction:row}}
+.stage{flex:1;display:flex;flex-direction:column;padding:12px;min-height:70vh}
+@media(min-width:960px){.stage{padding:20px;min-height:100dvh}}
+.monitor{position:relative;flex:1;min-height:520px;overflow:hidden;border:1px solid var(--border);border-radius:16px;background:var(--scope-bg);color:var(--scope-fg);display:flex;flex-direction:column}
+.mon-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 16px;border-bottom:1px solid color-mix(in srgb, var(--scope-fg) 15%, transparent);font-size:12px;letter-spacing:.04em}
+.mon-head b{font-weight:600}
+.mon-head .meta{font-family:var(--mono);opacity:.8;font-variant-numeric:tabular-nums}
+.view{position:relative;flex:1;min-height:0}
+canvas#radar{width:100%;height:100%;display:block}
+.wall{position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;overflow:hidden;padding:12px}
+.wall.hybrid{left:auto;width:46%;min-width:220px}
+.wall.on{display:flex}
+.fa-card{border:1px solid color-mix(in srgb, var(--scope-fg) 22%, transparent);background:#0000008f;border-radius:12px;padding:12px;margin:0 0 8px;color:var(--scope-fg)}
+.fa-row{display:grid;grid-template-columns:40px 1fr;gap:10px;align-items:center}
+.logo{width:40px;height:40px;border-radius:8px;background:var(--paper);color:var(--ink);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;overflow:hidden}
 .logo img{width:100%;height:100%;object-fit:contain;background:#fff}
-.logo .fb{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800}
-.fa-row{display:grid;grid-template-columns:40px 1fr;gap:8px;align-items:center}
-.bar{flex:1;height:4px;background:#ffffff22;position:relative;overflow:hidden}.bar>i{position:absolute;inset:0 auto 0 0;background:var(--list)}
-.fa-card{background:var(--card);border:1px solid var(--list);color:var(--ink);padding:7px 8px;border-radius:4px;flex:0 0 auto}
+.fa-top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.fa-id{font-weight:700;font-family:var(--mono);font-size:15px}
+.fa-st{font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:.75}
+.fa-air{font-size:11px;opacity:.7;margin-top:2px}
+.fa-route{display:flex;align-items:center;gap:8px;margin:8px 0 6px;font-weight:700;font-size:13px}
+.bar{flex:1;height:3px;background:#ffffff22;position:relative;overflow:hidden;border-radius:99px}
+.bar>i{position:absolute;inset:0 auto 0 0;background:var(--scope-fg)}
+.fa-times{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:11px;opacity:.85}
+.fa-times b{display:block;font-size:13px}
+.lbl{font-size:9px;letter-spacing:.08em;text-transform:uppercase;opacity:.55}
+.fa-met{margin-top:8px;font-size:11px;opacity:.8}
 .carousel-wrap{height:100%;display:flex;align-items:stretch}
-.carousel-wrap .fa-card{flex:1;display:flex;flex-direction:column;justify-content:center;padding:28px}
-.carousel-wrap .logo{width:96px;height:96px;flex-basis:96px;margin:0 auto 12px}
-.carousel-wrap .fa-row{grid-template-columns:1fr;text-align:center}
-.carousel-wrap .fa-id{font-size:32px}.carousel-wrap .fa-route{font-size:26px}
-.carousel-wrap .fa-met{font-size:20px;margin-top:18px}
-.fa-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.fa-id{font-weight:800;font-size:13px}
-.fa-st{font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:2px 6px}
-.st-air{color:#7ee0a5;background:#0e2a1c}.st-gnd{color:#f0d27a;background:#2a220c}.st-late{color:#ff8b8b;background:#2a1212}
-.fa-air{font-size:10px;color:#9aa8bd}
-.fa-route{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:14px;font-weight:700}
-.fa-times{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:10px;color:#c5d0de}.fa-times b{display:block;color:#fff;font-size:12px}
-.lbl{color:#6f7f96;font-size:8px;letter-spacing:.08em;text-transform:uppercase}
-.fa-met{margin-top:5px;color:var(--list);font-size:10px;font-weight:600}
-.wall.full .fa-met{font-size:14px}
-.fids{width:100%;border-collapse:collapse;font-size:11px;color:var(--list)}
-.fids th{color:var(--list);font-size:8px;text-align:left;padding:3px 5px;border-bottom:1px solid var(--list)}
-.fids td{padding:5px;border-bottom:1px solid #ffffff22;white-space:nowrap}
-.phone{background:#0e0e10;border:8px solid #2a2a2e;border-radius:28px;padding:18px 14px 22px}
-.notch{width:80px;height:8px;background:#222;border-radius:8px;margin:0 auto 12px}
-label{display:block;font-size:11px;color:#9a958b;margin:8px 0 4px}
-input,select{width:100%;padding:9px;border-radius:8px;border:1px solid #333;background:#16161a;color:#eee}
-button{width:100%;margin-top:14px;padding:12px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;cursor:pointer}
-.ghost{background:#222;margin-top:8px}
-.hint{font-size:12px;color:#9a958b}.wifi-banner{background:#1c1810;border:1px solid #e8b86d33;color:var(--amber);padding:8px 10px;border-radius:8px;font-size:12px;margin-bottom:10px}
-#status{font-size:12px;color:#8fdf8a;margin-top:8px}
-.checks{display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:12px;color:#ddd}
-.checks label{margin:0;display:flex;gap:6px;align-items:center;color:#ddd}.checks input{width:auto}
-body.embed header,body.embed .phone{display:none}
-body.embed .desk{display:block;margin:0;padding:0;max-width:none}
-body.embed .monitor{border:0;border-radius:0}
-body.embed .bezel{height:100vh;min-height:100vh}
-</style></head>
+.carousel-wrap .fa-card{flex:1;display:flex;flex-direction:column;justify-content:center;padding:28px;margin:0}
+.fids{width:100%;border-collapse:collapse;font-size:12px;color:var(--scope-fg)}
+.fids th{text-align:left;font-size:10px;letter-spacing:.08em;padding:6px;border-bottom:1px solid color-mix(in srgb, var(--scope-fg) 25%, transparent);opacity:.7}
+.fids td{padding:8px 6px;border-bottom:1px solid #ffffff14;white-space:nowrap}
+.empty{margin:auto;max-width:280px;text-align:center;border:1px solid color-mix(in srgb, var(--scope-fg) 20%, transparent);border-radius:12px;padding:20px 18px;background:#0000004d}
+#overCard{display:none;position:absolute;left:12px;bottom:12px;max-width:42%;z-index:3}
+#load{display:none;position:absolute;inset:0;z-index:4;background:#00000073;color:var(--scope-fg);align-items:center;justify-content:center;letter-spacing:.2em;font-size:14px}
+#load.on{display:grid}
+aside.panel{width:100%;border-top:1px solid var(--border);background:var(--surface)}
+@media(min-width:960px){aside.panel{width:340px;border-top:0;border-left:1px solid var(--border);flex-shrink:0}}
+.panel-in{padding:24px 20px 40px}
+.kicker{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--subtle);margin:0}
+h1{margin:4px 0 0;font-size:1.5rem;font-weight:600;letter-spacing:-.02em;color:var(--fg)}
+.status{margin:8px 0 0;font-size:14px;line-height:1.5;color:var(--muted)}
+.tabs{margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:10px;background:var(--elevated)}
+.tabs button{height:44px;border:0;border-radius:8px;background:transparent;color:var(--muted);font-weight:500}
+.tabs button.on{background:var(--paper);color:var(--ink)}
+.field{margin-top:18px}
+.field>span{display:block;margin-bottom:6px;font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--subtle)}
+.field input[type=text], .field input:not([type]), .field input[type=search]{
+  width:100%;height:44px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--fg);padding:0 12px;outline:none
+}
+.field input:focus{box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent)}
+.seg{display:grid;gap:4px}
+.seg button{height:40px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--muted);font-size:12px}
+.seg button.on{border-color:var(--accent);color:var(--fg);background:color-mix(in srgb, var(--accent) 12%, transparent)}
+.checks{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.checks label{height:44px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:10px;font-size:12px;color:var(--muted);cursor:pointer}
+.checks label.on{border-color:var(--accent);background:color-mix(in srgb, var(--accent) 15%, transparent);color:var(--fg)}
+.checks input{display:none}
+.toggle{height:44px;display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border);border-radius:10px;padding:0 12px;font-size:14px}
+.primary{width:100%;height:44px;margin-top:18px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-fg);font-weight:500}
+.ghost{height:44px;border:1px solid var(--border);border-radius:10px;background:transparent;font-size:12px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.sug{position:relative}
+.sug-list{display:none;position:absolute;left:0;right:0;top:100%;z-index:20;background:var(--elevated);border:1px solid var(--border);border-radius:10px;max-height:240px;overflow:auto;margin:4px 0 0;padding:4px 0}
+.sug-list button{display:block;width:100%;text-align:left;background:none;border:0;color:var(--fg);padding:10px 12px;font-size:13px}
+.sug-list button:hover{background:var(--bg)}
+.sug-list b{color:var(--accent);font-family:var(--mono);margin-right:8px}
+.foot{margin-top:32px;font-size:12px;color:var(--subtle)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+input[type=checkbox]:not(.checks input){width:16px;height:16px;accent-color:var(--accent)}
+a{color:var(--radar)}
+</style>
+</head>
 <body>
-<header><a href="index.html">← Proyecto</a><p class="hint">Abrí ?v=12</p></header>
-<div class="desk">
-<div class="monitor"><div class="bezel">
-<canvas id="radar"></canvas>
-<div id="overCard"></div>
-<div class="wall" id="wall"></div>
-<div class="scan"></div>
-<div id="load">CARGANDO</div>
-</div></div>
-<div class="phone">
-<div class="notch"></div>
-<div class="wifi-banner">Preview · no guarda en el Pico</div>
-<form id="f">
-<label>Aeropuerto</label>
-<div class="sug"><input id="preset" autocomplete="off" value="AEP" placeholder="Ezeiza, Asuncion, Sydney..."><div class="sug-list" id="sugAp"></div></div>
-<button type="button" class="ghost" id="geo">Usar ubicacion del telefono</button>
-<button type="button" class="ghost" id="demoHouse">Ver ejemplo de sobrevuelo</button>
-<label>Radio (km)</label>
-<input id="radius" type="number" value="120" min="10" max="400">
-<label>Vista</label>
-<select id="mode"><option value="hybrid">Radar + lista</option><option value="radar">Solo radar</option><option value="wall">Solo lista</option></select>
-<label>Formato de lista</label>
-<select id="listStyle"><option value="fa">FlightAware (tarjeta)</option><option value="fids">Pantalla de aeropuerto</option><option value="carousel">Un vuelo por vez</option></select>
-<label>Rotar cada (s)</label>
-<input id="rotate" type="number" value="7" min="3" max="30">
-<label>Estilo radar</label>
-<select id="theme"><option value="crt_amber">CRT ambar</option><option value="crt_green">CRT verde</option><option value="atc_dark">ATC oscuro</option><option value="navy">Azul marino</option><option value="red">Rojo ATC</option><option value="ice">Hielo</option></select>
-<label>Que mostrar</label>
-<div class="checks">
-<label><input type="checkbox" id="fAir" checked> Aerolineas</label>
-<label><input type="checkbox" id="fGa"> Gral. aviacion</label>
-<label><input type="checkbox" id="fBiz"> Jets ejecutivos</label>
-<label><input type="checkbox" id="fHeli"> Helicopteros</label>
+<div class="app">
+  <section class="stage">
+    <div class="monitor" id="monitor">
+      <header class="mon-head"><b>Pico Radar</b><span class="meta" id="monMeta">0 · 150 km · Híbrido</span></header>
+      <div class="view">
+        <canvas id="radar"></canvas>
+        <div id="overCard"></div>
+        <div class="wall hybrid on" id="wall"></div>
+        <div id="load">CARGANDO</div>
+      </div>
+    </div>
+  </section>
+  <aside class="panel">
+    <div class="panel-in">
+      <p class="kicker">Pico 2W · VGA</p>
+      <h1>Cielo en vivo</h1>
+      <p class="status" id="status">Cargando EZE</p>
+      <div class="tabs">
+        <button type="button" class="on" id="tabMon">Monitor</button>
+        <button type="button" id="tabCfg">Configurar</button>
+      </div>
+      <div id="paneMon">
+        <div class="field"><span>Aeropuerto</span>
+          <div class="sug">
+            <input id="preset" autocomplete="off" value="EZE — Buenos Aires (Ezeiza) · Argentina" placeholder="Ezeiza, Tokio, Cabo Verde…">
+            <div class="sug-list" id="sugAp"></div>
+          </div>
+        </div>
+        <div class="field"><span id="radLbl">Radio 150 km</span>
+          <input id="radius" type="range" min="40" max="250" step="10" value="150">
+        </div>
+        <div class="field"><span>Filtros</span>
+          <div class="checks">
+            <label class="on"><input type="checkbox" id="fAir" checked> Aerolineas</label>
+            <label><input type="checkbox" id="fGa"> General</label>
+            <label><input type="checkbox" id="fBiz"> Business</label>
+            <label><input type="checkbox" id="fHeli"> Heli</label>
+          </div>
+        </div>
+        <label class="toggle">En tierra <input type="checkbox" id="ground" checked></label>
+        <button type="button" class="primary" id="refreshBtn">Actualizar cielo</button>
+      </div>
+      <div id="paneCfg" hidden>
+        <div class="field"><span>Vista</span>
+          <div class="seg" style="grid-template-columns:1fr 1fr 1fr">
+            <button type="button" class="on" data-view="hybrid">Híbrido</button>
+            <button type="button" data-view="radar">Radar</button>
+            <button type="button" data-view="wall">Pared</button>
+          </div>
+        </div>
+        <div class="field"><span>Lista</span>
+          <div class="seg" style="grid-template-columns:1fr 1fr 1fr">
+            <button type="button" class="on" data-list="fa">FlightAware</button>
+            <button type="button" data-list="fids">FIDS</button>
+            <button type="button" data-list="carousel">Carrusel</button>
+          </div>
+        </div>
+        <div class="field"><span>Tema</span>
+          <div class="seg" style="grid-template-columns:1fr 1fr 1fr">
+            <button type="button" class="on" data-theme="crt_amber">CRT ambar</button>
+            <button type="button" data-theme="crt_green">CRT verde</button>
+            <button type="button" data-theme="atc_dark">ATC</button>
+            <button type="button" data-theme="navy">Navy</button>
+            <button type="button" data-theme="red">Rojo</button>
+            <button type="button" data-theme="ice">Hielo</button>
+          </div>
+        </div>
+        <div class="field"><span>Seguir aerolínea</span>
+          <div class="sug">
+            <input id="followAl" autocomplete="off" placeholder="Andes, Qantas, JetSMART…">
+            <div class="sug-list" id="sugAl"></div>
+          </div>
+        </div>
+        <div class="field"><span>Seguir vuelo</span>
+          <input id="followFlt" placeholder="ARG1268" autocomplete="off">
+        </div>
+        <div class="field"><span id="maxLbl">Máx. 16 vuelos</span>
+          <input id="max" type="range" min="4" max="24" value="16">
+        </div>
+        <div class="field"><span id="rotLbl">Rotación 7s</span>
+          <input id="rotate" type="range" min="3" max="20" value="7">
+        </div>
+        <label class="toggle">Casa / sobrevuelo <input type="checkbox" id="house"></label>
+        <div class="row2">
+          <button type="button" class="ghost" id="geo">Mi ubicación</button>
+          <button type="button" class="ghost" id="demoHouse">Demo sobrevuelo</button>
+        </div>
+      </div>
+      <p class="foot" id="foot">ADS-B en vivo</p>
+    </div>
+  </aside>
 </div>
-<label>Seguir aerolinea</label>
-<div class="sug"><input id="followAl" autocomplete="off" placeholder="Cape, Andes, ANA..."><div class="sug-list" id="sugAl"></div></div>
-<div id="hubs" class="hint"></div>
-<label>Seguir vuelo</label>
-<input id="followFlt" placeholder="DL1390">
-<label><input type="checkbox" id="house" style="width:auto"> Destacar sobre mi casa</label>
-<label>Max. aviones</label>
-<input id="max" type="number" value="16" min="4" max="24">
-<label>Incluir en tierra</label>
-<select id="ground"><option value="0">No</option><option value="1">Si</option></select>
-<button>Aplicar en preview</button>
-<p id="status"></p>
-</form></div></div>
-<script src="radar.js?v=12"></script>
-</body></html>
+<script src="radar.js?v=13"></script>
+</body>
+</html>
