@@ -65,7 +65,7 @@ body.embed .monitor{border:0;border-radius:0}
 body.embed .bezel{height:100vh;min-height:100vh}
 </style></head>
 <body>
-<header><a href="index.html">← Proyecto</a><p class="hint">Abrí ?v=11</p></header>
+<header><a href="index.html">← Proyecto</a><p class="hint">Abrí ?v=12</p></header>
 <div class="desk">
 <div class="monitor"><div class="bezel">
 <canvas id="radar"></canvas>
@@ -79,11 +79,11 @@ body.embed .bezel{height:100vh;min-height:100vh}
 <div class="wifi-banner">Preview · no guarda en el Pico</div>
 <form id="f">
 <label>Aeropuerto</label>
-<div class="sug"><input id="preset" autocomplete="off" value="AEP" placeholder="Ezeiza, Cabo Verde, Osaka..."><div class="sug-list" id="sugAp"></div></div>
+<div class="sug"><input id="preset" autocomplete="off" value="AEP" placeholder="Ezeiza, Asuncion, Sydney..."><div class="sug-list" id="sugAp"></div></div>
 <button type="button" class="ghost" id="geo">Usar ubicacion del telefono</button>
 <button type="button" class="ghost" id="demoHouse">Ver ejemplo de sobrevuelo</button>
 <label>Radio (km)</label>
-<input id="radius" type="number" value="80" min="10" max="250">
+<input id="radius" type="number" value="120" min="10" max="400">
 <label>Vista</label>
 <select id="mode"><option value="hybrid">Radar + lista</option><option value="radar">Solo radar</option><option value="wall">Solo lista</option></select>
 <label>Formato de lista</label>
@@ -112,5 +112,5 @@ body.embed .bezel{height:100vh;min-height:100vh}
 <button>Aplicar en preview</button>
 <p id="status"></p>
 </form></div></div>
-<script src="radar.js?v=11"></script>
+<script src="radar.js?v=12"></script>
 </body></html>
