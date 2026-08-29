@@ -295,26 +295,48 @@ async function pullJson(url, ms) {
   } finally { clearTimeout(t); }
 }
 function skyUrls(lat, lon, nm) {
-  const a = "https://opendata.adsb.fi/api/v2/lat/" + lat + "/lon/" + lon + "/dist/" + nm;
-  const b = "https://api.adsb.lol/v2/lat/" + lat + "/lon/" + lon + "/dist/" + nm;
   return [
     SKY_API + "/sky?lat=" + lat + "&lon=" + lon + "&dist=" + nm,
-    a,
-    b,
-    "https://corsproxy.io/?" + encodeURIComponent(a),
-    "https://api.allorigins.win/raw?url=" + encodeURIComponent(a),
-    "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(a),
+    "https://opendata.adsb.fi/api/v2/lat/" + lat + "/lon/" + lon + "/dist/" + nm,
+    "https://api.adsb.lol/v2/lat/" + lat + "/lon/" + lon + "/dist/" + nm,
   ];
 }
 function normList(data) {
   const list = data && (data.ac || data.aircraft);
   return Array.isArray(list) ? list : [];
 }
+async function fetchSnapshot(lat, lon) {
+  let cache = null;
+  try { cache = await pullJson("sky-cache.json", 4000); } catch (e) { cache = null; }
+  if (!cache) {
+    try {
+      const live = await pullJson("live.json", 3000);
+      if (live && Array.isArray(live.ac)) {
+        cache = { EZE: { lat: live.lat || -34.822, lon: live.lon || -58.536, ac: live.ac, ts: live.ts } };
+      }
+    } catch (e) { cache = null; }
+  }
+  if (!cache || typeof cache !== "object") throw new Error("sin cielo");
+  const apt = currentApt()[0];
+  let best = cache[apt] || null;
+  let bestD = best ? 0 : 1e9;
+  if (!best) {
+    Object.keys(cache).forEach((k) => {
+      const h = cache[k];
+      if (!h || h.lat == null || !Array.isArray(h.ac)) return;
+      const d = kmLL([lat, lon], [h.lat, h.lon]);
+      if (d < bestD) { bestD = d; best = h; }
+    });
+  }
+  if (!best || !Array.isArray(best.ac)) throw new Error("sin cielo");
+  if (bestD > 220) throw new Error("sin cobertura de snapshot");
+  return { list: best.ac, src: "snapshot" };
+}
 async function fetchSky(lat, lon, nm) {
   let lastErr;
   for (const u of skyUrls(lat, lon, nm)) {
     try {
-      const data = await pullJson(u, u.indexOf("vercel.app") >= 0 ? 12000 : 8000);
+      const data = await pullJson(u, 2500);
       const list = normList(data);
       if (data && Array.isArray(list)) {
         const src = data.source || (u.indexOf("adsb.fi") >= 0 ? "adsb.fi" : u.indexOf("adsb.lol") >= 0 ? "adsb.lol" : "vivo");
@@ -322,7 +344,11 @@ async function fetchSky(lat, lon, nm) {
       }
     } catch (e) { lastErr = e; }
   }
-  throw lastErr || new Error("sin cielo");
+  try {
+    return await fetchSnapshot(lat, lon);
+  } catch (e) {
+    throw lastErr || e;
+  }
 }
 async function fillRoutes(list) {
   const pending = list.filter((a) => a.flight && !ROUTECACHE[compactId(a.flight)]).slice(0, 10);
