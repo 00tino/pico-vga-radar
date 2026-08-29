@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Simulador</title>
 <style>
-:root{--amber:#e8b86d;--accent:#f2542d}
+:root{--amber:#e8b86d;--accent:#f2542d;--list:#e8b86d;--ink:#e8eef6}
 *{box-sizing:border-box}
 body{margin:0;background:#14110e;color:#f4f1ea;font:15px/1.45 ui-sans-serif,system-ui,sans-serif}
 header{padding:16px 20px 0;max-width:1240px;margin:0 auto}header a{color:var(--amber)}
@@ -21,13 +21,14 @@ canvas#radar{width:100%;height:100%;display:none}
 .logo img{width:100%;height:100%;object-fit:contain;background:#fff}
 .logo .fb{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800}
 .fa-row{display:grid;grid-template-columns:44px 1fr;gap:8px;align-items:center}
-.bar{flex:1;height:4px;background:#243044;position:relative;overflow:hidden}.bar>i{position:absolute;inset:0 auto 0 0;background:#7ff3ff}
-.fa-card{background:#0b1018;border:1px solid #243044;color:#e8eef6;padding:7px 8px;border-radius:4px}
+.bar{flex:1;height:4px;background:#ffffff22;position:relative;overflow:hidden}.bar>i{position:absolute;inset:0 auto 0 0;background:var(--list)}
+.fa-card{background:#0b1018;border:1px solid #ffffff22;color:var(--ink);padding:7px 8px;border-radius:4px}
 .carousel-wrap{height:100%;display:flex;align-items:stretch}
 .carousel-wrap .fa-card{flex:1;display:flex;flex-direction:column;justify-content:center;padding:28px}
 .carousel-wrap .logo{width:96px;height:96px;flex-basis:96px;margin:0 auto 12px}
 .carousel-wrap .fa-row{grid-template-columns:1fr;text-align:center}
 .carousel-wrap .fa-id{font-size:32px}.carousel-wrap .fa-route{font-size:26px}
+.carousel-wrap .fa-met{font-size:16px;margin-top:14px}.carousel-wrap .fa-times b{font-size:18px}
 .fa-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .fa-id{font-weight:800;font-size:13px}
 .fa-st{font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:2px 6px}
@@ -36,27 +37,28 @@ canvas#radar{width:100%;height:100%;display:none}
 .fa-route{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:15px;font-weight:700}
 .fa-times{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:10px;color:#c5d0de}.fa-times b{display:block;color:#fff;font-size:12px}
 .lbl{color:#6f7f96;font-size:8px;letter-spacing:.08em;text-transform:uppercase}
-.fa-met{margin-top:5px;color:#7fd7ea;font-size:9px}
+.fa-met{margin-top:5px;color:var(--list);font-size:11px}
 .fids{width:100%;border-collapse:collapse;font-size:11px;color:#d7e6ff}
-.fids th{color:#7ff3ff;font-size:8px;letter-spacing:.12em;text-align:left;padding:3px 5px;border-bottom:1px solid #1e2a3d}
+.fids th{color:var(--list);font-size:8px;letter-spacing:.12em;text-align:left;padding:3px 5px;border-bottom:1px solid #ffffff22}
 .fids td{padding:5px;border-bottom:1px solid #152033;white-space:nowrap}
 .phone{background:#0e0e10;border:8px solid #2a2a2e;border-radius:28px;padding:18px 14px 22px}
 .notch{width:80px;height:8px;background:#222;border-radius:8px;margin:0 auto 12px}
 label{display:block;font-size:11px;color:#9a958b;margin:8px 0 4px}
 input,select{width:100%;padding:9px;border-radius:8px;border:1px solid #333;background:#16161a;color:#eee}
 button{width:100%;margin-top:14px;padding:12px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;cursor:pointer}
+.ghost{background:#222;margin-top:8px}
 .hint{font-size:12px;color:#9a958b}.wifi-banner{background:#1c1810;border:1px solid #e8b86d33;color:var(--amber);padding:8px 10px;border-radius:8px;font-size:12px;margin-bottom:10px}
 #status{font-size:12px;color:#8fdf8a;margin-top:8px}
 .checks{display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:12px;color:#ddd}
 .checks label{margin:0;display:flex;gap:6px;align-items:center;color:#ddd}.checks input{width:auto}
 body.embed{background:#050508}body.embed header,body.embed .phone{display:none}
 body.embed .desk{display:block;margin:0;padding:0;max-width:none}
-body.embed .monitor{border:0;border-radius:0;box-shadow:none;background:#050508}
+body.embed .monitor{border:0;border-radius:0;background:#050508}
 body.embed .bezel{aspect-ratio:auto;height:100vh}
 </style>
 </head>
 <body>
-<header><a href="index.html">← Proyecto</a><p class="hint">Cambia de aeropuerto y pide el cielo de esa zona. Abrir con ?v=5</p></header>
+<header><a href="index.html">← Proyecto</a><p class="hint">Escribi el aeropuerto. Pedi ubicacion del telefono. Abrir ?v=6</p></header>
 <div class="desk">
 <div class="monitor"><div class="bezel">
 <canvas id="radar"></canvas>
@@ -67,34 +69,10 @@ body.embed .bezel{aspect-ratio:auto;height:100vh}
 <div class="notch"></div>
 <div class="wifi-banner">Preview · no guarda en el Pico</div>
 <form id="f">
-<label>Aeropuerto</label>
-<select id="preset">
-<option value="AEP">Aeroparque (AEP)</option>
-<option value="EZE">Ezeiza (EZE)</option>
-<option value="FDO">San Fernando (FDO)</option>
-<option value="COR">Cordoba (COR)</option>
-<option value="MDZ">Mendoza (MDZ)</option>
-<option value="MDQ">Mar del Plata (MDQ)</option>
-<option value="IGR">Iguazu (IGR)</option>
-<option value="JFK">Nueva York JFK</option>
-<option value="LGA">Nueva York LaGuardia</option>
-<option value="EWR">Newark (EWR)</option>
-<option value="LAX">Los Angeles (LAX)</option>
-<option value="MIA">Miami (MIA)</option>
-<option value="ATL">Atlanta (ATL)</option>
-<option value="DXB">Dubai (DXB)</option>
-<option value="LHR">Londres Heathrow</option>
-<option value="MAD">Madrid (MAD)</option>
-<option value="GRU">Sao Paulo GRU</option>
-<option value="SCL">Santiago (SCL)</option>
-<option value="BOG">Bogota (BOG)</option>
-<option value="custom">Coordenadas de casa</option>
-</select>
-<div id="coords" style="display:none">
-<label>Lat / Lon</label>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-<input id="lat" placeholder="Lat"><input id="lon" placeholder="Lon">
-</div></div>
+<label>Aeropuerto (escribi ciudad o codigo)</label>
+<input id="preset" list="airports" value="AEP" placeholder="Sydney, Dubai, JFK...">
+<datalist id="airports"></datalist>
+<button type="button" class="ghost" id="geo">Usar ubicacion del telefono</button>
 <label>Radio (km)</label>
 <input id="radius" type="number" value="80" min="10" max="250">
 <label>Vista</label>
@@ -113,10 +91,10 @@ body.embed .bezel{aspect-ratio:auto;height:100vh}
 <label><input type="checkbox" id="fHeli"> Helicopteros</label>
 </div>
 <label>Seguir aerolinea</label>
-<input id="followAl" placeholder="United, JetSMART, UAL">
+<input id="followAl" placeholder="Delta, United, JetSMART">
 <label>Seguir vuelo</label>
-<input id="followFlt" placeholder="UA1294">
-<label><input type="checkbox" id="house" style="width:auto"> Destacar lo que pasa sobre mi casa</label>
+<input id="followFlt" placeholder="DL1390">
+<label><input type="checkbox" id="house" style="width:auto"> Destacar sobre mi casa</label>
 <label>Max. aviones</label>
 <input id="max" type="number" value="16" min="4" max="24">
 <label>Incluir en tierra</label>
