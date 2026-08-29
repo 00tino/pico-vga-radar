@@ -1,128 +1,128 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Simulador — Pico VGA Radar</title>
-  <style>
-    :root { --amber:#e8b86d; --accent:#f2542d; --ink:#e8eef6; }
-    * { box-sizing: border-box; }
-    body { margin: 0; background: #14110e; color: #f4f1ea; font: 15px/1.45 ui-sans-serif, system-ui, sans-serif; }
-    header { padding: 16px 20px 0; max-width: 1240px; margin: 0 auto; }
-    header a { color: var(--amber); }
-    .desk { display: grid; grid-template-columns: 1.4fr .86fr; gap: 22px; max-width: 1240px; margin: 0 auto; padding: 16px 20px 48px; }
-    @media (max-width: 920px) { .desk { grid-template-columns: 1fr; } }
-    .monitor { background: #1a1a1a; border: 10px solid #2c2c2c; border-bottom-width: 28px; border-radius: 10px; box-shadow: 0 24px 60px #000a; }
-    .bezel { background: #050508; aspect-ratio: 4/3; position: relative; overflow: hidden; font-family: ui-monospace, Menlo, Consolas, monospace; }
-    .scan { pointer-events: none; position: absolute; inset: 0; background: repeating-linear-gradient(transparent 0 2px, #0003 3px); }
-    canvas#radar { width: 100%; height: 100%; display: none; }
-    .wall { display: none; position: absolute; right: 8px; top: 8px; bottom: 8px; width: 46%; overflow: hidden; justify-content: center; flex-direction: column; gap: 8px; }
-    .wall.full { left: 8px; right: 8px; width: auto; }
-    .logo { width: 48px; height: 48px; background: #111; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-    .logo img { width: 100%; height: 100%; object-fit: contain; background: #fff; }
-    .logo .fb { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; }
-    .fa-row { display: grid; grid-template-columns: 48px 1fr; gap: 8px; align-items: center; }
-    .bar { flex: 1; height: 4px; background: #243044; position: relative; overflow: hidden; }
-    .bar > i { position: absolute; inset: 0 auto 0 0; background: #7ff3ff; }
-    .fa-card { background: linear-gradient(180deg, #121826, #0b1018); border: 1px solid #243044; color: #e8eef6; padding: 8px 9px 7px; border-radius: 4px; }
-    .fa-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-    .fa-id { font-weight: 800; letter-spacing: .04em; font-size: 13px; }
-    .fa-st { font-size: 9px; letter-spacing: .12em; text-transform: uppercase; padding: 2px 6px; }
-    .st-air { color: #7ee0a5; background: #0e2a1c; }
-    .st-gnd { color: #f0d27a; background: #2a220c; }
-    .st-arr { color: #9bb7ff; background: #142038; }
-    .fa-air { font-size: 10px; color: #9aa8bd; }
-    .fa-route { display: flex; align-items: center; gap: 8px; margin: 7px 0 6px; font-size: 15px; font-weight: 700; }
-    .fa-times { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 10px; color: #c5d0de; }
-    .fa-times b { display: block; color: #fff; font-size: 12px; }
-    .lbl { color: #6f7f96; font-size: 8px; letter-spacing: .08em; text-transform: uppercase; }
-    .fa-met { margin-top: 6px; color: #7fd7ea; font-size: 9px; }
-    .carousel-wrap { height: 100%; display: flex; align-items: center; }
-    .fids { width: 100%; border-collapse: collapse; font-size: 12px; color: #d7e6ff; }
-    .fids th { color: #7ff3ff; font-size: 9px; letter-spacing: .12em; text-align: left; padding: 4px 6px; border-bottom: 1px solid #1e2a3d; }
-    .fids td { padding: 7px 6px; border-bottom: 1px solid #152033; }
-    .phone { background: #0e0e10; border: 8px solid #2a2a2e; border-radius: 28px; padding: 18px 14px 22px; }
-    .notch { width: 80px; height: 8px; background: #222; border-radius: 8px; margin: 0 auto 12px; }
-    label { display: block; font-size: 11px; color: #9a958b; margin: 8px 0 4px; }
-    input, select { width: 100%; padding: 9px; border-radius: 8px; border: 1px solid #333; background: #16161a; color: #eee; }
-    button { width: 100%; margin-top: 14px; padding: 12px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font-weight: 700; cursor: pointer; }
-    .hint { font-size: 12px; color: #9a958b; }
-    .wifi-banner { background: #1c1810; border: 1px solid #e8b86d33; color: var(--amber); padding: 8px 10px; border-radius: 8px; font-size: 12px; margin-bottom: 10px; }
-    #status { font-size: 12px; color: #8fdf8a; margin-top: 8px; }
-    .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 12px; color: #ddd; }
-    .checks label { margin: 0; display: flex; gap: 6px; align-items: center; color: #ddd; }
-    .checks input { width: auto; }
-    body.embed { background:#050508; }
-    body.embed header, body.embed .phone { display:none; }
-    body.embed .desk { display:block; margin:0; padding:0; max-width:none; }
-    body.embed .monitor { border:0; border-radius:0; box-shadow:none; background:#050508; }
-    body.embed .bezel { aspect-ratio:auto; height:100vh; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulador</title>
+<style>
+:root{--amber:#e8b86d;--accent:#f2542d}
+*{box-sizing:border-box}
+body{margin:0;background:#14110e;color:#f4f1ea;font:15px/1.45 ui-sans-serif,system-ui,sans-serif}
+header{padding:16px 20px 0;max-width:1240px;margin:0 auto}header a{color:var(--amber)}
+.desk{display:grid;grid-template-columns:1.4fr .86fr;gap:22px;max-width:1240px;margin:0 auto;padding:16px 20px 48px}
+@media(max-width:920px){.desk{grid-template-columns:1fr}}
+.monitor{background:#1a1a1a;border:10px solid #2c2c2c;border-bottom-width:28px;border-radius:10px}
+.bezel{background:#050508;aspect-ratio:4/3;position:relative;overflow:hidden;font-family:ui-monospace,Menlo,monospace}
+.scan{pointer-events:none;position:absolute;inset:0;background:repeating-linear-gradient(transparent 0 2px,#0003 3px)}
+canvas#radar{width:100%;height:100%;display:none}
+.wall{display:none;position:absolute;right:10px;top:16px;bottom:16px;width:46%;overflow:hidden;justify-content:center;flex-direction:column;gap:6px}
+.wall.full{left:10px;right:10px;width:auto}
+.logo{width:44px;height:44px;background:#111;display:flex;align-items:center;justify-content:center;overflow:hidden;flex:0 0 44px}
+.logo img{width:100%;height:100%;object-fit:contain;background:#fff}
+.logo .fb{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800}
+.fa-row{display:grid;grid-template-columns:44px 1fr;gap:8px;align-items:center}
+.bar{flex:1;height:4px;background:#243044;position:relative;overflow:hidden}.bar>i{position:absolute;inset:0 auto 0 0;background:#7ff3ff}
+.fa-card{background:#0b1018;border:1px solid #243044;color:#e8eef6;padding:7px 8px;border-radius:4px}
+.carousel-wrap{height:100%;display:flex;align-items:stretch}
+.carousel-wrap .fa-card{flex:1;display:flex;flex-direction:column;justify-content:center;padding:28px}
+.carousel-wrap .logo{width:96px;height:96px;flex-basis:96px;margin:0 auto 12px}
+.carousel-wrap .fa-row{grid-template-columns:1fr;text-align:center}
+.carousel-wrap .fa-id{font-size:32px}.carousel-wrap .fa-route{font-size:26px}
+.fa-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.fa-id{font-weight:800;font-size:13px}
+.fa-st{font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:2px 6px}
+.st-air{color:#7ee0a5;background:#0e2a1c}.st-gnd{color:#f0d27a;background:#2a220c}.st-arr{color:#9bb7ff;background:#142038}.st-late{color:#ff8b8b;background:#2a1212}
+.fa-air{font-size:10px;color:#9aa8bd}
+.fa-route{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:15px;font-weight:700}
+.fa-times{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:10px;color:#c5d0de}.fa-times b{display:block;color:#fff;font-size:12px}
+.lbl{color:#6f7f96;font-size:8px;letter-spacing:.08em;text-transform:uppercase}
+.fa-met{margin-top:5px;color:#7fd7ea;font-size:9px}
+.fids{width:100%;border-collapse:collapse;font-size:11px;color:#d7e6ff}
+.fids th{color:#7ff3ff;font-size:8px;letter-spacing:.12em;text-align:left;padding:3px 5px;border-bottom:1px solid #1e2a3d}
+.fids td{padding:5px;border-bottom:1px solid #152033;white-space:nowrap}
+.phone{background:#0e0e10;border:8px solid #2a2a2e;border-radius:28px;padding:18px 14px 22px}
+.notch{width:80px;height:8px;background:#222;border-radius:8px;margin:0 auto 12px}
+label{display:block;font-size:11px;color:#9a958b;margin:8px 0 4px}
+input,select{width:100%;padding:9px;border-radius:8px;border:1px solid #333;background:#16161a;color:#eee}
+button{width:100%;margin-top:14px;padding:12px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:700;cursor:pointer}
+.hint{font-size:12px;color:#9a958b}.wifi-banner{background:#1c1810;border:1px solid #e8b86d33;color:var(--amber);padding:8px 10px;border-radius:8px;font-size:12px;margin-bottom:10px}
+#status{font-size:12px;color:#8fdf8a;margin-top:8px}
+.checks{display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:12px;color:#ddd}
+.checks label{margin:0;display:flex;gap:6px;align-items:center;color:#ddd}.checks input{width:auto}
+body.embed{background:#050508}body.embed header,body.embed .phone{display:none}
+body.embed .desk{display:block;margin:0;padding:0;max-width:none}
+body.embed .monitor{border:0;border-radius:0;box-shadow:none;background:#050508}
+body.embed .bezel{aspect-ratio:auto;height:100vh}
+</style>
 </head>
 <body>
-  <header>
-    <a href="index.html">← Proyecto</a>
-    <p class="hint">Preview. Lista LED tipo FlightAware. El Pico solo recibe JSON chico.</p>
-  </header>
-  <div class="desk">
-    <div class="monitor"><div class="bezel">
-      <canvas id="radar"></canvas>
-      <div class="wall" id="wall"></div>
-      <div class="scan"></div>
-    </div></div>
-    <div class="phone">
-      <div class="notch"></div>
-      <div class="wifi-banner">Preview · no guarda en el Pico</div>
-      <form id="f">
-        <label>Aeropuerto (IATA)</label>
-        <input id="preset" value="AEP" placeholder="AEP, LGA, DXB, JFK">
-        <label>O coordenadas</label>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <input id="lat" placeholder="Lat">
-          <input id="lon" placeholder="Lon">
-        </div>
-        <label>Radio (km)</label>
-        <input id="radius" type="number" value="80" min="10" max="200">
-        <label>Vista</label>
-        <select id="mode">
-          <option value="hybrid">Radar + lista</option>
-          <option value="radar">Solo radar</option>
-          <option value="wall">Solo lista</option>
-        </select>
-        <label>Formato de lista</label>
-        <select id="listStyle">
-          <option value="fa">FlightAware (tarjeta)</option>
-          <option value="fids">Pantalla de aeropuerto</option>
-          <option value="carousel">Un vuelo por vez</option>
-        </select>
-        <label>Rotar lista cada (s)</label>
-        <input id="rotate" type="number" value="7" min="3" max="30">
-        <label>Estilo radar</label>
-        <select id="theme">
-          <option value="crt_amber">CRT ambar</option>
-          <option value="crt_green">CRT verde</option>
-          <option value="atc_dark">ATC oscuro</option>
-        </select>
-        <label>Que mostrar</label>
-        <div class="checks">
-          <label><input type="checkbox" id="fAir" checked> Aerolineas</label>
-          <label><input type="checkbox" id="fGa"> Gral. aviacion</label>
-          <label><input type="checkbox" id="fBiz"> Jets ejecutivos</label>
-          <label><input type="checkbox" id="fHeli"> Helicopteros</label>
-        </div>
-        <label>Seguir aerolinea</label>
-        <input id="followAl" placeholder="JetSMART o JES">
-        <label>Seguir vuelo</label>
-        <input id="followFlt" placeholder="JA3166">
-        <label>Max. aviones</label>
-        <input id="max" type="number" value="16" min="4" max="24">
-        <label>Incluir en tierra</label>
-        <select id="ground"><option value="0">No</option><option value="1">Si</option></select>
-        <button>Aplicar en preview</button>
-        <p id="status"></p>
-      </form>
-    </div>
-  </div>
+<header><a href="index.html">← Proyecto</a><p class="hint">Cambia de aeropuerto y pide el cielo de esa zona. Abrir con ?v=5</p></header>
+<div class="desk">
+<div class="monitor"><div class="bezel">
+<canvas id="radar"></canvas>
+<div class="wall" id="wall"></div>
+<div class="scan"></div>
+</div></div>
+<div class="phone">
+<div class="notch"></div>
+<div class="wifi-banner">Preview · no guarda en el Pico</div>
+<form id="f">
+<label>Aeropuerto</label>
+<select id="preset">
+<option value="AEP">Aeroparque (AEP)</option>
+<option value="EZE">Ezeiza (EZE)</option>
+<option value="FDO">San Fernando (FDO)</option>
+<option value="COR">Cordoba (COR)</option>
+<option value="MDZ">Mendoza (MDZ)</option>
+<option value="MDQ">Mar del Plata (MDQ)</option>
+<option value="IGR">Iguazu (IGR)</option>
+<option value="JFK">Nueva York JFK</option>
+<option value="LGA">Nueva York LaGuardia</option>
+<option value="EWR">Newark (EWR)</option>
+<option value="LAX">Los Angeles (LAX)</option>
+<option value="MIA">Miami (MIA)</option>
+<option value="ATL">Atlanta (ATL)</option>
+<option value="DXB">Dubai (DXB)</option>
+<option value="LHR">Londres Heathrow</option>
+<option value="MAD">Madrid (MAD)</option>
+<option value="GRU">Sao Paulo GRU</option>
+<option value="SCL">Santiago (SCL)</option>
+<option value="BOG">Bogota (BOG)</option>
+<option value="custom">Coordenadas de casa</option>
+</select>
+<div id="coords" style="display:none">
+<label>Lat / Lon</label>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+<input id="lat" placeholder="Lat"><input id="lon" placeholder="Lon">
+</div></div>
+<label>Radio (km)</label>
+<input id="radius" type="number" value="80" min="10" max="250">
+<label>Vista</label>
+<select id="mode"><option value="hybrid">Radar + lista</option><option value="radar">Solo radar</option><option value="wall">Solo lista</option></select>
+<label>Formato de lista</label>
+<select id="listStyle"><option value="fa">FlightAware (tarjeta)</option><option value="fids">Pantalla de aeropuerto</option><option value="carousel">Un vuelo por vez</option></select>
+<label>Rotar cada (s)</label>
+<input id="rotate" type="number" value="7" min="3" max="30">
+<label>Estilo radar</label>
+<select id="theme"><option value="crt_amber">CRT ambar</option><option value="crt_green">CRT verde</option><option value="atc_dark">ATC oscuro</option><option value="navy">Azul marino</option><option value="red">Rojo ATC</option><option value="ice">Hielo</option></select>
+<label>Que mostrar</label>
+<div class="checks">
+<label><input type="checkbox" id="fAir" checked> Aerolineas</label>
+<label><input type="checkbox" id="fGa"> Gral. aviacion</label>
+<label><input type="checkbox" id="fBiz"> Jets ejecutivos</label>
+<label><input type="checkbox" id="fHeli"> Helicopteros</label>
+</div>
+<label>Seguir aerolinea</label>
+<input id="followAl" placeholder="United, JetSMART, UAL">
+<label>Seguir vuelo</label>
+<input id="followFlt" placeholder="UA1294">
+<label><input type="checkbox" id="house" style="width:auto"> Destacar lo que pasa sobre mi casa</label>
+<label>Max. aviones</label>
+<input id="max" type="number" value="16" min="4" max="24">
+<label>Incluir en tierra</label>
+<select id="ground"><option value="0">No</option><option value="1">Si</option></select>
+<button>Aplicar en preview</button>
+<p id="status"></p>
+</form></div></div>
 <script src="radar.js"></script>
-</body>
-</html>
+</body></html>
