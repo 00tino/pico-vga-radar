@@ -1,4 +1,4 @@
-/* Pico Radar v18 — GitHub Pages CRT. Pistas, hero, rutas VRS, loading. */
+/* Pico Radar v19 — GitHub Pages CRT. Pistas finas 120km, logos kiwi locales. */
 const PUBLIC_SKY = "https://pico-vga-radar-sky.vercel.app/api";
 const SKY_API = (function () {
   const q = new URLSearchParams(location.search).get("api");
@@ -46,6 +46,8 @@ const SEED_AP = [
 const SEED_AL = [
   ["ARG", "AR", "Aerolineas Argentinas", "Argentina"],
   ["JES", "JA", "JetSMART", "Chile"],
+  ["JAT", "JA", "JetSMART", "Chile"],
+  ["JMR", "WJ", "JetSMART Argentina", "Argentina"],
   ["FBZ", "FO", "Flybondi", "Argentina"],
   ["LAN", "LA", "LATAM", "Chile"],
   ["CMP", "CM", "Copa", "Panama"],
@@ -253,11 +255,11 @@ function kmLL(a, b) {
 function nearbyRwy() {
   const key = center[0] + "," + center[1] + "," + radiusKm + "," + AIRPORTS.length;
   if (rwyNear.key === key) return rwyNear.list;
-  if (radiusKm >= 70) {
+  if (radiusKm >= 120) {
     rwyNear = { key: key, list: [] };
     return rwyNear.list;
   }
-  const maxD = Math.min(radiusKm * 0.95, 65);
+  const maxD = Math.min(radiusKm * 0.95, 115);
   const out = [];
   for (let i = 0; i < AIRPORTS.length; i++) {
     const a = AIRPORTS[i];
@@ -268,7 +270,7 @@ function nearbyRwy() {
     out.push({ iata: a[0], lat: a[2], lon: a[3], rows: rows, d: d });
   }
   out.sort((a, b) => a.d - b.d);
-  rwyNear = { key: key, list: out.slice(0, 8) };
+  rwyNear = { key: key, list: out.slice(0, 10) };
   return rwyNear.list;
 }
 function aptCoord(code) {
@@ -665,7 +667,7 @@ function logoHTML(a) {
   const name = pair[1];
   const fb = '<div class="fb">' + (iata || name || "GA").slice(0, 2) + "</div>";
   if (!iata) return fb;
-  return '<img alt="' + iata + '" src="https://pics.avs.io/128/128/' + iata + '.png" onerror="this.outerHTML=this.dataset.fb" data-fb=\'' + fb + "'>";
+  return '<img alt="' + iata + '" src="logos/' + iata + '.png" onerror="this.outerHTML=this.dataset.fb" data-fb=\'' + fb + "'>";
 }
 function cardHTML(a) {
   const pair = airlineOf(a.flight);
@@ -812,18 +814,22 @@ function loop() {
   ctx.globalAlpha = 1;
   const span = Math.max(0.25, radiusKm / 111);
   const toXY = (lat, lon) => ({ x: cx + ((lon - center[1]) / span) * R, y: cy - ((lat - center[0]) / span) * R });
-  if (radiusKm < 70) {
+  if (radiusKm < 120) {
     const sets = nearbyRwy();
     sets.forEach((set) => {
       const rows = set.rows;
       rows.forEach((rw) => {
         const a = toXY(rw[4], rw[5]), b = toXY(rw[6], rw[7]);
         ctx.strokeStyle = pair.fg; ctx.globalAlpha = 0.92;
-        ctx.lineWidth = Math.max(3, Math.min(12, 9000 / Math.max(25, radiusKm) * 0.4));
+        const len = Math.hypot(b.x - a.x, b.y - a.y);
+        ctx.lineCap = "butt"; ctx.lineJoin = "miter";
+        ctx.lineWidth = Math.max(1.15, Math.min(2.4, len * 0.14));
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-        ctx.globalAlpha = 0.9; ctx.font = "10px ui-monospace, monospace"; ctx.fillStyle = pair.fg;
-        ctx.fillText(String(rw[0]), a.x + 6, a.y - 4);
-        ctx.fillText(String(rw[1]), b.x + 6, b.y - 4);
+        if (radiusKm < 90 && len > 14) {
+          ctx.globalAlpha = 0.9; ctx.font = "10px ui-monospace, monospace"; ctx.fillStyle = pair.fg;
+          ctx.fillText(String(rw[0]), a.x + 6, a.y - 4);
+          ctx.fillText(String(rw[1]), b.x + 6, b.y - 4);
+        }
       });
       const mid = toXY(set.lat, set.lon);
       ctx.globalAlpha = 0.8; ctx.font = "11px ui-monospace, monospace"; ctx.fillStyle = pair.fg;
@@ -854,10 +860,13 @@ function loop() {
         const backKm = Math.min(22, radiusKm * 0.5);
         const back = [hit.lat + Math.cos(rad) * backKm / 111, hit.lon + Math.sin(rad) * backKm / (111 * Math.cos(hit.lat * Math.PI / 180))];
         const s = toXY(back[0], back[1]), t = toXY(hit.lat, hit.lon);
-        ctx.setLineDash([8, 6]); ctx.strokeStyle = pair.fg; ctx.globalAlpha = 0.8; ctx.lineWidth = 1.8;
-        ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(t.x, t.y); ctx.stroke();
-        ctx.setLineDash([]); ctx.fillStyle = pair.fg; ctx.globalAlpha = 0.95; ctx.font = "11px ui-monospace, monospace";
-        ctx.fillText("APX " + hit.ident, s.x + 4, s.y - 4);
+        if (radiusKm < 80) {
+          ctx.setLineDash([8, 6]); ctx.strokeStyle = pair.fg; ctx.globalAlpha = 0.8; ctx.lineWidth = 1.6;
+          ctx.lineCap = "butt";
+          ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(t.x, t.y); ctx.stroke();
+          ctx.setLineDash([]); ctx.fillStyle = pair.fg; ctx.globalAlpha = 0.95; ctx.font = "11px ui-monospace, monospace";
+          ctx.fillText("APX " + hit.ident, s.x + 4, s.y - 4);
+        }
       });
     });
     ctx.globalAlpha = 1;
