@@ -326,12 +326,7 @@ function relatedToAirport(a) {
   if (pub) return pub.origin === apt[0] || pub.dest === apt[0];
   const here = [a.lat, a.lon];
   const dSel = kmLL(here, [apt[2], apt[3]]);
-  if (dSel < 6) {
-    if (isGnd(a)) return true;
-    const alt = Number(a.alt) || 0;
-    const gs = Number(a.gs) || 0;
-    if (alt < 2500 && gs < 200) return true;
-  }
+  if (dSel < 6) return true;
   for (let i = 0; i < AIRPORTS.length; i++) {
     const r = AIRPORTS[i];
     if (r[0] === apt[0]) continue;
