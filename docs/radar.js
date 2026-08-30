@@ -1,4 +1,4 @@
-/* Pico Radar v22 — CRT sin chrome, vuelos del aeropuerto primero, FIDS/FA sin recortes. */
+/* Pico Radar v23 — pared del aeropuerto (no del vecino), FIDS con más datos, CRT limpio. */
 const PUBLIC_SKY = "https://pico-vga-radar-sky.vercel.app/api";
 const SKY_API = (function () {
   const q = new URLSearchParams(location.search).get("api");
@@ -314,6 +314,34 @@ function resolveRoute(a) {
   else if (gs > 90 && alt > 600 && dSel < 36 && away) origin = origin || apt[0];
   return { origin: origin || "—", dest: dest || "—" };
 }
+function publishedRoute(a) {
+  const o = (a.origin || "").toUpperCase();
+  const d = (a.dest || "").toUpperCase();
+  if (!o || !d || o === "—" || d === "—" || o.length < 3 || d.length < 3) return null;
+  return { origin: o, dest: d };
+}
+function relatedToAirport(a) {
+  const apt = currentApt();
+  const pub = publishedRoute(a);
+  if (pub) return pub.origin === apt[0] || pub.dest === apt[0];
+  const here = [a.lat, a.lon];
+  const dSel = kmLL(here, [apt[2], apt[3]]);
+  if (dSel < 6) {
+    if (isGnd(a)) return true;
+    const alt = Number(a.alt) || 0;
+    const gs = Number(a.gs) || 0;
+    if (alt < 2500 && gs < 200) return true;
+  }
+  for (let i = 0; i < AIRPORTS.length; i++) {
+    const r = AIRPORTS[i];
+    if (r[0] === apt[0]) continue;
+    if (kmLL([r[2], r[3]], [apt[2], apt[3]]) >= 45) continue;
+    const dR = kmLL(here, [r[2], r[3]]);
+    if (dR <= dSel) return false;
+  }
+  const route = resolveRoute(a);
+  return route.origin === apt[0] || route.dest === apt[0];
+}
 function setLoad(show, msg) {
   if (msg) statusEl.textContent = msg;
   if (show) loadEl.textContent = "CARGANDO " + (currentApt()[0] || "");
@@ -442,9 +470,7 @@ function applyFilters() {
   const radiusNm = radiusKm / 1.852;
   const alQ = (document.getElementById("followAl").value || "").trim();
   const alHit = findAirline(alQ);
-  const apt = currentApt()[0];
   const pool = RAW.filter((a) => {
-    if (distNmOf(a) > radiusNm * 1.08) return false;
     const k = kindOf(a);
     if (!want[k]) return false;
     if (isGnd(a) && !includeGround) return false;
@@ -452,16 +478,13 @@ function applyFilters() {
     if (followFlt && !compactId(a.flight).includes(compactId(followFlt)) && compactId(a.r || "").indexOf(compactId(followFlt)) < 0) return false;
     return a.lat != null;
   });
-  function score(a) {
-    const r = resolveRoute(a);
-    if (r.origin === apt || r.dest === apt) return 1;
-    if (kmLL([a.lat, a.lon], center) < 6) return 1;
-    return 0;
-  }
-  pool.sort((a, b) => (score(b) - score(a)) || (looksAir(b) - looksAir(a)) || (distNmOf(a) - distNmOf(b)));
-  SKY = pool.slice(0, Math.max(maxN, 24));
+  const zone = pool.filter((a) => distNmOf(a) <= radiusNm * 1.08);
+  zone.sort((a, b) => (relatedToAirport(b) - relatedToAirport(a)) || (looksAir(b) - looksAir(a)) || (distNmOf(a) - distNmOf(b)));
+  SKY = zone.slice(0, Math.max(maxN, 24));
   SKY.forEach(enrich);
-  const local = SKY.filter((a) => score(a) > 0);
+  const local = pool.filter(relatedToAirport);
+  local.forEach(enrich);
+  local.sort((a, b) => distNmOf(a) - distNmOf(b));
   AC = local.slice(0, maxN);
   setMeta();
 }
@@ -560,7 +583,7 @@ async function fillRoutes(list) {
     const cs = compactId(a.flight);
     if (isReg(cs) || ROUTECACHE[cs]) return false;
     return a.flight && cs.length >= 4 && /[A-Z]{2,3}\d/.test(cs);
-  }).slice(0, 28);
+  }).slice(0, 56);
   function keysFor(flight) {
     const cs = compactId(flight);
     const out = [cs];
@@ -618,7 +641,7 @@ async function loadLive(showOverlay) {
   const apt = currentApt();
   center = [apt[2], apt[3]];
   if (showOverlay) setLoad(true, "Cargando " + apt[0]);
-  const nm = Math.min(250, Math.max(180, Math.round(radiusKm / 1.852) + 8));
+  const nm = Math.min(250, Math.max(200, Math.round(radiusKm / 1.852) + 8));
   try {
     const got = await fetchSky(center[0], center[1], nm);
     srcLabel = got.src;
@@ -639,7 +662,7 @@ async function loadLive(showOverlay) {
       }
     }
     renderWall();
-    fillRoutes(SKY).then(() => { applyFilters(); renderWall(); });
+    fillRoutes(RAW).then(() => { applyFilters(); renderWall(); });
     const now = performance.now();
     SKY.forEach((a) => { POS[a.hex] = { lat: a.lat, lon: a.lon, t: now, gs: a.gs, track: a.track }; });
     lastSweep = now;
@@ -735,7 +758,8 @@ function cardHTML(a) {
   );
 }
 function clipCards() {
-  if (listStyle === "carousel" || listStyle === "fids" || view === "wall") return;
+  if (listStyle === "carousel" || listStyle === "fids") return;
+  if (view === "wall" && wall.querySelector(".carousel-wrap.hero")) return;
   const box = wall.getBoundingClientRect();
   [].slice.call(wall.querySelectorAll(".fa-card")).forEach((c) => {
     const r = c.getBoundingClientRect();
@@ -753,8 +777,8 @@ function visibleList() {
   }
   const h = wall.clientHeight || 300;
   const n = listStyle === "fids"
-    ? Math.max(1, Math.floor((h - 22) / (view === "wall" ? 48 : 36)))
-    : Math.max(1, Math.floor((h - 16) / (view === "wall" ? 168 : 158)));
+    ? Math.max(1, Math.floor((h - 22) / (view === "wall" ? 64 : 36)))
+    : Math.max(1, Math.floor((h - 16) / (view === "wall" ? 210 : 158)));
   const start = (page * n) % Math.max(1, AC.length);
   const out = [];
   for (let i = 0; i < Math.min(n, AC.length); i++) out.push(AC[(start + i) % AC.length]);
@@ -791,7 +815,7 @@ function renderWall() {
   wall.classList.toggle("full", view === "wall");
   if (!AC.length) {
     wall.innerHTML = SKY.length
-      ? '<div class="empty"><div>Sin vuelos de ' + currentApt()[0] + ' ahora</div><p class="fa-air">Hay ' + SKY.length + " aviones en la zona, ninguno con origen o destino " + currentApt()[0] + ". El radar los sigue mostrando.</p></div>"
+      ? '<div class="empty"><div>Sin vuelos de ' + currentApt()[0] + ' ahora</div><p class="fa-air">Hay tráfico en la zona, ninguno con origen o destino ' + currentApt()[0] + " en el ADS-B. El radar los sigue mostrando.</p></div>"
       : '<div class="empty"><div>' + (loading ? "Cargando el cielo…" : "Sin vuelos en este radio") + '</div><p class="fa-air">' + (statusEl.textContent || "") + "</p></div>";
     return;
   }
@@ -799,14 +823,25 @@ function renderWall() {
   if (listStyle === "fids") {
     const compact = view === "hybrid";
     const shortSt = (st) => st === "APROXIMANDO" ? "APROX" : st === "EN TIERRA" ? "TIERRA" : st === "EN VUELO" ? "VUELO" : st;
-    wall.innerHTML = '<table class="fids"><thead><tr><th></th><th>VUELO</th><th>RUTA</th><th>DEP</th><th>ARR</th>' +
-      (compact ? "" : '<th class="col-extra">RUMBO</th>') +
+    wall.innerHTML = '<table class="fids"><thead><tr><th></th><th>VUELO</th><th>RUTA</th>' +
+      (compact ? "" : "<th>TIPO</th>") +
+      "<th>DEP</th><th>ARR</th>" +
+      (compact ? "" : "<th>LLEGA</th>") +
       "<th>ESTADO</th></tr></thead><tbody>" +
       list.map((a) => {
         const route = resolveRoute(a);
         const st = a.status || phaseOf(a);
-        return '<tr><td><div class="logo" style="width:26px;height:26px;font-size:9px">' + logoHTML(a) + "</div></td><td>" + displayId(a) + "</td><td>" + route.origin + " → " + route.dest + "</td><td>" + hhmm(a.depAt) + "</td><td>" + hhmm(a.arrAt) + "</td>" +
-          (compact ? "" : "<td>" + (isGnd(a) ? "—" : fmtHdg(a.track)) + "</td>") +
+        const id = displayId(a);
+        const pair = airlineOf(a.flight);
+        const eta = (st === "EN TIERRA" || !a.arrAt) ? "—" : (Math.max(0, Math.round((a.arrAt - Date.now()) / 60000)) + " min");
+        const cities = compact ? "" : '<div class="fid-sub">' + (aptCity(route.origin) || route.origin) + " → " + (aptCity(route.dest) || route.dest) + "</div>";
+        const sub = compact ? "" : '<div class="fid-sub">' + (isReg(id) ? "Matrícula" : pair[1]) + (a.r && !isReg(id) ? " · " + String(a.r).replace(/[^A-Z0-9]/gi, "").toUpperCase() : "") + "</div>";
+        return '<tr><td><div class="logo" style="width:26px;height:26px;font-size:9px">' + logoHTML(a) + "</div></td>" +
+          "<td>" + id + sub + "</td>" +
+          '<td class="' + (compact ? "" : "wrap") + '">' + route.origin + " → " + route.dest + cities + "</td>" +
+          (compact ? "" : "<td>" + (a.t || "—") + "</td>") +
+          "<td>" + hhmm(a.depAt) + "</td><td>" + hhmm(a.arrAt) + "</td>" +
+          (compact ? "" : "<td>" + eta + "</td>") +
           '<td><span class="' + pillClass(st) + '">' + (compact ? shortSt(st) : st) + "</span></td></tr>";
       }).join("") +
       "</tbody></table>";
@@ -817,13 +852,14 @@ function renderWall() {
   } else {
     const hero = view === "wall" && list.length === 1;
     const lg = view === "wall" && list.length <= 3;
-    if (view === "wall") {
-      wall.innerHTML = '<div class="carousel-wrap' + (hero ? " hero" : lg ? " lg" : "") + '" style="grid-template-rows:repeat(' + list.length + ',minmax(0,1fr))">' +
+    if (view === "wall" && list.length === 1) {
+      wall.innerHTML = '<div class="carousel-wrap hero" style="grid-template-rows:repeat(1,minmax(0,1fr))">' +
         list.map(cardHTML).join("") + "</div>";
     } else {
       wall.innerHTML = list.map(cardHTML).join("");
     }
     wall.classList.toggle("hero", hero);
+    wall.classList.toggle("lg", lg && !hero);
   }
   requestAnimationFrame(clipCards);
 }
