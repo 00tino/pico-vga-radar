@@ -1,4 +1,4 @@
-/* Pico Radar v25 — pared del aeropuerto con ruta real, FIDS con ETA, CRT limpio. */
+/* Pico Radar v26 — CRT 3 pulgadas (radar o tarjetas), QR con tamaño de pantalla. */
 const PUBLIC_SKY = "https://pico-vga-radar-sky.vercel.app/api";
 const SKY_API = (function () {
   const q = new URLSearchParams(location.search).get("api");
@@ -88,7 +88,7 @@ const ROUTECACHE = {};
 const POS = {};
 let home = null, demoOver = false, srcLabel = "";
 let RAW = [], AC = [], SKY = [], running = false, looping = false;
-let view = "hybrid", theme = "crt_amber", listStyle = "fa";
+let view = "hybrid", theme = "crt_amber", listStyle = "fa", disp = "auto";
 let center = [-34.822, -58.536], includeGround = true, radiusKm = 150, maxN = 16, rotateS = 7, carouselN = 2;
 let beam = -Math.PI / 2, lastSweep = 0, lastRot = performance.now(), page = 0, loading = false;
 let loadSeq = 0;
@@ -126,14 +126,86 @@ function hay(a) {
 }
 function letters(s) { return (s || "").toUpperCase().replace(/[^A-Z]/g, ""); }
 function compactId(s) { return (s || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); }
+function shownView() {
+  if (disp === "3") return view === "radar" ? "radar" : "wall";
+  return view;
+}
 function viewLabel() {
-  return view === "hybrid" ? "Hibrido" : view === "radar" ? "Radar" : "Pared";
+  const v = shownView();
+  return v === "hybrid" ? "Hibrido" : v === "radar" ? "Radar" : "Pared";
 }
 const screenMeta = document.getElementById("screenMeta");
 function setMeta() {
-  const line = (SKY.length || AC.length) + " en zona · " + AC.length + " de " + currentApt()[0] + " · " + radiusKm + " km · " + viewLabel();
+  const line = (SKY.length || AC.length) + " en zona · " + AC.length + " de " + currentApt()[0] + " · " + radiusKm + " km · " + viewLabel() + (disp === "3" ? ' · 3"' : "");
   if (screenMeta) screenMeta.textContent = line;
 }
+function cfgQuery() {
+  const p = new URLSearchParams();
+  p.set("apt", currentApt()[0]);
+  if (disp !== "auto") p.set("disp", disp);
+  p.set("view", shownView());
+  p.set("list", listStyle);
+  p.set("theme", theme);
+  p.set("r", String(radiusKm));
+  return p.toString();
+}
+function updateQr() {
+  const pico = "http://192.168.4.1/?" + cfgQuery();
+  const img = document.getElementById("qrImg");
+  const url = document.getElementById("qrUrl");
+  if (img) img.src = "https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=8&data=" + encodeURIComponent(pico);
+  if (url) url.textContent = pico;
+}
+function applyDisp() {
+  const app = document.querySelector(".app");
+  const stage = document.querySelector(".stage");
+  const mon = document.getElementById("monitor");
+  if (app) app.classList.toggle("disp-3", disp === "3");
+  if (stage) stage.classList.toggle("disp-3", disp === "3");
+  if (mon) mon.classList.toggle("disp-3", disp === "3");
+  const note = document.getElementById("dispNote");
+  if (note) note.hidden = disp !== "3";
+  const viewSeg = document.getElementById("viewSeg");
+  if (viewSeg) viewSeg.style.gridTemplateColumns = disp === "3" ? "1fr 1fr" : "1fr 1fr 1fr";
+  document.querySelectorAll("[data-disp]").forEach((b) => b.classList.toggle("on", b.dataset.disp === disp));
+  updateQr();
+}
+function applyQuery() {
+  const q = new URLSearchParams(location.search);
+  const d = (q.get("disp") || q.get("screen") || "").toLowerCase().replace(/in$/i, "");
+  if (d === "3" || d === "tiny" || d === "small") disp = "3";
+  else if (d === "7") disp = "7";
+  else if (d === "15" || d === "19") disp = "15";
+  document.querySelectorAll("[data-disp]").forEach((x) => x.classList.toggle("on", x.dataset.disp === disp));
+  let v = (q.get("view") || q.get("face") || "").toLowerCase();
+  if (v === "cards" || v === "board") v = "wall";
+  if (v === "scope") v = "radar";
+  if (v === "radar" || v === "wall" || v === "hybrid") {
+    document.querySelectorAll("[data-view]").forEach((x) => x.classList.toggle("on", x.dataset.view === v));
+    view = v;
+  }
+  const list = q.get("list");
+  if (list === "fa" || list === "fids" || list === "carousel") {
+    document.querySelectorAll("[data-list]").forEach((x) => x.classList.toggle("on", x.dataset.list === list));
+    listStyle = list;
+  }
+  const th = q.get("theme");
+  if (th && THEMES[th]) {
+    document.querySelectorAll("[data-theme]").forEach((x) => x.classList.toggle("on", x.dataset.theme === th));
+    theme = th;
+  }
+  const apt = (q.get("apt") || q.get("iata") || "").toUpperCase();
+  if (/^[A-Z]{3}$/.test(apt)) {
+    const a = (typeof AIRPORTS !== "undefined" ? AIRPORTS : SEED_AP).find((x) => x[0] === apt) || SEED_AP.find((x) => x[0] === apt);
+    if (a) document.getElementById("preset").value = a[0] + " — " + a[1] + " · " + (a[4] || "");
+  }
+  const r = Number(q.get("r") || q.get("radius"));
+  if (Number.isFinite(r) && r >= 40 && r <= 400) {
+    document.getElementById("radius").value = String(r);
+    radiusKm = r;
+  }
+}
+
 function isReg(s) {
   const c = compactId(s);
   return /^(N[0-9]{1,5}[A-Z]{0,3}|LV[A-Z]{3}|LV[A-Z]?\d{3,}|VH[A-Z]{3}|CC[A-Z]{3}|HK\d{4}|PR[A-Z]{3}|PT[A-Z]{3}|G[A-Z]{4}|F[A-Z]{4}|XA[A-Z]{3}|C[A-Z]{4})$/.test(c);
@@ -757,6 +829,9 @@ function clipCards() {
 }
 function visibleList() {
   if (!AC.length) return [];
+  if (disp === "3" && listStyle !== "fids") {
+    return [AC[page % AC.length]];
+  }
   if (listStyle === "carousel") {
     const n = Math.max(1, Math.min(carouselN, AC.length));
     const start = (page * n) % AC.length;
@@ -774,6 +849,7 @@ function visibleList() {
   return out;
 }
 function overhead() {
+  if (disp === "3") return null;
   if (demoOver) return enrich({ hex: "demo", flight: "ARG1716", t: "A320", lat: center[0], lon: center[1], alt: 4200, gs: 210, track: 180, origin: "AEP", dest: "COR" });
   if (!document.getElementById("house").checked || !home) return null;
   let best = null, bestD = 9;
@@ -785,7 +861,7 @@ let overAt = 0;
 function updateOver() {
   const el = document.getElementById("overCard");
   const a = overhead();
-  if (!a || view === "wall") { el.style.display = "none"; return; }
+  if (!a || shownView() === "wall") { el.style.display = "none"; return; }
   if (a.hex !== overHex) { overHex = a.hex; overAt = performance.now(); }
   if (performance.now() - overAt > 7000) {
     el.style.display = "none";
@@ -796,7 +872,9 @@ function updateOver() {
   el.innerHTML = cardHTML(a);
 }
 function renderWall() {
+  const view = shownView();
   applyTheme();
+  applyDisp();
   updateOver();
   radar.style.display = view === "wall" ? "none" : "block";
   wall.classList.toggle("on", view !== "radar");
@@ -859,6 +937,7 @@ function angDiff(a, b) {
   return d;
 }
 function loop() {
+  const view = shownView();
   if (!running || view === "wall") { looping = false; return; }
   looping = true;
   const ctx = radar.getContext("2d");
@@ -968,6 +1047,8 @@ function grabForm() {
   view = (vBtn && vBtn.dataset.view) || "hybrid";
   theme = (tBtn && tBtn.dataset.theme) || "crt_amber";
   listStyle = (lBtn && lBtn.dataset.list) || "fa";
+  const dBtn = document.querySelector("[data-disp].on");
+  disp = (dBtn && dBtn.dataset.disp) || disp || "auto";
   const apt = currentApt();
   center = [apt[2], apt[3]];
   followAl = document.getElementById("followAl").value.trim();
@@ -990,6 +1071,7 @@ function grabForm() {
   document.getElementById("carField").hidden = listStyle !== "carousel";
   document.querySelectorAll(".checks label").forEach((l) => l.classList.toggle("on", l.querySelector("input").checked));
   applyTheme();
+  applyDisp();
   setMeta();
 }
 document.getElementById("tabMon").onclick = function () {
@@ -1004,13 +1086,13 @@ document.getElementById("tabCfg").onclick = function () {
   document.getElementById("paneMon").hidden = true;
   document.getElementById("paneCfg").hidden = false;
 };
-document.querySelectorAll("[data-view],[data-list],[data-theme]").forEach((b) => {
+document.querySelectorAll("[data-view],[data-list],[data-theme],[data-disp]").forEach((b) => {
   b.addEventListener("click", () => {
-    const key = b.dataset.view ? "view" : b.dataset.list ? "list" : "theme";
+    const key = b.dataset.view ? "view" : b.dataset.list ? "list" : b.dataset.disp ? "disp" : "theme";
     document.querySelectorAll("[data-" + key + "]").forEach((x) => x.classList.remove("on"));
     b.classList.add("on");
     grabForm(); applyFilters(); renderWall();
-    running = true; if (view !== "wall" && !looping) loop();
+    running = true; if (shownView() !== "wall" && !looping) loop();
   });
 });
 ["fAir", "fGa", "fBiz", "fHeli", "ground", "house", "followFlt", "max", "rotate", "carN"].forEach((id) => {
@@ -1037,7 +1119,12 @@ document.getElementById("rotate").addEventListener("input", () => {
   document.getElementById("rotLbl").textContent = "Rotacion " + rotateS + "s";
 });
 document.getElementById("refreshBtn").onclick = function () {
-  grabForm(); loadLive(true); running = true; if (view !== "wall" && !looping) loop();
+  grabForm(); loadLive(true); running = true; if (shownView() !== "wall" && !looping) loop();
+};
+document.getElementById("qrTry").onclick = function () {
+  grabForm();
+  const qs = cfgQuery();
+  history.replaceState({}, "", location.pathname + "?" + qs);
 };
 document.getElementById("geo").onclick = function () {
   navigator.geolocation.getCurrentPosition((pos) => {
@@ -1078,11 +1165,16 @@ async function loadCatalogs() {
 }
 
 async function boot() {
+  applyQuery();
   grabForm();
-  running = true; if (view !== "wall") loop();
+  applyDisp();
+  running = true; if (shownView() !== "wall") loop();
   loadLive(true);
   await loadCatalogs();
+  applyQuery();
+  grabForm();
+  applyDisp();
 }
 boot();
-setInterval(() => { if (view !== "wall") return; if (performance.now() - lastRot > rotateS * 1000) { lastRot = performance.now(); page++; renderWall(); } }, 400);
+setInterval(() => { if (shownView() !== "wall") return; if (performance.now() - lastRot > rotateS * 1000) { lastRot = performance.now(); page++; renderWall(); } }, 400);
 window.addEventListener("resize", () => renderWall());
