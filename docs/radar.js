@@ -1,4 +1,4 @@
-/* Pico Radar v23 — pared del aeropuerto (no del vecino), FIDS con más datos, CRT limpio. */
+/* Pico Radar v24 — pared solo con origen/destino reales del aeropuerto. */
 const PUBLIC_SKY = "https://pico-vga-radar-sky.vercel.app/api";
 const SKY_API = (function () {
   const q = new URLSearchParams(location.search).get("api");
@@ -324,18 +324,12 @@ function relatedToAirport(a) {
   const apt = currentApt();
   const pub = publishedRoute(a);
   if (pub) return pub.origin === apt[0] || pub.dest === apt[0];
-  const here = [a.lat, a.lon];
-  const dSel = kmLL(here, [apt[2], apt[3]]);
-  if (dSel < 6) return true;
-  for (let i = 0; i < AIRPORTS.length; i++) {
-    const r = AIRPORTS[i];
-    if (r[0] === apt[0]) continue;
-    if (kmLL([r[2], r[3]], [apt[2], apt[3]]) >= 45) continue;
-    const dR = kmLL(here, [r[2], r[3]]);
-    if (dR <= dSel) return false;
-  }
-  const route = resolveRoute(a);
-  return route.origin === apt[0] || route.dest === apt[0];
+  const dSel = kmLL([a.lat, a.lon], [apt[2], apt[3]]);
+  if (dSel >= 6) return false;
+  if (isGnd(a)) return true;
+  const alt = Number(a.alt) || 0;
+  const gs = Number(a.gs) || 0;
+  return alt < 2500 && gs < 200;
 }
 function setLoad(show, msg) {
   if (msg) statusEl.textContent = msg;
