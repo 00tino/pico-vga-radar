@@ -1,4 +1,4 @@
-/* Pico Radar v24 — pared solo con origen/destino reales del aeropuerto. */
+/* Pico Radar v25 — pared del aeropuerto con ruta real, FIDS con ETA, CRT limpio. */
 const PUBLIC_SKY = "https://pico-vga-radar-sky.vercel.app/api";
 const SKY_API = (function () {
   const q = new URLSearchParams(location.search).get("api");
@@ -767,7 +767,7 @@ function visibleList() {
   const h = wall.clientHeight || 300;
   const n = listStyle === "fids"
     ? Math.max(1, Math.floor((h - 22) / (view === "wall" ? 64 : 36)))
-    : Math.max(1, Math.floor((h - 16) / (view === "wall" ? 210 : 158)));
+    : Math.max(1, Math.floor((h - 16) / (view === "wall" ? 320 : 158)));
   const start = (page * n) % Math.max(1, AC.length);
   const out = [];
   for (let i = 0; i < Math.min(n, AC.length); i++) out.push(AC[(start + i) % AC.length]);
