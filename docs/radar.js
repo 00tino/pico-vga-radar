@@ -1,4 +1,4 @@
-/* Pico Radar v20 — GitHub Pages CRT. Cielo vivo via proxy, pistas finas, logos kiwi. */
+/* Pico Radar v21 — GitHub Pages CRT. Monitor cabe, una APX, sin Palomar, FIDS corto. */
 const PUBLIC_SKY = "https://pico-vga-radar-sky.vercel.app/api";
 const SKY_API = (function () {
   const q = new URLSearchParams(location.search).get("api");
@@ -262,14 +262,16 @@ function kmLL(a, b) {
 function nearbyRwy() {
   const key = center[0] + "," + center[1] + "," + radiusKm + "," + AIRPORTS.length;
   if (rwyNear.key === key) return rwyNear.list;
-  if (radiusKm >= 120) {
+  if (radiusKm > 110) {
     rwyNear = { key: key, list: [] };
     return rwyNear.list;
   }
-  const maxD = Math.min(radiusKm * 0.95, 115);
+  const maxD = Math.min(radiusKm * 0.95, 110);
+  const skip = { EPA: 1, FDO: 1 };
   const out = [];
   for (let i = 0; i < AIRPORTS.length; i++) {
     const a = AIRPORTS[i];
+    if (skip[a[0]]) continue;
     const rows = RUNWAYS[a[0]];
     if (!rows || !rows.length) continue;
     const d = kmLL(center, [a[2], a[3]]);
@@ -279,6 +281,18 @@ function nearbyRwy() {
   out.sort((a, b) => a.d - b.d);
   rwyNear = { key: key, list: out.slice(0, 10) };
   return rwyNear.list;
+}
+function aptCity(code) {
+  const a = AIRPORTS.find((x) => x[0] === code);
+  return a ? (a[1] || "") : "";
+}
+function hdgDelta(x, y) { return Math.abs(((x - y + 540) % 360) - 180); }
+function bearingLL(from, to) {
+  const dlon = (to[1] - from[1]) * Math.PI / 180;
+  const lat1 = from[0] * Math.PI / 180, lat2 = to[0] * Math.PI / 180;
+  const y = Math.sin(dlon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dlon);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
 function aptCoord(code) {
   const a = AIRPORTS.find((x) => x[0] === code);
@@ -292,16 +306,8 @@ function resolveRoute(a) {
   const alt = Number(a.alt) || 0;
   const gs = Number(a.gs) || 0;
   const dSel = kmLL([a.lat, a.lon], [apt[2], apt[3]]);
-  function hdgDelta(x, y) { return Math.abs(((x - y + 540) % 360) - 180); }
-  function bearing(from, to) {
-    const dlon = (to[1] - from[1]) * Math.PI / 180;
-    const lat1 = from[0] * Math.PI / 180, lat2 = to[0] * Math.PI / 180;
-    const y = Math.sin(dlon) * Math.cos(lat2);
-    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dlon);
-    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-  }
-  const toward = a.track != null && hdgDelta(a.track, bearing([a.lat, a.lon], [apt[2], apt[3]])) < 28;
-  const away = a.track != null && hdgDelta(a.track, bearing([apt[2], apt[3]], [a.lat, a.lon])) < 32;
+  const toward = a.track != null && hdgDelta(a.track, bearingLL([a.lat, a.lon], [apt[2], apt[3]])) < 28;
+  const away = a.track != null && hdgDelta(a.track, bearingLL([apt[2], apt[3]], [a.lat, a.lon])) < 32;
   if (isGnd(a) && dSel < 8) origin = origin || apt[0];
   else if (gs > 70 && alt > 200 && alt < 14000 && dSel < 75 && toward) dest = dest || apt[0];
   else if (gs > 90 && alt > 600 && dSel < 36 && away) origin = origin || apt[0];
@@ -686,14 +692,19 @@ function cardHTML(a) {
   const foot = gnd
     ? "En tierra · preparandose para el despegue"
     : (a.arrAt ? "Llega en " + Math.max(0, Math.round((a.arrAt - Date.now()) / 60000)) + " min" : "En ruta");
+  const distKm = a.dst != null && isFinite(Number(a.dst)) ? Math.round(Number(a.dst) * 1.852) : (a.dstNm != null ? Math.round(a.dstNm * 1.852) : null);
+  const extraBits = [];
+  if (!isReg(id) && a.r) extraBits.push("Matrícula " + String(a.r).replace(/[^A-Z0-9]/gi, "").toUpperCase());
+  if (distKm != null) extraBits.push(distKm + " km del aeropuerto");
   const pill = '<span class="' + pillClass(st) + '">' + st + "</span>";
   return (
     '<div class="fa-card">' +
-      '<div class="fa-row"><div class="logo">' + logoHTML(a) + "</div><div>" +
+      '<div class="fa-row"><div class="logo">' + logoHTML(a) + '</div><div class="fa-meta">' +
         '<div class="fa-top"><span class="fa-id">' + id + "</span>" + pill + "</div>" +
         '<div class="fa-air">' + sub + "</div>" +
       "</div></div>" +
       '<div class="fa-route"><span>' + route.origin + '</span><span class="bar"><i style="width:' + pct + '%"></i></span><span>' + route.dest + "</span></div>" +
+      '<div class="fa-cities"><span>' + aptCity(route.origin) + "</span><span>" + aptCity(route.dest) + "</span></div>" +
       '<div class="fa-times">' +
         '<div><span class="lbl">Despegue ' + a.depKind + "</span><b>" + hhmm(a.depAt) + "</b></div>" +
         '<div><span class="lbl">Aterrizaje ' + a.arrKind + "</span><b>" + hhmm(a.arrAt) + "</b></div>" +
@@ -703,6 +714,7 @@ function cardHTML(a) {
         '<div><span class="lbl">Velocidad</span><b>' + (gnd ? "—" : fmtGs(a.gs)) + "</b></div>" +
         '<div><span class="lbl">Rumbo</span><b>' + (gnd || a.track == null ? "—" : '<span class="hdg"><span class="arr" style="transform:rotate(' + Number(a.track) + 'deg)"></span> ' + fmtHdg(a.track) + "</span>") + "</b></div>" +
       "</div>" +
+      (extraBits.length ? '<div class="fa-extra">' + extraBits.join(" · ") + "</div>" : "") +
       '<div class="fa-foot"><span>' + foot + "</span>" + pill + "</div>" +
     "</div>"
   );
@@ -754,16 +766,25 @@ function renderWall() {
   wall.classList.toggle("on", view !== "radar");
   wall.classList.toggle("hybrid", view === "hybrid");
   wall.classList.toggle("full", view === "wall");
+  const hint = document.getElementById("rwyHint");
+  if (hint) hint.style.display = view === "wall" ? "none" : "block";
   if (!AC.length) {
     wall.innerHTML = '<div class="empty"><div>' + (loading ? "Cargando el cielo…" : "Sin vuelos en este radio") + '</div><p class="fa-air">' + (statusEl.textContent || "") + "</p></div>";
     return;
   }
   const list = visibleList();
   if (listStyle === "fids") {
-    wall.innerHTML = '<table class="fids"><thead><tr><th></th><th>VUELO</th><th>RUTA</th><th>DEP</th><th>ARR</th><th>RUMBO</th><th>ESTADO</th></tr></thead><tbody>' +
+    const compact = view === "hybrid";
+    const shortSt = (st) => st === "APROXIMANDO" ? "APROX" : st === "EN TIERRA" ? "TIERRA" : st === "EN VUELO" ? "VUELO" : st;
+    wall.innerHTML = '<table class="fids"><thead><tr><th></th><th>VUELO</th><th>RUTA</th><th>DEP</th><th>ARR</th>' +
+      (compact ? "" : '<th class="col-extra">RUMBO</th>') +
+      "<th>ESTADO</th></tr></thead><tbody>" +
       list.map((a) => {
         const route = resolveRoute(a);
-        return '<tr><td><div class="logo" style="width:28px;height:28px;font-size:10px">' + logoHTML(a) + "</div></td><td>" + displayId(a) + "</td><td>" + route.origin + " → " + route.dest + "</td><td>" + hhmm(a.depAt) + "</td><td>" + hhmm(a.arrAt) + "</td><td>" + (isGnd(a) ? "—" : fmtHdg(a.track)) + '</td><td><span class="' + pillClass(a.status || phaseOf(a)) + '">' + (a.status || phaseOf(a)) + "</span></td></tr>";
+        const st = a.status || phaseOf(a);
+        return '<tr><td><div class="logo" style="width:26px;height:26px;font-size:9px">' + logoHTML(a) + "</div></td><td>" + displayId(a) + "</td><td>" + route.origin + " → " + route.dest + "</td><td>" + hhmm(a.depAt) + "</td><td>" + hhmm(a.arrAt) + "</td>" +
+          (compact ? "" : "<td>" + (isGnd(a) ? "—" : fmtHdg(a.track)) + "</td>") +
+          '<td><span class="' + pillClass(st) + '">' + (compact ? shortSt(st) : st) + "</span></td></tr>";
       }).join("") +
       "</tbody></table>";
   } else if (listStyle === "carousel") {
@@ -813,10 +834,12 @@ function loop() {
   ctx.fillText(currentApt()[0], 10, 18);
   ctx.globalAlpha = 0.7; ctx.font = "11px sans-serif";
   ctx.fillText(currentApt()[1] || "", 10, 34);
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = 1; ctx.font = "11px ui-monospace, monospace"; ctx.textAlign = "right";
+  ctx.fillText(Math.round(radiusKm) + " km", w - 10, 18);
+  ctx.textAlign = "left";
   const span = Math.max(0.25, radiusKm / 111);
   const toXY = (lat, lon) => ({ x: cx + ((lon - center[1]) / span) * R, y: cy - ((lat - center[0]) / span) * R });
-  if (radiusKm < 120) {
+  if (radiusKm <= 110) {
     const sets = nearbyRwy();
     sets.forEach((set) => {
       const rows = set.rows;
@@ -836,40 +859,39 @@ function loop() {
       const mid = toXY(set.lat, set.lon);
       ctx.globalAlpha = 0.8; ctx.font = "11px ui-monospace, monospace"; ctx.fillStyle = pair.fg;
       ctx.fillText(set.iata, mid.x + 8, mid.y + 14);
+      if (radiusKm > 70) return;
       const scored = {};
       AC.forEach((ac) => {
-        if (isGnd(ac) || ac.track == null) return;
+        if (!looksAir(ac) || isGnd(ac) || ac.track == null) return;
         const alt = Number(ac.alt) || 0, gs = Number(ac.gs) || 0;
         if (alt > 9000 || gs < 80) return;
         rows.forEach((rw) => {
           [[rw[0], rw[2], rw[4], rw[5]], [rw[1], rw[3], rw[6], rw[7]]].forEach((end) => {
             const ident = String(end[0]), hdg = Number(end[1]), lat = end[2], lon = end[3];
             if (!ident || !isFinite(hdg)) return;
-            let d = ((ac.track - hdg + 540) % 360) - 180;
-            if (Math.abs(d) > 14) return;
+            if (hdgDelta(ac.track, hdg) > 10) return;
             const km = kmLL([ac.lat, ac.lon], [lat, lon]);
-            if (km < 1.2 || km > 28) return;
-            scored[ident] = scored[ident] || { ident, hdg, lat, lon, n: 0 };
+            const along = Math.cos((ac.track - bearingLL([ac.lat, ac.lon], [lat, lon])) * Math.PI / 180) * km;
+            if (along <= 2 || along >= 22) return;
+            scored[ident] = scored[ident] || { ident, hdg, lat, lon, n: 0, minAlong: 99 };
             scored[ident].n += 1;
+            if (along < scored[ident].minAlong) scored[ident].minAlong = along;
           });
         });
       });
-      const ranked = Object.keys(scored).map((k) => scored[k]).sort((a, b) => b.n - a.n);
-      const top = ranked.length ? ranked[0].n : 0;
-      ranked.filter((x) => x.n >= top).forEach((hit) => {
-        const rec = (hit.hdg + 180) % 360;
-        const rad = rec * Math.PI / 180;
-        const backKm = Math.min(22, radiusKm * 0.5);
-        const back = [hit.lat + Math.cos(rad) * backKm / 111, hit.lon + Math.sin(rad) * backKm / (111 * Math.cos(hit.lat * Math.PI / 180))];
-        const s = toXY(back[0], back[1]), t = toXY(hit.lat, hit.lon);
-        if (radiusKm < 80) {
-          ctx.setLineDash([8, 6]); ctx.strokeStyle = pair.fg; ctx.globalAlpha = 0.8; ctx.lineWidth = 1.6;
-          ctx.lineCap = "butt";
-          ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(t.x, t.y); ctx.stroke();
-          ctx.setLineDash([]); ctx.fillStyle = pair.fg; ctx.globalAlpha = 0.95; ctx.font = "11px ui-monospace, monospace";
-          ctx.fillText("APX " + hit.ident, s.x + 4, s.y - 4);
-        }
-      });
+      const ranked = Object.keys(scored).map((k) => scored[k]).sort((a, b) => b.n - a.n || a.minAlong - b.minAlong);
+      const hit = ranked[0];
+      if (!hit) return;
+      const rec = (hit.hdg + 180) % 360;
+      const rad = rec * Math.PI / 180;
+      const backKm = Math.min(22, radiusKm * 0.5);
+      const back = [hit.lat + Math.cos(rad) * backKm / 111, hit.lon + Math.sin(rad) * backKm / (111 * Math.cos(hit.lat * Math.PI / 180))];
+      const s = toXY(back[0], back[1]), t = toXY(hit.lat, hit.lon);
+      ctx.setLineDash([8, 6]); ctx.strokeStyle = pair.fg; ctx.globalAlpha = 0.8; ctx.lineWidth = 1.6;
+      ctx.lineCap = "butt";
+      ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(t.x, t.y); ctx.stroke();
+      ctx.setLineDash([]); ctx.fillStyle = pair.fg; ctx.globalAlpha = 0.95; ctx.font = "11px ui-monospace, monospace";
+      ctx.fillText("APX " + hit.ident, s.x + 4, s.y - 4);
     });
     ctx.globalAlpha = 1;
   }
