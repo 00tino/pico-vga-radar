@@ -42,12 +42,13 @@ canvas#radar{width:100%;height:100%;display:block}
 .pill{display:inline-flex;align-items:center;border-radius:99px;border:1px solid color-mix(in srgb, var(--scope-fg) 35%, transparent);padding:2px 8px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;white-space:nowrap;flex-shrink:0}
 .pill.gnd{background:#ffffff18}
 .pill.aprox{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb, var(--accent) 18%, transparent)}
-.fa-air{font-size:11px;opacity:.7;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fa-air{font-size:11px;opacity:.7;margin-top:2px}
 .fa-route{display:flex;align-items:center;gap:8px;margin:8px 0 2px;font-weight:700;font-size:13px}
 .bar{flex:1;height:3px;background:#ffffff22;position:relative;overflow:hidden;border-radius:99px}
 .bar>i{position:absolute;inset:0 auto 0 0;background:var(--scope-fg)}
-.fa-cities{display:none;justify-content:space-between;gap:8px;font-size:11px;opacity:.7}
-.fa-extra{display:none;font-size:12px;opacity:.75;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fa-cities{display:none;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;line-height:1.25;opacity:.75}
+.fa-cities span:last-child{text-align:right}
+.fa-extra{display:none;font-size:12px;opacity:.75;line-height:1.35;flex-shrink:0}
 .fa-times{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:11px;opacity:.85}
 .fa-times b{display:block;font-size:15px;font-family:var(--mono)}
 .lbl{font-size:9px;letter-spacing:.08em;text-transform:uppercase;opacity:.55}
@@ -61,14 +62,14 @@ canvas#radar{width:100%;height:100%;display:block}
 .hdg .arr{display:inline-block;width:12px;height:12px;flex-shrink:0;background:currentColor;clip-path:polygon(50% 6%, 86% 90%, 50% 70%, 14% 90%);transform-origin:center center}
 .wall.full{padding:12px 14px}
 .wall.full .carousel-wrap .fa-card{padding:16px 18px}
-.carousel-wrap.hero .fa-id, .wall.hero .fa-id, .wall.full.hero .fa-id{font-size:clamp(18px, 2.8vh, 28px)}
-.carousel-wrap.hero .fa-times b, .wall.hero .fa-times b, .wall.full.hero .fa-times b{font-size:clamp(18px, 3.2vh, 28px)}
-.carousel-wrap.hero .metrics b, .wall.hero .metrics b, .wall.full.hero .metrics b{font-size:clamp(15px, 2.4vh, 22px)}
-.carousel-wrap.hero .fa-route, .wall.hero .fa-route{font-size:clamp(14px, 2.2vh, 20px)}
-.carousel-wrap.hero .logo, .wall.hero .logo{width:44px;height:44px}
-.carousel-wrap.hero .fa-card{padding:clamp(12px, 2vh, 20px) clamp(14px, 1.8vw, 24px);gap:clamp(8px, 1.4vh, 14px)}
-.carousel-wrap.hero .fa-times, .carousel-wrap.hero .metrics{flex:1;align-content:center}
-.carousel-wrap.hero .fa-cities, .carousel-wrap.lg .fa-cities, .wall.full .fa-cities{display:flex}
+.carousel-wrap.hero .fa-id, .wall.hero .fa-id, .wall.full.hero .fa-id{font-size:clamp(22px, 4.4vh, 42px)}
+.carousel-wrap.hero .fa-times b, .wall.hero .fa-times b, .wall.full.hero .fa-times b{font-size:clamp(22px, 5vh, 44px)}
+.carousel-wrap.hero .metrics b, .wall.hero .metrics b, .wall.full.hero .metrics b{font-size:clamp(16px, 3vh, 28px)}
+.carousel-wrap.hero .fa-route, .wall.hero .fa-route{font-size:clamp(16px, 2.8vh, 26px)}
+.carousel-wrap.hero .logo, .wall.hero .logo{width:56px;height:56px}
+.carousel-wrap.hero .fa-card{padding:clamp(14px, 2.2vh, 24px) clamp(16px, 2vw, 28px);gap:clamp(8px, 1.6vh, 16px)}
+.carousel-wrap.hero .fa-times{flex:1;align-content:center}
+.carousel-wrap.hero .fa-cities, .carousel-wrap.lg .fa-cities, .wall.full .fa-cities{display:grid}
 .carousel-wrap.hero .fa-extra, .carousel-wrap.lg .fa-extra, .wall.full .fa-extra{display:block}
 .carousel-wrap.lg .fa-id{font-size:clamp(16px, 2.4vh, 22px)}
 .carousel-wrap.lg .fa-times b{font-size:clamp(14px, 2.2vh, 20px)}
@@ -87,15 +88,15 @@ canvas#radar{width:100%;height:100%;display:block}
 .wall.hybrid .fids{font-size:12px}
 .wall.hybrid .fids .col-extra{display:none}
 .empty{margin:auto;max-width:280px;text-align:center;border:1px solid color-mix(in srgb, var(--scope-fg) 20%, transparent);border-radius:12px;padding:20px 18px;background:#0000004d}
-#overCard{display:none;position:absolute;left:12px;bottom:28px;max-width:42%;z-index:3}
-#rwyHint{display:block;position:absolute;left:50%;bottom:6px;transform:translateX(-50%);z-index:2;font-size:10px;letter-spacing:.12em;text-transform:uppercase;opacity:.55;pointer-events:none;white-space:nowrap;text-align:center}
-.wall.full ~ #rwyHint{display:none}
+#overCard{display:none;position:absolute;left:12px;bottom:12px;max-width:42%;z-index:3}
 aside.panel{width:100%;border-top:1px solid var(--border);background:var(--surface);overflow:auto;min-height:0}
 @media(min-width:960px){aside.panel{width:300px;border-top:0;border-left:1px solid var(--border);flex-shrink:0;height:100dvh}}
 .panel-in{padding:20px 18px 32px}
 .kicker{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--subtle);margin:0}
 h1{margin:4px 0 0;font-size:1.5rem;font-weight:600;letter-spacing:-.02em;color:var(--fg)}
 .status{margin:8px 0 0;font-size:14px;line-height:1.5;color:var(--muted)}
+#screenMeta{margin:4px 0 0;font-size:12px;font-family:var(--mono);color:var(--subtle);font-variant-numeric:tabular-nums}
+.rwy-note{margin:8px 0 0;font-size:11px;line-height:1.45;color:var(--subtle)}
 .tabs{margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:10px;background:var(--elevated)}
 .tabs button{height:44px;border:0;border-radius:8px;background:transparent;color:var(--muted);font-weight:500}
 .tabs button.on{background:var(--paper);color:var(--ink)}
@@ -131,12 +132,10 @@ a{color:var(--radar)}
 <div class="app">
   <section class="stage">
     <div class="monitor" id="monitor">
-      <header class="mon-head"><b>Pico Radar</b><span class="meta" id="monMeta">0 · 150 km · Híbrido</span></header>
       <div class="view">
         <canvas id="radar"></canvas>
         <div id="overCard"></div>
         <div class="wall hybrid on" id="wall"></div>
-        <div id="rwyHint">Pistas hasta 110 km · Aprox. activa hasta 70 km</div>
         <div id="load">CARGANDO</div>
       </div>
     </div>
@@ -146,6 +145,7 @@ a{color:var(--radar)}
       <p class="kicker">Pico 2W · VGA</p>
       <h1>Cielo en vivo</h1>
       <p class="status" id="status">Cargando EZE</p>
+      <p id="screenMeta">0 en pantalla · 150 km · Híbrido</p>
       <div class="tabs">
         <button type="button" class="on" id="tabMon">Monitor</button>
         <button type="button" id="tabCfg">Configurar</button>
@@ -157,6 +157,7 @@ a{color:var(--radar)}
             <div class="sug-list" id="sugAp"></div>
           </div>
         </div>
+        <p class="rwy-note">Las pistas se dibujan hasta 110 km. La aproximación punteada aparece solo si hay un vuelo comercial en final, y como máximo hasta 70 km.</p>
         <div class="field"><span id="radLbl">Radio 150 km</span>
           <input id="radius" type="range" min="40" max="400" step="10" value="150">
         </div>
@@ -232,6 +233,6 @@ a{color:var(--radar)}
     </div>
   </aside>
 </div>
-<script src="radar.js?v=21"></script>
+<script src="radar.js?v=22"></script>
 </body>
 </html>

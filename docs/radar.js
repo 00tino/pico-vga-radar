@@ -1,4 +1,4 @@
-/* Pico Radar v21 — GitHub Pages CRT. Monitor cabe, una APX, sin Palomar, FIDS corto. */
+/* Pico Radar v22 — CRT sin chrome, vuelos del aeropuerto primero, FIDS/FA sin recortes. */
 const PUBLIC_SKY = "https://pico-vga-radar-sky.vercel.app/api";
 const SKY_API = (function () {
   const q = new URLSearchParams(location.search).get("api");
@@ -87,7 +87,7 @@ let ALINES = SEED_AL.slice();
 const ROUTECACHE = {};
 const POS = {};
 let home = null, demoOver = false, srcLabel = "";
-let RAW = [], AC = [], running = false, looping = false;
+let RAW = [], AC = [], SKY = [], running = false, looping = false;
 let view = "hybrid", theme = "crt_amber", listStyle = "fa";
 let center = [-34.822, -58.536], includeGround = true, radiusKm = 150, maxN = 16, rotateS = 7, carouselN = 2;
 let beam = -Math.PI / 2, lastSweep = 0, lastRot = performance.now(), page = 0, loading = false;
@@ -103,7 +103,6 @@ const radar = document.getElementById("radar");
 const wall = document.getElementById("wall");
 const loadEl = document.getElementById("load");
 const statusEl = document.getElementById("status");
-const monMeta = document.getElementById("monMeta");
 const foot = document.getElementById("foot");
 
 function fold(s) {
@@ -130,8 +129,10 @@ function compactId(s) { return (s || "").toUpperCase().replace(/[^A-Z0-9]/g, "")
 function viewLabel() {
   return view === "hybrid" ? "Hibrido" : view === "radar" ? "Radar" : "Pared";
 }
+const screenMeta = document.getElementById("screenMeta");
 function setMeta() {
-  monMeta.textContent = AC.length + " · " + radiusKm + " km · " + viewLabel();
+  const line = (SKY.length || AC.length) + " en zona · " + AC.length + " de " + currentApt()[0] + " · " + radiusKm + " km · " + viewLabel();
+  if (screenMeta) screenMeta.textContent = line;
 }
 function isReg(s) {
   const c = compactId(s);
@@ -441,7 +442,8 @@ function applyFilters() {
   const radiusNm = radiusKm / 1.852;
   const alQ = (document.getElementById("followAl").value || "").trim();
   const alHit = findAirline(alQ);
-  AC = RAW.filter((a) => {
+  const apt = currentApt()[0];
+  const pool = RAW.filter((a) => {
     if (distNmOf(a) > radiusNm * 1.08) return false;
     const k = kindOf(a);
     if (!want[k]) return false;
@@ -449,8 +451,18 @@ function applyFilters() {
     if (alHit && !matchAirline(a.flight, alHit)) return false;
     if (followFlt && !compactId(a.flight).includes(compactId(followFlt)) && compactId(a.r || "").indexOf(compactId(followFlt)) < 0) return false;
     return a.lat != null;
-  }).sort((a, b) => (looksAir(b) - looksAir(a)) || (distNmOf(a) - distNmOf(b))).slice(0, maxN);
-  AC.forEach(enrich);
+  });
+  function score(a) {
+    const r = resolveRoute(a);
+    if (r.origin === apt || r.dest === apt) return 1;
+    if (kmLL([a.lat, a.lon], center) < 6) return 1;
+    return 0;
+  }
+  pool.sort((a, b) => (score(b) - score(a)) || (looksAir(b) - looksAir(a)) || (distNmOf(a) - distNmOf(b)));
+  SKY = pool.slice(0, Math.max(maxN, 24));
+  SKY.forEach(enrich);
+  const local = SKY.filter((a) => score(a) > 0);
+  AC = local.slice(0, maxN);
   setMeta();
 }
 async function pullJson(url, ms) {
@@ -627,9 +639,9 @@ async function loadLive(showOverlay) {
       }
     }
     renderWall();
-    fillRoutes(AC).then(() => { applyFilters(); renderWall(); });
+    fillRoutes(SKY).then(() => { applyFilters(); renderWall(); });
     const now = performance.now();
-    AC.forEach((a) => { POS[a.hex] = { lat: a.lat, lon: a.lon, t: now, gs: a.gs, track: a.track }; });
+    SKY.forEach((a) => { POS[a.hex] = { lat: a.lat, lon: a.lon, t: now, gs: a.gs, track: a.track }; });
     lastSweep = now;
     lastRot = performance.now();
     const alQ = (document.getElementById("followAl").value || "").trim();
@@ -649,7 +661,7 @@ async function loadLive(showOverlay) {
       applyFilters(); renderWall();
       statusEl.textContent = RAW.length + " aeronaves · " + apt[0] + " · " + srcLabel;
     } else {
-      RAW = []; AC = []; renderWall();
+      RAW = []; AC = []; SKY = []; renderWall();
       statusEl.textContent = "No pude leer el cielo de " + apt[0] + ". Reintenta.";
       foot.textContent = "ADS-B en vivo · error";
     }
@@ -694,8 +706,11 @@ function cardHTML(a) {
     : (a.arrAt ? "Llega en " + Math.max(0, Math.round((a.arrAt - Date.now()) / 60000)) + " min" : "En ruta");
   const distKm = a.dst != null && isFinite(Number(a.dst)) ? Math.round(Number(a.dst) * 1.852) : (a.dstNm != null ? Math.round(a.dstNm * 1.852) : null);
   const extraBits = [];
+  if (a.t) extraBits.push("Tipo " + a.t);
   if (!isReg(id) && a.r) extraBits.push("Matrícula " + String(a.r).replace(/[^A-Z0-9]/gi, "").toUpperCase());
-  if (distKm != null) extraBits.push(distKm + " km del aeropuerto");
+  if (distKm != null) extraBits.push(distKm + " km al centro");
+  const destLL = aptCoord(route.dest);
+  if (!gnd && destLL) extraBits.push(Math.round(kmLL([a.lat, a.lon], destLL)) + " km a " + route.dest);
   const pill = '<span class="' + pillClass(st) + '">' + st + "</span>";
   return (
     '<div class="fa-card">' +
@@ -720,7 +735,7 @@ function cardHTML(a) {
   );
 }
 function clipCards() {
-  if (listStyle === "carousel" || listStyle === "fids") return;
+  if (listStyle === "carousel" || listStyle === "fids" || view === "wall") return;
   const box = wall.getBoundingClientRect();
   [].slice.call(wall.querySelectorAll(".fa-card")).forEach((c) => {
     const r = c.getBoundingClientRect();
@@ -739,7 +754,7 @@ function visibleList() {
   const h = wall.clientHeight || 300;
   const n = listStyle === "fids"
     ? Math.max(1, Math.floor((h - 22) / (view === "wall" ? 48 : 36)))
-    : Math.max(1, Math.floor((h - 16) / (view === "wall" ? 250 : 188)));
+    : Math.max(1, Math.floor((h - 16) / (view === "wall" ? 168 : 158)));
   const start = (page * n) % Math.max(1, AC.length);
   const out = [];
   for (let i = 0; i < Math.min(n, AC.length); i++) out.push(AC[(start + i) % AC.length]);
@@ -752,10 +767,18 @@ function overhead() {
   AC.forEach((a) => { const d = kmLL([displayPos(a).lat, displayPos(a).lon], home); if (d < bestD) { bestD = d; best = a; } });
   return best;
 }
+let overHex = "";
+let overAt = 0;
 function updateOver() {
   const el = document.getElementById("overCard");
   const a = overhead();
   if (!a || view === "wall") { el.style.display = "none"; return; }
+  if (a.hex !== overHex) { overHex = a.hex; overAt = performance.now(); }
+  if (performance.now() - overAt > 7000) {
+    el.style.display = "none";
+    if (demoOver) demoOver = false;
+    return;
+  }
   el.style.display = "block";
   el.innerHTML = cardHTML(a);
 }
@@ -766,10 +789,10 @@ function renderWall() {
   wall.classList.toggle("on", view !== "radar");
   wall.classList.toggle("hybrid", view === "hybrid");
   wall.classList.toggle("full", view === "wall");
-  const hint = document.getElementById("rwyHint");
-  if (hint) hint.style.display = view === "wall" ? "none" : "block";
   if (!AC.length) {
-    wall.innerHTML = '<div class="empty"><div>' + (loading ? "Cargando el cielo…" : "Sin vuelos en este radio") + '</div><p class="fa-air">' + (statusEl.textContent || "") + "</p></div>";
+    wall.innerHTML = SKY.length
+      ? '<div class="empty"><div>Sin vuelos de ' + currentApt()[0] + ' ahora</div><p class="fa-air">Hay ' + SKY.length + " aviones en la zona, ninguno con origen o destino " + currentApt()[0] + ". El radar los sigue mostrando.</p></div>"
+      : '<div class="empty"><div>' + (loading ? "Cargando el cielo…" : "Sin vuelos en este radio") + '</div><p class="fa-air">' + (statusEl.textContent || "") + "</p></div>";
     return;
   }
   const list = visibleList();
@@ -834,9 +857,7 @@ function loop() {
   ctx.fillText(currentApt()[0], 10, 18);
   ctx.globalAlpha = 0.7; ctx.font = "11px sans-serif";
   ctx.fillText(currentApt()[1] || "", 10, 34);
-  ctx.globalAlpha = 1; ctx.font = "11px ui-monospace, monospace"; ctx.textAlign = "right";
-  ctx.fillText(Math.round(radiusKm) + " km", w - 10, 18);
-  ctx.textAlign = "left";
+  ctx.globalAlpha = 1;
   const span = Math.max(0.25, radiusKm / 111);
   const toXY = (lat, lon) => ({ x: cx + ((lon - center[1]) / span) * R, y: cy - ((lat - center[0]) / span) * R });
   if (radiusKm <= 110) {
@@ -861,7 +882,7 @@ function loop() {
       ctx.fillText(set.iata, mid.x + 8, mid.y + 14);
       if (radiusKm > 70) return;
       const scored = {};
-      AC.forEach((ac) => {
+      SKY.forEach((ac) => {
         if (!looksAir(ac) || isGnd(ac) || ac.track == null) return;
         const alt = Number(ac.alt) || 0, gs = Number(ac.gs) || 0;
         if (alt > 9000 || gs < 80) return;
@@ -896,7 +917,7 @@ function loop() {
     ctx.globalAlpha = 1;
   }
   const labeled = new Set(visibleList().map((a) => a.hex));
-  AC.forEach((a) => {
+  SKY.forEach((a) => {
     const pos = displayPos(a);
     const x = cx + ((pos.lon - center[1]) / span) * R;
     const y = cy - ((pos.lat - center[0]) / span) * R;
