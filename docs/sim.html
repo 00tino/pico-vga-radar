@@ -123,9 +123,10 @@ h1{margin:4px 0 0;font-size:1.5rem;font-weight:600;letter-spacing:-.02em;color:v
 .status{margin:8px 0 0;font-size:14px;line-height:1.5;color:var(--muted)}
 #screenMeta{margin:4px 0 0;font-size:12px;font-family:var(--mono);color:var(--subtle);font-variant-numeric:tabular-nums}
 .rwy-note{margin:8px 0 0;font-size:11px;line-height:1.45;color:var(--subtle)}
-.tabs{margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:10px;background:var(--elevated)}
-.tabs button{height:44px;border:0;border-radius:8px;background:transparent;color:var(--muted);font-weight:500}
+.tabs{margin-top:20px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:4px;border-radius:10px;background:var(--elevated)}
+.tabs button{height:44px;border:0;border-radius:8px;background:transparent;color:var(--muted);font-weight:500;font-size:12px;padding:0 4px}
 .tabs button.on{background:var(--paper);color:var(--ink)}
+.install-lock{opacity:.45;pointer-events:none}
 .field{margin-top:18px}
 .field>span{display:block;margin-bottom:6px;font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--subtle)}
 .field input[type=text], .field input:not([type]), .field input[type=search]{
@@ -174,7 +175,8 @@ a{color:var(--radar)}
       <p id="screenMeta">0 en pantalla · 150 km · Híbrido</p>
       <div class="tabs">
         <button type="button" class="on" id="tabMon">Monitor</button>
-        <button type="button" id="tabCfg">Configurar</button>
+        <button type="button" id="tabCfg">Cliente</button>
+        <button type="button" id="tabInst">Instalador</button>
       </div>
       <div id="paneMon">
         <div class="field"><span>Aeropuerto</span>
@@ -183,7 +185,7 @@ a{color:var(--radar)}
             <div class="sug-list" id="sugAp"></div>
           </div>
         </div>
-        <p class="rwy-note">Las pistas se dibujan hasta 110 km. La aproximación punteada aparece solo si hay un vuelo comercial en final, y como máximo hasta 70 km.</p>
+        <p class="rwy-note" id="rwyLive">Las pistas se dibujan hasta 110 km. La aproximación punteada aparece solo si hay un vuelo comercial en final, y como máximo hasta 70 km.</p>
         <div class="field"><span id="radLbl">Radio 150 km</span>
           <input id="radius" type="range" min="40" max="400" step="10" value="150">
         </div>
@@ -199,39 +201,24 @@ a{color:var(--radar)}
         <button type="button" class="primary" id="refreshBtn">Actualizar cielo</button>
       </div>
       <div id="paneCfg" hidden>
-        <div class="field"><span>Pantalla VGA</span>
-          <div class="seg" style="grid-template-columns:repeat(4,1fr)">
-            <button type="button" data-preset="2">2"</button>
-            <button type="button" data-preset="3">3"</button>
-            <button type="button" data-preset="7">7"</button>
-            <button type="button" data-preset="10">10"</button>
-            <button type="button" data-preset="15" class="on">15"</button>
-            <button type="button" data-preset="21">21"</button>
-            <button type="button" data-preset="custom">Otra</button>
-          </div>
-        </div>
-        <div class="disp-grid">
-          <div class="field"><span>Pulgadas</span><input id="inIn" type="number" min="1.5" max="32" step="0.1" value="15"></div>
-          <div class="field"><span>Ancho px</span><input id="vgaW" type="number" min="160" max="1920" step="8" value="640"></div>
-          <div class="field"><span>Alto px</span><input id="vgaH" type="number" min="120" max="1200" step="8" value="480"></div>
-        </div>
-        <p class="rwy-note" id="dispNote">15" 640×480 · híbrido · 2 tarjetas</p>
-        <p class="rwy-note">El monitor VGA es mudo: no le habla al celular. Vos le decís al sistema las pulgadas y los píxeles, y el radar se calibra solo — de 2 pulgadas a 21.</p>
+        <p class="rwy-note">Configuración del cliente. Se puede cambiar cuando quiera. El tamaño del monitor ya lo grabó el instalador.</p>
         <div class="field"><span>Vista</span>
           <div class="seg" id="viewSeg" style="grid-template-columns:1fr 1fr 1fr">
-            <button type="button" class="on" data-view="hybrid">Híbrido</button>
+            <button type="button" class="on" data-view="hybrid">Radar+lista</button>
             <button type="button" data-view="radar">Radar</button>
-            <button type="button" data-view="wall">Pared</button>
+            <button type="button" data-view="wall">Lista</button>
           </div>
         </div>
-        <div class="field"><span>Lista</span>
+        <div class="field"><span>Formato</span>
           <div class="seg" style="grid-template-columns:1fr 1fr 1fr">
-            <button type="button" class="on" data-list="fa">FlightAware</button>
-            <button type="button" data-list="fids">FIDS</button>
+            <button type="button" class="on" data-list="fa">Flyover</button>
+            <button type="button" data-list="fids">Aeropuerto</button>
             <button type="button" data-list="carousel">Carrusel</button>
           </div>
         </div>
-        <p class="rwy-note">Las horas son estimación ADS-B (posición y velocidad). Sin el horario publicado de la aerolínea no se puede marcar si va a tiempo o atrasado.</p>
+        <p class="rwy-note">Aeropuerto es el tablero tipo FIDS. Flyover son las tarjetas grandes. Las horas son estimación ADS-B: sin el horario publicado no se marca a tiempo o atrasado.</p>
+        <label class="toggle">Pistas <input type="checkbox" id="rwyOn" checked></label>
+        <p class="rwy-note" id="rwyClientNote" hidden>Pistas apagadas. El radar no dibuja pistas ni aproximaciones.</p>
         <div class="field"><span>Tema</span>
           <div class="seg" style="grid-template-columns:1fr 1fr 1fr">
             <button type="button" class="on" data-theme="crt_amber">CRT ámbar</button>
@@ -274,21 +261,44 @@ a{color:var(--radar)}
           <button type="button" class="ghost" id="demoHouse">Demo sobrevuelo</button>
         </div>
         <div class="qr-box">
-          <div class="lbl">QR de esta pantalla</div>
-          <p class="rwy-note" style="margin:0 0 10px">El Pico pinta este código. Lleva aeropuerto, pulgadas y resolución para que el celular abra la config ya calibrada. El teléfono no mide el monitor: lo informás vos en el sistema.</p>
+          <div class="lbl">QR del cliente</div>
+          <p class="rwy-note" style="margin:0 0 10px">El Pico pinta este código. El cliente elige aeropuerto, vista y formato. El tamaño del monitor ya está grabado en esta Raspberry.</p>
           <div class="qr-row">
             <img id="qrImg" alt="QR" width="120" height="120">
             <div>
               <div class="qr-url" id="qrUrl">http://192.168.4.1/</div>
-              <button type="button" class="ghost" id="qrTry" style="margin-top:8px;width:auto;padding:0 10px">Probar este tamaño</button>
+              <button type="button" class="ghost" id="qrTry" style="margin-top:8px;width:auto;padding:0 10px">Probar esta config</button>
             </div>
           </div>
         </div>
+      </div>
+      <div id="paneInst" hidden>
+        <p class="rwy-note">Pantalla del instalador. La usás una vez, cuando montás el Pico en este monitor. Queda grabada: el cliente no la toca.</p>
+        <div class="field" id="installFields"><span>Pantalla VGA</span>
+          <div class="seg" style="grid-template-columns:repeat(4,1fr)">
+            <button type="button" data-preset="2">2"</button>
+            <button type="button" data-preset="3">3"</button>
+            <button type="button" data-preset="7">7"</button>
+            <button type="button" data-preset="10">10"</button>
+            <button type="button" data-preset="15" class="on">15"</button>
+            <button type="button" data-preset="21">21"</button>
+            <button type="button" data-preset="custom">Otra</button>
+          </div>
+        </div>
+        <div class="disp-grid" id="installNums">
+          <div class="field"><span>Pulgadas</span><input id="inIn" type="number" min="1.5" max="32" step="0.1" value="15"></div>
+          <div class="field"><span>Ancho px</span><input id="vgaW" type="number" min="160" max="1920" step="8" value="640"></div>
+          <div class="field"><span>Alto px</span><input id="vgaH" type="number" min="120" max="1200" step="8" value="480"></div>
+        </div>
+        <p class="rwy-note" id="dispNote">15" 640×480 · híbrido · 2 tarjetas</p>
+        <p class="rwy-note" id="installState">Todavía no está grabado. Probá el tamaño en el CRT y cuando cierre, guardalo.</p>
+        <button type="button" class="primary" id="installLock">Guardar en este Pico</button>
+        <button type="button" class="ghost" id="installTry" style="margin-top:8px;width:100%">Probar este monitor</button>
       </div>
       <p class="foot" id="foot">ADS-B en vivo</p>
     </div>
   </aside>
 </div>
-<script src="radar.js?v=27"></script>
+<script src="radar.js?v=28"></script>
 </body>
 </html>

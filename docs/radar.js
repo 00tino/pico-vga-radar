@@ -1,4 +1,4 @@
-/* Pico Radar v27 — pulgadas + resolución VGA, layout automático 2–21". */
+/* Pico Radar v28 — instalador (tamaño fijo) vs cliente (vista, formato, pistas). */
 const PUBLIC_SKY = "https://pico-vga-radar-sky.vercel.app/api";
 const SKY_API = (function () {
   const q = new URLSearchParams(location.search).get("api");
@@ -90,6 +90,9 @@ let home = null, demoOver = false, srcLabel = "";
 let RAW = [], AC = [], SKY = [], running = false, looping = false;
 let view = "hybrid", theme = "crt_amber", listStyle = "fa";
 let spec = { inches: 15, w: 640, h: 480 };
+let runwaysOn = true;
+let installLocked = false;
+const LS_INSTALL = "pico-radar-install-v1";
 const PRESETS = [
   { id: "2", spec: { inches: 2, w: 320, h: 240 } },
   { id: "3", spec: { inches: 3, w: 320, h: 240 } },
@@ -245,16 +248,56 @@ function setMeta() {
   if (screenMeta) screenMeta.textContent = line;
 }
 function cfgQuery() {
-  const L = layoutOf(spec);
   const p = new URLSearchParams();
   p.set("apt", currentApt()[0]);
-  p.set("in", String(L.spec.inches));
-  p.set("vga", L.spec.w + "x" + L.spec.h);
   p.set("view", shownView());
   p.set("list", listStyle);
   p.set("theme", theme);
   p.set("r", String(radiusKm));
+  if (!runwaysOn) p.set("rwy", "0");
   return p.toString();
+}
+function installQuery() {
+  const L = layoutOf(spec);
+  const p = new URLSearchParams(cfgQuery());
+  p.set("in", String(L.spec.inches));
+  p.set("vga", L.spec.w + "x" + L.spec.h);
+  p.set("tab", "install");
+  return p.toString();
+}
+function saveInstall() {
+  try { localStorage.setItem(LS_INSTALL, JSON.stringify({ spec: spec, locked: installLocked })); } catch (e) {}
+}
+function loadInstall() {
+  try {
+    const raw = localStorage.getItem(LS_INSTALL);
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    if (s && s.spec) spec = clampSpec(s.spec);
+    installLocked = !!(s && s.locked);
+  } catch (e) {}
+}
+function applyInstallLock() {
+  const fields = document.getElementById("installFields");
+  const nums = document.getElementById("installNums");
+  if (fields) fields.classList.toggle("install-lock", installLocked);
+  if (nums) nums.classList.toggle("install-lock", installLocked);
+  const btn = document.getElementById("installLock");
+  const state = document.getElementById("installState");
+  const L = layoutOf(spec);
+  if (btn) btn.textContent = installLocked ? "Cambiar instalación" : "Guardar en este Pico";
+  if (state) state.textContent = installLocked
+    ? ("Grabado en este Pico: " + L.label + ". El cliente elige vista y formato, no el tamaño.")
+    : "Todavía no está grabado. Probá el tamaño en el CRT y cuando cierre, guardalo.";
+}
+function showPane(which) {
+  const tabs = { tabMon: "paneMon", tabCfg: "paneCfg", tabInst: "paneInst" };
+  Object.keys(tabs).forEach((id) => {
+    const t = document.getElementById(id);
+    const pane = document.getElementById(tabs[id]);
+    if (t) t.classList.toggle("on", id === which);
+    if (pane) pane.hidden = id !== which;
+  });
 }
 function updateQr() {
   const pico = "http://192.168.4.1/?" + cfgQuery();
@@ -293,6 +336,7 @@ function applyDisp() {
   const viewSeg = document.getElementById("viewSeg");
   if (viewSeg) viewSeg.style.gridTemplateColumns = L.hybridOk ? "1fr 1fr 1fr" : "1fr 1fr";
   document.querySelectorAll("[data-preset]").forEach((b) => b.classList.toggle("on", b.dataset.preset === matchPreset(spec)));
+  applyInstallLock();
   updateQr();
 }
 function applyQuery() {
@@ -327,6 +371,18 @@ function applyQuery() {
     document.getElementById("radius").value = String(r);
     radiusKm = r;
   }
+  const rwy = (q.get("rwy") || q.get("pistas") || "").toLowerCase();
+  if (rwy === "0" || rwy === "off" || rwy === "no") {
+    runwaysOn = false;
+    const el = document.getElementById("rwyOn");
+    if (el) el.checked = false;
+  } else if (rwy === "1" || rwy === "on" || rwy === "yes") {
+    runwaysOn = true;
+    const el = document.getElementById("rwyOn");
+    if (el) el.checked = true;
+  }
+  if (q.get("install") === "1" || q.get("tab") === "install") showPane("tabInst");
+  else if (q.get("tab") === "client") showPane("tabCfg");
 }
 
 function isReg(s) {
@@ -456,6 +512,7 @@ function kmLL(a, b) {
   return Math.hypot((a[0] - b[0]) * 111, (a[1] - b[1]) * 111 * Math.cos((a[0] * Math.PI) / 180));
 }
 function nearbyRwy() {
+  if (!runwaysOn) return [];
   const key = center[0] + "," + center[1] + "," + radiusKm + "," + AIRPORTS.length;
   if (rwyNear.key === key) return rwyNear.list;
   if (radiusKm > 110) {
@@ -1182,6 +1239,7 @@ function grabForm() {
   followAl = document.getElementById("followAl").value.trim();
   followFlt = document.getElementById("followFlt").value.trim();
   includeGround = document.getElementById("ground").checked;
+  runwaysOn = !!(document.getElementById("rwyOn") && document.getElementById("rwyOn").checked);
   radiusKm = Number(document.getElementById("radius").value) || 150;
   maxN = Math.max(4, Math.min(24, Number(document.getElementById("max").value) || 16));
   rotateS = Math.max(4, Math.min(30, Number(document.getElementById("rotate").value) || 8));
@@ -1198,22 +1256,20 @@ function grabForm() {
   document.getElementById("carLbl").textContent = "Carrusel: " + carouselN + (carouselN === 1 ? " vuelo" : " vuelos");
   document.getElementById("carField").hidden = listStyle !== "carousel";
   document.querySelectorAll(".checks label").forEach((l) => l.classList.toggle("on", l.querySelector("input").checked));
+  const rwyLive = document.getElementById("rwyLive");
+  if (rwyLive) rwyLive.textContent = runwaysOn
+    ? "Las pistas se dibujan hasta 110 km. La aproximación punteada aparece solo si hay un vuelo comercial en final, y como máximo hasta 70 km."
+    : "Pistas apagadas. El cliente las puede volver a prender.";
+  const rwyClient = document.getElementById("rwyClientNote");
+  if (rwyClient) rwyClient.hidden = runwaysOn;
   applyTheme();
   applyDisp();
+  saveInstall();
   setMeta();
 }
-document.getElementById("tabMon").onclick = function () {
-  document.getElementById("tabMon").classList.add("on");
-  document.getElementById("tabCfg").classList.remove("on");
-  document.getElementById("paneMon").hidden = false;
-  document.getElementById("paneCfg").hidden = true;
-};
-document.getElementById("tabCfg").onclick = function () {
-  document.getElementById("tabCfg").classList.add("on");
-  document.getElementById("tabMon").classList.remove("on");
-  document.getElementById("paneMon").hidden = true;
-  document.getElementById("paneCfg").hidden = false;
-};
+document.getElementById("tabMon").onclick = function () { showPane("tabMon"); };
+document.getElementById("tabCfg").onclick = function () { showPane("tabCfg"); };
+document.getElementById("tabInst").onclick = function () { showPane("tabInst"); };
 document.querySelectorAll("[data-view],[data-list],[data-theme]").forEach((b) => {
   b.addEventListener("click", () => {
     const key = b.dataset.view ? "view" : b.dataset.list ? "list" : "theme";
@@ -1225,6 +1281,7 @@ document.querySelectorAll("[data-view],[data-list],[data-theme]").forEach((b) =>
 });
 document.querySelectorAll("[data-preset]").forEach((b) => {
   b.addEventListener("click", () => {
+    if (installLocked) return;
     const id = b.dataset.preset;
     if (id && id !== "custom") {
       const p = PRESETS.find((x) => x.id === id);
@@ -1241,6 +1298,7 @@ document.querySelectorAll("[data-preset]").forEach((b) => {
   const el = document.getElementById(id);
   if (!el) return;
   el.addEventListener("change", () => {
+    if (installLocked) return;
     fillSpecInputs(clampSpec({
       inches: Number(document.getElementById("inIn").value),
       w: Number(document.getElementById("vgaW").value),
@@ -1259,7 +1317,7 @@ document.querySelectorAll("[data-preset]").forEach((b) => {
     setMeta();
   });
 });
-["fAir", "fGa", "fBiz", "fHeli", "ground", "house", "followFlt", "max", "rotate", "carN"].forEach((id) => {
+["fAir", "fGa", "fBiz", "fHeli", "ground", "house", "followFlt", "max", "rotate", "carN", "rwyOn"].forEach((id) => {
   document.getElementById(id).addEventListener("change", () => { grabForm(); applyFilters(); renderWall(); });
 });
 document.getElementById("followAl").addEventListener("input", () => { grabForm(); applyFilters(); renderWall(); });
@@ -1289,6 +1347,16 @@ document.getElementById("qrTry").onclick = function () {
   grabForm();
   const qs = cfgQuery();
   history.replaceState({}, "", location.pathname + "?" + qs);
+};
+document.getElementById("installLock").onclick = function () {
+  installLocked = !installLocked;
+  if (installLocked) spec = clampSpec(spec);
+  saveInstall();
+  applyInstallLock();
+};
+document.getElementById("installTry").onclick = function () {
+  grabForm();
+  history.replaceState({}, "", location.pathname + "?" + installQuery());
 };
 document.getElementById("geo").onclick = function () {
   navigator.geolocation.getCurrentPosition((pos) => {
@@ -1329,6 +1397,8 @@ async function loadCatalogs() {
 }
 
 async function boot() {
+  loadInstall();
+  fillSpecInputs(spec);
   applyQuery();
   grabForm();
   applyDisp();
