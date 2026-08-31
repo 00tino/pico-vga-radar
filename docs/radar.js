@@ -1,4 +1,4 @@
-/* Pico Radar v26 — CRT 3 pulgadas (radar o tarjetas), QR con tamaño de pantalla. */
+/* Pico Radar v27 — pulgadas + resolución VGA, layout automático 2–21". */
 const PUBLIC_SKY = "https://pico-vga-radar-sky.vercel.app/api";
 const SKY_API = (function () {
   const q = new URLSearchParams(location.search).get("api");
@@ -88,7 +88,17 @@ const ROUTECACHE = {};
 const POS = {};
 let home = null, demoOver = false, srcLabel = "";
 let RAW = [], AC = [], SKY = [], running = false, looping = false;
-let view = "hybrid", theme = "crt_amber", listStyle = "fa", disp = "auto";
+let view = "hybrid", theme = "crt_amber", listStyle = "fa";
+let spec = { inches: 15, w: 640, h: 480 };
+const PRESETS = [
+  { id: "2", spec: { inches: 2, w: 320, h: 240 } },
+  { id: "3", spec: { inches: 3, w: 320, h: 240 } },
+  { id: "7", spec: { inches: 7, w: 800, h: 480 } },
+  { id: "10", spec: { inches: 10, w: 800, h: 600 } },
+  { id: "15", spec: { inches: 15, w: 640, h: 480 } },
+  { id: "21", spec: { inches: 21, w: 1024, h: 768 } },
+];
+const DEFAULT_SPEC = { inches: 15, w: 640, h: 480 };
 let center = [-34.822, -58.536], includeGround = true, radiusKm = 150, maxN = 16, rotateS = 7, carouselN = 2;
 let beam = -Math.PI / 2, lastSweep = 0, lastRot = performance.now(), page = 0, loading = false;
 let loadSeq = 0;
@@ -126,8 +136,102 @@ function hay(a) {
 }
 function letters(s) { return (s || "").toUpperCase().replace(/[^A-Z]/g, ""); }
 function compactId(s) { return (s || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); }
+function clampSpec(s) {
+  const inches = Math.min(32, Math.max(1.5, Math.round((Number(s && s.inches) || DEFAULT_SPEC.inches) * 10) / 10));
+  const w = Math.round(Math.min(1920, Math.max(160, Number(s && s.w) || DEFAULT_SPEC.w)));
+  const h = Math.round(Math.min(1200, Math.max(120, Number(s && s.h) || DEFAULT_SPEC.h)));
+  return { inches, w, h };
+}
+function guessVga(inches) {
+  if (inches < 4.5) return { w: 320, h: 240 };
+  if (inches < 8) return { w: 800, h: 480 };
+  if (inches < 12) return { w: 800, h: 600 };
+  if (inches < 18) return { w: 640, h: 480 };
+  return { w: 1024, h: 768 };
+}
+function guessInches(w, h) {
+  const min = Math.min(w, h);
+  if (min <= 240) return 3;
+  if (min <= 320) return 5;
+  if (min <= 480) return 7;
+  if (min <= 600) return 10;
+  if (min <= 768) return 15;
+  return 21;
+}
+function layoutOf(s) {
+  s = clampSpec(s);
+  const minPx = Math.min(s.w, s.h);
+  let band = "large";
+  if (s.inches < 5 || minPx < 360) band = "tiny";
+  else if (s.inches < 12) band = "mid";
+  const hybridOk = band !== "tiny";
+  const cards = band === "tiny" ? 1 : Math.max(1, Math.min(8, Math.floor(s.h / (band === "large" ? 280 : 200))));
+  const carouselN0 = band === "tiny" ? 1 : band === "mid" ? 2 : Math.min(4, Math.max(2, Math.floor(s.h / 240)));
+  const t = (s.inches - 2) / 19;
+  const typeScale = Math.round((0.72 + Math.max(0, Math.min(1, t)) * 0.4) * 100) / 100;
+  const frame = band !== "large";
+  const inch = Number.isInteger(s.inches) ? String(s.inches) : s.inches.toFixed(1);
+  const label = inch + '" ' + s.w + "×" + s.h;
+  const mode = hybridOk ? "híbrido" : "radar o tarjetas";
+  const cardTxt = cards === 1 ? "1 tarjeta" : cards + " tarjetas";
+  return { spec: s, band, hybridOk, cards, carouselN: carouselN0, typeScale, frame, label, summary: label + " · " + mode + " · " + cardTxt };
+}
+function matchPreset(s) {
+  s = clampSpec(s);
+  const hit = PRESETS.find((p) => p.spec.inches === s.inches && p.spec.w === s.w && p.spec.h === s.h);
+  return hit ? hit.id : "custom";
+}
+function parseVga(raw) {
+  const m = String(raw || "").match(/(\d{2,4})\s*[x×]\s*(\d{2,4})/i);
+  return m ? { w: Number(m[1]), h: Number(m[2]) } : null;
+}
+function parseInches(raw) {
+  const s = String(raw || "").toLowerCase().replace(/["'\s]/g, "").replace(/pulgadas|inch|in$/g, "");
+  const n = Number(s);
+  if (!Number.isFinite(n) || n < 1.5 || n > 32) return null;
+  return Math.round(n * 10) / 10;
+}
+function parseLegacyScreen(raw) {
+  const s = String(raw || "").toLowerCase().replace(/["'\s]/g, "").replace(/pulgadas|inch|in$/g, "");
+  if (s === "2") return "2";
+  if (s === "3" || s === "tiny" || s === "small" || s === "qvga") return "3";
+  if (s === "7" || s === "mid" || s === "wvga") return "7";
+  if (s === "10") return "10";
+  if (s === "15" || s === "19" || s === "big" || s === "vga" || s === "auto") return "15";
+  if (s === "21") return "21";
+  return null;
+}
+function specFromQuery(q) {
+  const inches = parseInches(q.get("in") || q.get("inch") || q.get("pulgadas"));
+  const vga = parseVga(q.get("vga") || q.get("res") || q.get("px"));
+  const legacyId = parseLegacyScreen(q.get("disp") || q.get("screen"));
+  const legacy = legacyId ? PRESETS.find((p) => p.id === legacyId) : null;
+  if (inches == null && !vga && !legacy) return null;
+  const base = (legacy && legacy.spec) || DEFAULT_SPEC;
+  const inch = inches != null ? inches : (vga ? guessInches(vga.w, vga.h) : base.inches);
+  const px = vga || (inches != null ? guessVga(inches) : { w: base.w, h: base.h });
+  return clampSpec({ inches: inch, w: px.w, h: px.h });
+}
+function fitFrame(w, h, maxW, maxH) {
+  const mw = Math.max(80, maxW);
+  const mh = Math.max(60, maxH);
+  const scale = Math.min(1, mw / w, mh / h);
+  return { width: Math.max(80, Math.round(w * scale)), height: Math.max(60, Math.round(h * scale)), scale };
+}
+function fillSpecInputs(s) {
+  s = clampSpec(s);
+  spec = s;
+  const a = document.getElementById("inIn");
+  const b = document.getElementById("vgaW");
+  const c = document.getElementById("vgaH");
+  if (a) a.value = String(s.inches);
+  if (b) b.value = String(s.w);
+  if (c) c.value = String(s.h);
+  document.querySelectorAll("[data-preset]").forEach((btn) => btn.classList.toggle("on", btn.dataset.preset === matchPreset(s)));
+}
 function shownView() {
-  if (disp === "3") return view === "radar" ? "radar" : "wall";
+  const L = layoutOf(spec);
+  if (!L.hybridOk) return view === "radar" ? "radar" : "wall";
   return view;
 }
 function viewLabel() {
@@ -136,13 +240,16 @@ function viewLabel() {
 }
 const screenMeta = document.getElementById("screenMeta");
 function setMeta() {
-  const line = (SKY.length || AC.length) + " en zona · " + AC.length + " de " + currentApt()[0] + " · " + radiusKm + " km · " + viewLabel() + (disp === "3" ? ' · 3"' : "");
+  const L = layoutOf(spec);
+  const line = (SKY.length || AC.length) + " en zona · " + AC.length + " de " + currentApt()[0] + " · " + radiusKm + " km · " + viewLabel() + " · " + L.label;
   if (screenMeta) screenMeta.textContent = line;
 }
 function cfgQuery() {
+  const L = layoutOf(spec);
   const p = new URLSearchParams();
   p.set("apt", currentApt()[0]);
-  if (disp !== "auto") p.set("disp", disp);
+  p.set("in", String(L.spec.inches));
+  p.set("vga", L.spec.w + "x" + L.spec.h);
   p.set("view", shownView());
   p.set("list", listStyle);
   p.set("theme", theme);
@@ -157,26 +264,42 @@ function updateQr() {
   if (url) url.textContent = pico;
 }
 function applyDisp() {
+  const L = layoutOf(spec);
   const app = document.querySelector(".app");
   const stage = document.querySelector(".stage");
   const mon = document.getElementById("monitor");
-  if (app) app.classList.toggle("disp-3", disp === "3");
-  if (stage) stage.classList.toggle("disp-3", disp === "3");
-  if (mon) mon.classList.toggle("disp-3", disp === "3");
+  if (app) {
+    app.classList.toggle("band-tiny", L.band === "tiny");
+    app.classList.toggle("band-mid", L.band === "mid");
+    app.classList.toggle("band-large", L.band === "large");
+  }
+  if (stage) stage.classList.toggle("framed", L.frame);
+  if (mon) {
+    mon.classList.toggle("framed", L.frame);
+    mon.classList.toggle("band-tiny", L.band === "tiny");
+    if (L.frame && stage) {
+      const r = stage.getBoundingClientRect();
+      const box = fitFrame(L.spec.w, L.spec.h, Math.max(40, r.width - 8), Math.max(40, r.height - 8));
+      mon.style.width = box.width + "px";
+      mon.style.height = box.height + "px";
+    } else {
+      mon.style.width = "";
+      mon.style.height = "";
+    }
+    mon.style.setProperty("--type-scale", String(L.typeScale));
+  }
   const note = document.getElementById("dispNote");
-  if (note) note.hidden = disp !== "3";
+  if (note) note.textContent = L.summary;
   const viewSeg = document.getElementById("viewSeg");
-  if (viewSeg) viewSeg.style.gridTemplateColumns = disp === "3" ? "1fr 1fr" : "1fr 1fr 1fr";
-  document.querySelectorAll("[data-disp]").forEach((b) => b.classList.toggle("on", b.dataset.disp === disp));
+  if (viewSeg) viewSeg.style.gridTemplateColumns = L.hybridOk ? "1fr 1fr 1fr" : "1fr 1fr";
+  document.querySelectorAll("[data-preset]").forEach((b) => b.classList.toggle("on", b.dataset.preset === matchPreset(spec)));
   updateQr();
 }
 function applyQuery() {
   const q = new URLSearchParams(location.search);
-  const d = (q.get("disp") || q.get("screen") || "").toLowerCase().replace(/in$/i, "");
-  if (d === "3" || d === "tiny" || d === "small") disp = "3";
-  else if (d === "7") disp = "7";
-  else if (d === "15" || d === "19") disp = "15";
-  document.querySelectorAll("[data-disp]").forEach((x) => x.classList.toggle("on", x.dataset.disp === disp));
+  const fromQ = specFromQuery(q);
+  if (fromQ) fillSpecInputs(fromQ);
+  document.querySelectorAll("[data-preset]").forEach((x) => x.classList.toggle("on", x.dataset.preset === matchPreset(spec)));
   let v = (q.get("view") || q.get("face") || "").toLowerCase();
   if (v === "cards" || v === "board") v = "wall";
   if (v === "scope") v = "radar";
@@ -829,7 +952,8 @@ function clipCards() {
 }
 function visibleList() {
   if (!AC.length) return [];
-  if (disp === "3" && listStyle !== "fids") {
+  const L = layoutOf(spec);
+  if (L.band === "tiny" && listStyle !== "fids") {
     return [AC[page % AC.length]];
   }
   if (listStyle === "carousel") {
@@ -849,7 +973,7 @@ function visibleList() {
   return out;
 }
 function overhead() {
-  if (disp === "3") return null;
+  if (layoutOf(spec).band === "tiny") return null;
   if (demoOver) return enrich({ hex: "demo", flight: "ARG1716", t: "A320", lat: center[0], lon: center[1], alt: 4200, gs: 210, track: 180, origin: "AEP", dest: "COR" });
   if (!document.getElementById("house").checked || !home) return null;
   let best = null, bestD = 9;
@@ -1047,8 +1171,12 @@ function grabForm() {
   view = (vBtn && vBtn.dataset.view) || "hybrid";
   theme = (tBtn && tBtn.dataset.theme) || "crt_amber";
   listStyle = (lBtn && lBtn.dataset.list) || "fa";
-  const dBtn = document.querySelector("[data-disp].on");
-  disp = (dBtn && dBtn.dataset.disp) || disp || "auto";
+  spec = clampSpec({
+    inches: Number(document.getElementById("inIn") && document.getElementById("inIn").value),
+    w: Number(document.getElementById("vgaW") && document.getElementById("vgaW").value),
+    h: Number(document.getElementById("vgaH") && document.getElementById("vgaH").value),
+  });
+  document.querySelectorAll("[data-preset]").forEach((b) => b.classList.toggle("on", b.dataset.preset === matchPreset(spec)));
   const apt = currentApt();
   center = [apt[2], apt[3]];
   followAl = document.getElementById("followAl").value.trim();
@@ -1086,13 +1214,49 @@ document.getElementById("tabCfg").onclick = function () {
   document.getElementById("paneMon").hidden = true;
   document.getElementById("paneCfg").hidden = false;
 };
-document.querySelectorAll("[data-view],[data-list],[data-theme],[data-disp]").forEach((b) => {
+document.querySelectorAll("[data-view],[data-list],[data-theme]").forEach((b) => {
   b.addEventListener("click", () => {
-    const key = b.dataset.view ? "view" : b.dataset.list ? "list" : b.dataset.disp ? "disp" : "theme";
+    const key = b.dataset.view ? "view" : b.dataset.list ? "list" : "theme";
     document.querySelectorAll("[data-" + key + "]").forEach((x) => x.classList.remove("on"));
     b.classList.add("on");
     grabForm(); applyFilters(); renderWall();
     running = true; if (shownView() !== "wall" && !looping) loop();
+  });
+});
+document.querySelectorAll("[data-preset]").forEach((b) => {
+  b.addEventListener("click", () => {
+    const id = b.dataset.preset;
+    if (id && id !== "custom") {
+      const p = PRESETS.find((x) => x.id === id);
+      if (p) fillSpecInputs(p.spec);
+    } else {
+      document.querySelectorAll("[data-preset]").forEach((x) => x.classList.remove("on"));
+      b.classList.add("on");
+    }
+    grabForm(); applyFilters(); renderWall();
+    running = true; if (shownView() !== "wall" && !looping) loop();
+  });
+});
+["inIn", "vgaW", "vgaH"].forEach((id) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener("change", () => {
+    fillSpecInputs(clampSpec({
+      inches: Number(document.getElementById("inIn").value),
+      w: Number(document.getElementById("vgaW").value),
+      h: Number(document.getElementById("vgaH").value),
+    }));
+    grabForm(); applyFilters(); renderWall();
+    running = true; if (shownView() !== "wall" && !looping) loop();
+  });
+  el.addEventListener("input", () => {
+    spec = {
+      inches: Number(document.getElementById("inIn").value) || spec.inches,
+      w: Number(document.getElementById("vgaW").value) || spec.w,
+      h: Number(document.getElementById("vgaH").value) || spec.h,
+    };
+    applyDisp();
+    setMeta();
   });
 });
 ["fAir", "fGa", "fBiz", "fHeli", "ground", "house", "followFlt", "max", "rotate", "carN"].forEach((id) => {

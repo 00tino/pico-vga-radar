@@ -20,14 +20,20 @@ html,body{margin:0;height:100%;max-height:100dvh;overflow:hidden;background:var(
 @media(min-width:960px){.stage{padding:12px}}
 @media(max-width:959px){.stage{flex:1 1 46%;min-height:0} aside.panel{flex:1 1 54%;min-height:0}}
 .monitor{position:relative;flex:1;min-height:0;overflow:hidden;border:1px solid var(--border);border-radius:16px;background:var(--scope-bg);color:var(--scope-fg);display:flex;flex-direction:column}
-.stage.disp-3{align-items:center;justify-content:center;background:#050505}
-.monitor.disp-3{width:320px;height:240px;flex:none;min-height:240px;max-width:100%;border-radius:8px}
-.monitor.disp-3 .wall{padding:6px}
-.monitor.disp-3 .carousel-wrap.hero .fa-id{font-size:22px}
-.monitor.disp-3 .carousel-wrap.hero .fa-times b{font-size:22px}
-.monitor.disp-3 .carousel-wrap.hero .metrics b{font-size:14px}
-.monitor.disp-3 .fids{font-size:10px}
-.app.disp-3 [data-view=hybrid]{display:none}
+.stage.framed{align-items:center;justify-content:center;background:#050505}
+.monitor.framed{flex:none;max-width:100%;max-height:100%;border-radius:8px}
+.monitor.band-tiny .wall{padding:6px}
+.monitor.band-tiny .carousel-wrap.hero .fa-id{font-size:22px}
+.monitor.band-tiny .carousel-wrap.hero .fa-times b{font-size:22px}
+.monitor.band-tiny .carousel-wrap.hero .metrics b{font-size:14px}
+.monitor.band-tiny .fids{font-size:10px}
+.app.band-tiny [data-view=hybrid]{display:none}
+.disp-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.field input[type=number]{
+  width:100%;height:44px;border-radius:10px;border:1px solid var(--border);
+  background:var(--bg);color:var(--fg);padding:0 10px;outline:none;
+  font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:13px
+}
 .qr-box{margin-top:18px;border:1px solid var(--border);border-radius:10px;padding:12px}
 .qr-box .lbl{margin-bottom:8px}
 .qr-row{display:flex;gap:12px;align-items:flex-start}
@@ -194,14 +200,23 @@ a{color:var(--radar)}
       </div>
       <div id="paneCfg" hidden>
         <div class="field"><span>Pantalla VGA</span>
-          <div class="seg" style="grid-template-columns:1fr 1fr 1fr 1fr">
-            <button type="button" class="on" data-disp="auto">Auto</button>
-            <button type="button" data-disp="3">3"</button>
-            <button type="button" data-disp="7">7"</button>
-            <button type="button" data-disp="15">15"</button>
+          <div class="seg" style="grid-template-columns:repeat(4,1fr)">
+            <button type="button" data-preset="2">2"</button>
+            <button type="button" data-preset="3">3"</button>
+            <button type="button" data-preset="7">7"</button>
+            <button type="button" data-preset="10">10"</button>
+            <button type="button" data-preset="15" class="on">15"</button>
+            <button type="button" data-preset="21">21"</button>
+            <button type="button" data-preset="custom">Otra</button>
           </div>
         </div>
-        <p class="rwy-note" id="dispNote" hidden>En 3 pulgadas el CRT no mezcla: Radar o Pared a pantalla completa. El Pico pone el tamaño en el QR porque él genera el VGA.</p>
+        <div class="disp-grid">
+          <div class="field"><span>Pulgadas</span><input id="inIn" type="number" min="1.5" max="32" step="0.1" value="15"></div>
+          <div class="field"><span>Ancho px</span><input id="vgaW" type="number" min="160" max="1920" step="8" value="640"></div>
+          <div class="field"><span>Alto px</span><input id="vgaH" type="number" min="120" max="1200" step="8" value="480"></div>
+        </div>
+        <p class="rwy-note" id="dispNote">15" 640×480 · híbrido · 2 tarjetas</p>
+        <p class="rwy-note">El monitor VGA es mudo: no le habla al celular. Vos le decís al sistema las pulgadas y los píxeles, y el radar se calibra solo — de 2 pulgadas a 21.</p>
         <div class="field"><span>Vista</span>
           <div class="seg" id="viewSeg" style="grid-template-columns:1fr 1fr 1fr">
             <button type="button" class="on" data-view="hybrid">Híbrido</button>
@@ -260,7 +275,7 @@ a{color:var(--radar)}
         </div>
         <div class="qr-box">
           <div class="lbl">QR de esta pantalla</div>
-          <p class="rwy-note" style="margin:0 0 10px">El Pico pinta este código. Lleva aeropuerto y tamaño para que el celular abra la config ya calibrada. El teléfono no mide el monitor: lo informa el Pico.</p>
+          <p class="rwy-note" style="margin:0 0 10px">El Pico pinta este código. Lleva aeropuerto, pulgadas y resolución para que el celular abra la config ya calibrada. El teléfono no mide el monitor: lo informás vos en el sistema.</p>
           <div class="qr-row">
             <img id="qrImg" alt="QR" width="120" height="120">
             <div>
@@ -274,6 +289,6 @@ a{color:var(--radar)}
     </div>
   </aside>
 </div>
-<script src="radar.js?v=26"></script>
+<script src="radar.js?v=27"></script>
 </body>
 </html>
