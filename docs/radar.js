@@ -1,4 +1,4 @@
-/* Pico Radar v31 — nudos, métricas compactas, una senda, tarjetas del aeropuerto. */
+/* Pico Radar v32 — lista solo del aeropuerto, sin fallback a Aeroparque, barrido suave. */
 const PUBLIC_SKY = "https://pico-vga-radar-sky.vercel.app/api";
 const SKY_API = (function () {
   const q = new URLSearchParams(location.search).get("api");
@@ -925,8 +925,7 @@ function applyFilters() {
     enrich(hit);
     AC = [hit];
   } else {
-    const local = SKY.filter(relatedToAirport);
-    AC = (local.length ? local : SKY).slice(0, maxN);
+    AC = SKY.filter(relatedToAirport).slice(0, maxN);
   }
   setMeta();
 }
@@ -1309,7 +1308,7 @@ function renderWall() {
     wall.innerHTML = compactId(followFlt)
       ? '<div class="empty"><div>Buscando ' + followFlt + "…</div><p class=\"fa-air\">Lo busco por indicativo en el ADS-B, aunque esté lejos del aeropuerto.</p></div>"
       : SKY.length
-      ? '<div class="empty"><div>Sin vuelos de ' + currentApt()[0] + ' ahora</div><p class="fa-air">Hay tráfico en la zona, ninguno entra en esta radio.</p></div>'
+      ? '<div class="empty"><div>Sin vuelos de ' + currentApt()[0] + ' ahora</div><p class="fa-air">El radar muestra el cielo de la zona. Aeroparque y overflight no entran a esta lista.</p></div>'
       : '<div class="empty"><div>' + (loading ? "Cargando el cielo…" : "Sin vuelos en este radio") + '</div><p class="fa-air">' + (statusEl.textContent || "") + "</p></div>";
     return;
   }
@@ -1545,7 +1544,21 @@ function loop() {
   [0.25, 0.5, 0.75, 1].forEach((r) => { ctx.beginPath(); ctx.arc(cx, cy, R * r, 0, Math.PI * 2); ctx.stroke(); });
   ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
   beam += 0.012; if (beam > Math.PI * 3) beam -= Math.PI * 2;
-  ctx.strokeStyle = pair.fg; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(beam) * R, cy + Math.sin(beam) * R); ctx.stroke();
+  ctx.save();
+  ctx.fillStyle = pair.fg;
+  ctx.globalAlpha = 0.14;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.arc(cx, cy, R, beam - 0.28, beam);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 0.4;
+  ctx.strokeStyle = pair.fg;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + Math.cos(beam) * R, cy + Math.sin(beam) * R);
+  ctx.stroke();
+  ctx.restore();
   ctx.fillStyle = pair.fg; ctx.font = "12px ui-monospace, monospace";
   ctx.fillText(currentApt()[0], 10, 18);
   ctx.globalAlpha = 0.7; ctx.font = "11px sans-serif";
@@ -1563,6 +1576,10 @@ function loop() {
     const scored = {};
     SKY.forEach((ac) => {
       if (!looksAir(ac) || isGnd(ac) || ac.track == null) return;
+      if (isHome) {
+        const pub = publishedRoute(ac);
+        if (pub && pub.origin !== homeIata && pub.dest !== homeIata) return;
+      }
       const alt = Number(ac.alt) || 0, gs = Number(ac.gs) || 0;
       if (alt > 12000 || gs < 80) return;
       rows.forEach((rw) => {
@@ -1692,7 +1709,7 @@ function grabForm() {
   document.querySelectorAll(".checks label").forEach((l) => l.classList.toggle("on", l.querySelector("input").checked));
   const rwyLive = document.getElementById("rwyLive");
   if (rwyLive) rwyLive.textContent = runwaysOn
-    ? "Las pistas de " + currentApt()[0] + " se dibujan siempre. La aproximación punteada se alarga con el radio (hasta ~32 km)."
+    ? "Las pistas de " + currentApt()[0] + " se dibujan siempre. Una sola senda: la cabecera en uso ahora."
     : "Pistas apagadas. El cliente las puede volver a prender.";
   const rwyClient = document.getElementById("rwyClientNote");
   if (rwyClient) rwyClient.hidden = runwaysOn;
