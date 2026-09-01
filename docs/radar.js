@@ -1,4 +1,4 @@
-/* Pico Radar v30 — typeahead de vuelo, mapa continental, flyover sin recortes. */
+/* Pico Radar v31 — nudos, métricas compactas, una senda, tarjetas del aeropuerto. */
 const PUBLIC_SKY = "https://pico-vga-radar-sky.vercel.app/api";
 const SKY_API = (function () {
   const q = new URLSearchParams(location.search).get("api");
@@ -456,16 +456,16 @@ function kindOf(a) {
 function fmtAlt(alt) {
   if (alt === "ground" || alt == null || alt === 0) return "GND";
   const n = Number(alt);
-  if (!n) return "-";
-  return n >= 1000 ? (n / 1000).toFixed(1) + "k ft" : Math.round(n) + " ft";
+  if (!n) return "—";
+  if (n >= 10000) return "FL" + Math.round(n / 100);
+  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
+  return String(Math.round(n));
 }
-function fmtGs(gs) { return gs == null ? "-" : Math.round(gs * 1.15078) + " mph"; }
+function fmtGs(gs) { return gs == null ? "—" : Math.round(gs) + " kt"; }
 function fmtHdg(track) {
   if (track == null || isNaN(Number(track))) return "—";
   const t = ((Math.round(Number(track)) % 360) + 360) % 360;
-  const dirs = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
-  const dir = dirs[Math.round(t / 45) % 8];
-  return String(t).padStart(3, "0") + "° " + dir;
+  return String(t).padStart(3, "0") + "°";
 }
 function isGnd(a) {
   if (a.alt === "ground" || a.alt === 0) return true;
@@ -925,7 +925,8 @@ function applyFilters() {
     enrich(hit);
     AC = [hit];
   } else {
-    AC = SKY.slice(0, maxN);
+    const local = SKY.filter(relatedToAirport);
+    AC = (local.length ? local : SKY).slice(0, maxN);
   }
   setMeta();
 }
@@ -1232,9 +1233,9 @@ function cardHTML(a) {
         '<div><span class="lbl">Aterrizaje ' + a.arrKind + "</span><b>" + hhmm(a.arrAt) + "</b></div>" +
       "</div>" +
       '<div class="metrics">' +
-        '<div><span class="lbl">Altitud</span><b>' + (gnd ? "GND" : fmtAlt(a.alt)) + "</b></div>" +
-        '<div><span class="lbl">Velocidad</span><b>' + (gnd ? "—" : fmtGs(a.gs)) + "</b></div>" +
-        '<div><span class="lbl">Rumbo</span><b>' + (gnd || a.track == null ? "—" : '<span class="hdg"><span class="arr" style="transform:rotate(' + Number(a.track) + 'deg)"></span> ' + fmtHdg(a.track) + "</span>") + "</b></div>" +
+        '<div><span class="lbl">Alt</span><b>' + (gnd ? "GND" : fmtAlt(a.alt)) + "</b></div>" +
+        '<div><span class="lbl">Vel</span><b>' + (gnd ? "—" : fmtGs(a.gs)) + "</b></div>" +
+        '<div><span class="lbl">Hdg</span><b>' + (gnd || a.track == null ? "—" : '<span class="hdg"><span class="arr" style="transform:rotate(' + Number(a.track) + 'deg)"></span>' + fmtHdg(a.track) + "</span>") + "</b></div>" +
       "</div>" +
       (extraBits.length ? '<div class="fa-extra">' + extraBits.join(" · ") + "</div>" : "") +
       '<div class="fa-foot"><span>' + foot + '</span><span class="fa-follow">' + hint + "</span>" + pill + "</div>" +
@@ -1555,25 +1556,10 @@ function loop() {
   const sets = nearbyRwy();
   const apxKm = approachKm(radiusKm);
   const homeIata = currentApt()[0];
+  let sendaIdent = "";
   sets.forEach((set) => {
     const rows = set.rows;
     const isHome = set.iata === homeIata;
-    rows.forEach((rw) => {
-      const a = toXY(rw[4], rw[5]), b = toXY(rw[6], rw[7]);
-      ctx.strokeStyle = pair.fg; ctx.globalAlpha = isHome ? 0.95 : 0.72;
-      const len = Math.hypot(b.x - a.x, b.y - a.y);
-      ctx.lineCap = "butt"; ctx.lineJoin = "miter";
-      ctx.lineWidth = Math.max(1.15, Math.min(2.4, len * 0.14));
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-      if ((isHome || radiusKm < 90) && len > 10) {
-        ctx.globalAlpha = 0.9; ctx.font = "10px ui-monospace, monospace"; ctx.fillStyle = pair.fg;
-        ctx.fillText(String(rw[0]), a.x + 6, a.y - 4);
-        ctx.fillText(String(rw[1]), b.x + 6, b.y - 4);
-      }
-    });
-    const mid = toXY(set.lat, set.lon);
-    ctx.globalAlpha = isHome ? 0.95 : 0.7; ctx.font = "11px ui-monospace, monospace"; ctx.fillStyle = pair.fg;
-    ctx.fillText(set.iata, mid.x + 8, mid.y + 14);
     const scored = {};
     SKY.forEach((ac) => {
       if (!looksAir(ac) || isGnd(ac) || ac.track == null) return;
@@ -1594,41 +1580,60 @@ function loop() {
       });
     });
     const ranked = Object.keys(scored).map((k) => scored[k]).sort((a, b) => b.n - a.n || a.minAlong - b.minAlong);
-    const hitIds = {};
-    if (ranked[0]) hitIds[ranked[0].ident] = 1;
-    function drawApx(lat, lon, hdg, ident, strong) {
-      const back = projectKm(lat, lon, (hdg + 180) % 360, apxKm);
+    const hit = isHome ? (ranked[0] || null) : null;
+    if (hit) sendaIdent = hit.ident;
+    rows.forEach((rw) => {
+      let a = toXY(rw[4], rw[5]), b = toXY(rw[6], rw[7]);
+      let len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (isHome && len > 0.2 && len < 36) {
+        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len;
+        a = { x: mx - ux * 18, y: my - uy * 18 };
+        b = { x: mx + ux * 18, y: my + uy * 18 };
+        len = 36;
+      }
+      const onUse = !!(hit && (String(rw[0]) === hit.ident || String(rw[1]) === hit.ident));
+      ctx.strokeStyle = pair.fg;
+      ctx.globalAlpha = isHome ? (hit ? (onUse ? 0.98 : 0.22) : 0.72) : 0.55;
+      ctx.lineCap = "butt"; ctx.lineJoin = "miter";
+      ctx.lineWidth = onUse ? 2.4 : Math.max(1.15, Math.min(2.4, len * 0.14));
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    });
+    const mid = toXY(set.lat, set.lon);
+    ctx.globalAlpha = isHome ? 0.95 : 0.55; ctx.font = "11px ui-monospace, monospace"; ctx.fillStyle = pair.fg;
+    ctx.fillText(set.iata, mid.x + 8, mid.y + 14);
+    if (isHome && hit) {
+      const back = projectKm(hit.lat, hit.lon, (hit.hdg + 180) % 360, apxKm);
       let s = toXY(back[0], back[1]);
-      const t = toXY(lat, lon);
+      const t = toXY(hit.lat, hit.lon);
       const dx = s.x - t.x, dy = s.y - t.y;
       const plen = Math.hypot(dx, dy);
-      if (isHome && plen < 56 && plen > 0.2) {
-        const k = 56 / plen;
+      if (plen < 64 && plen > 0.2) {
+        const k = 64 / plen;
         s = { x: t.x + dx * k, y: t.y + dy * k };
       }
-      ctx.setLineDash(strong ? [10, 5] : [7, 7]);
+      ctx.setLineDash([8, 6]);
       ctx.strokeStyle = pair.fg;
-      ctx.globalAlpha = strong ? 0.95 : isHome ? 0.62 : 0.28;
+      ctx.globalAlpha = 0.95;
       ctx.lineCap = "butt";
-      ctx.lineWidth = strong ? 2.2 : isHome ? 1.5 : 1.2;
+      ctx.lineWidth = 2.6;
       ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(t.x, t.y); ctx.stroke();
       ctx.setLineDash([]);
-      if (isHome || strong) {
-        ctx.fillStyle = pair.fg;
-        ctx.globalAlpha = strong ? 0.95 : 0.7;
-        ctx.font = "11px ui-monospace, monospace";
-        ctx.fillText(strong ? "APX " + ident : ident, s.x + 4, s.y - 4);
-      }
-    }
-    if (isHome) {
-      rows.forEach((rw) => {
-        if (rw[0] && isFinite(Number(rw[2]))) drawApx(rw[4], rw[5], Number(rw[2]), String(rw[0]), !!hitIds[rw[0]]);
-        if (rw[1] && isFinite(Number(rw[3]))) drawApx(rw[6], rw[7], Number(rw[3]), String(rw[1]), !!hitIds[rw[1]]);
-      });
-    } else if (radiusKm <= 70 && ranked[0]) {
-      drawApx(ranked[0].lat, ranked[0].lon, ranked[0].hdg, ranked[0].ident, true);
+      ctx.fillStyle = pair.fg;
+      ctx.globalAlpha = 1;
+      ctx.font = "bold 12px ui-monospace, monospace";
+      ctx.fillText("APX " + hit.ident + " EN USO", s.x + 6, s.y - 6);
     }
   });
+  if (sendaIdent) {
+    ctx.fillStyle = pair.fg;
+    ctx.globalAlpha = 0.95;
+    ctx.font = "bold 12px ui-monospace, monospace";
+    const hud = "SENDA " + sendaIdent + " EN USO";
+    const tw = ctx.measureText(hud).width;
+    ctx.fillText(hud, Math.max(10, w * left - tw - 12), 18);
+    ctx.globalAlpha = 1;
+  }
   ctx.globalAlpha = 1;
   const labeled = new Set(visibleList().map((a) => a.hex));
   SKY.forEach((a) => {
