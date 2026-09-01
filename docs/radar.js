@@ -1,4 +1,4 @@
-/* Pico Radar v28 — instalador (tamaño fijo) vs cliente (vista, formato, pistas). */
+/* Pico Radar v29 — lista=radar, pistas EZE, seguir vuelo = mapa de viaje. */
 const PUBLIC_SKY = "https://pico-vga-radar-sky.vercel.app/api";
 const SKY_API = (function () {
   const q = new URLSearchParams(location.search).get("api");
@@ -42,6 +42,20 @@ const SEED_AP = [
   ["JFK", "Nueva York", 40.641, -73.778, "United States", "JFK"],
   ["LHR", "Londres", 51.47, -0.454, "United Kingdom", "Heathrow"],
   ["MAD", "Madrid", 40.472, -3.563, "Spain", "Barajas"],
+  ["IAH", "Houston", 29.984, -95.341, "United States", "George Bush"],
+  ["MEX", "Ciudad de Mexico", 19.436, -99.072, "Mexico", "Benito Juarez"],
+  ["BOG", "Bogota", 4.701, -74.147, "Colombia", "El Dorado"],
+  ["LIM", "Lima", -12.022, -77.114, "Peru", "Jorge Chavez"],
+  ["PTY", "Panama", 9.071, -79.383, "Panama", "Tocumen"],
+  ["COR", "Cordoba", -31.31, -64.208, "Argentina", "Cordoba"],
+  ["MDZ", "Mendoza", -32.832, -68.793, "Argentina", "Mendoza"],
+  ["BRC", "Bariloche", -41.151, -71.158, "Argentina", "Bariloche"],
+  ["IGR", "Iguazu", -25.737, -54.473, "Argentina", "Iguazu"],
+  ["USH", "Ushuaia", -54.843, -68.296, "Argentina", "Ushuaia"],
+  ["MDQ", "Mar del Plata", -37.934, -57.573, "Argentina", "Mar del Plata"],
+  ["SLA", "Salta", -24.856, -65.486, "Argentina", "Salta"],
+  ["GIG", "Rio de Janeiro", -22.81, -43.251, "Brazil", "Galeao"],
+  ["MVD", "Montevideo", -34.838, -56.031, "Uruguay", "Carrasco"],
 ];
 const SEED_AL = [
   ["ARG", "AR", "Aerolineas Argentinas", "Argentina"],
@@ -86,6 +100,7 @@ let AIRPORTS = SEED_AP.slice();
 let ALINES = SEED_AL.slice();
 const ROUTECACHE = {};
 const POS = {};
+const TRAIL = {};
 let home = null, demoOver = false, srcLabel = "";
 let RAW = [], AC = [], SKY = [], running = false, looping = false;
 let view = "hybrid", theme = "crt_amber", listStyle = "fa";
@@ -244,7 +259,11 @@ function viewLabel() {
 const screenMeta = document.getElementById("screenMeta");
 function setMeta() {
   const L = layoutOf(spec);
-  const line = (SKY.length || AC.length) + " en zona · " + AC.length + " de " + currentApt()[0] + " · " + radiusKm + " km · " + viewLabel() + " · " + L.label;
+  const hit = followAcOf();
+  const ezeN = SKY.filter(relatedToAirport).length;
+  const line = hit
+    ? ("Siguiendo " + displayId(hit) + " · " + viewLabel() + " · " + L.label)
+    : (SKY.length + " en radar · " + ezeN + " de " + currentApt()[0] + " · " + radiusKm + " km · " + viewLabel() + " · " + L.label);
   if (screenMeta) screenMeta.textContent = line;
 }
 function cfgQuery() {
@@ -511,15 +530,98 @@ function hhmm(ts) {
 function kmLL(a, b) {
   return Math.hypot((a[0] - b[0]) * 111, (a[1] - b[1]) * 111 * Math.cos((a[0] * Math.PI) / 180));
 }
+function lonDelta(a, b) {
+  return ((b - a + 540) % 360) - 180;
+}
+function wrapLon(lon, origin) {
+  return origin + lonDelta(origin, lon);
+}
+function gcKm(a, b) {
+  const lat1 = (a[0] * Math.PI) / 180;
+  const lat2 = (b[0] * Math.PI) / 180;
+  const dlon = ((b[1] - a[1]) * Math.PI) / 180;
+  const dlat = lat2 - lat1;
+  const h = Math.sin(dlat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dlon / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+function gcInterpolate(a, b, f) {
+  const lat1 = (a[0] * Math.PI) / 180, lon1 = (a[1] * Math.PI) / 180;
+  const lat2 = (b[0] * Math.PI) / 180, lon2 = (b[1] * Math.PI) / 180;
+  const d = 2 * Math.asin(Math.sqrt(Math.sin((lat2 - lat1) / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin((lon2 - lon1) / 2) ** 2));
+  if (!isFinite(d) || d < 1e-8) return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+  const A = Math.sin((1 - f) * d) / Math.sin(d);
+  const B = Math.sin(f * d) / Math.sin(d);
+  const x = A * Math.cos(lat1) * Math.cos(lon1) + B * Math.cos(lat2) * Math.cos(lon2);
+  const y = A * Math.cos(lat1) * Math.sin(lon1) + B * Math.cos(lat2) * Math.sin(lon2);
+  const z = A * Math.sin(lat1) + B * Math.sin(lat2);
+  return [(Math.atan2(z, Math.hypot(x, y)) * 180) / Math.PI, (Math.atan2(y, x) * 180) / Math.PI];
+}
+function gcPath(a, b, n) {
+  const steps = Math.max(8, n || 48);
+  const out = [];
+  for (let i = 0; i <= steps; i++) out.push(gcInterpolate(a, b, i / steps));
+  return out;
+}
+function projectKm(lat, lon, track, km) {
+  const rad = (track * Math.PI) / 180;
+  return [lat + (Math.cos(rad) * km) / 111, lon + (Math.sin(rad) * km) / (111 * Math.cos((lat * Math.PI) / 180))];
+}
+function approachKm(r) {
+  return Math.min(32, Math.max(18, r * 0.35));
+}
+function routeLookupKeys(flight) {
+  const cs = compactId(flight);
+  if (!cs || isReg(cs) || cs.length < 4 || !/[A-Z]{2,3}\d/.test(cs)) return [];
+  const keys = [cs];
+  const m = cs.match(/^([A-Z]{2,3})(\d+)$/);
+  if (!m) return keys;
+  const prefix = m[1], num = m[2];
+  const pad = num.padStart(4, "0");
+  if (pad !== num) keys.push(prefix + pad);
+  const slim = String(Number(num));
+  if (slim !== num) keys.push(prefix + slim);
+  const al = ALINES.find((x) => x[0] === prefix || (x[1] && x[1] === prefix));
+  if (al) {
+    if (al[0] && al[0].length === 3 && al[0] !== prefix) keys.push(al[0] + num);
+    if (al[1] && al[1].length === 2 && al[1] !== prefix) keys.push(al[1] + num);
+  }
+  return keys.filter((v, i, arr) => arr.indexOf(v) === i);
+}
+function matchesFollowFlight(ac, needle) {
+  const n = compactId(needle);
+  if (!n || n.length < 2) return false;
+  const cs = compactId(ac.flight);
+  const reg = compactId(ac.r || "");
+  if ((cs && (cs.includes(n) || n.includes(cs))) || (reg && (reg.includes(n) || n.includes(reg)))) return true;
+  const nNum = n.match(/^([A-Z]{2,3})(\d+[A-Z]?)$/);
+  const csNum = cs.match(/^([A-Z]{2,3})(\d+[A-Z]?)$/);
+  if (nNum && csNum && nNum[2] === csNum[2]) {
+    if (nNum[1] === csNum[1]) return true;
+    if (nNum[1].length === 2 && csNum[1].startsWith(nNum[1])) return true;
+    if (csNum[1].length === 2 && nNum[1].startsWith(csNum[1])) return true;
+  }
+  const keys = routeLookupKeys(ac.flight);
+  const nKeys = routeLookupKeys(needle);
+  if (keys.some((k) => k.includes(n) || n.includes(k))) return true;
+  if (nKeys.some((k) => k === cs || cs.includes(k))) return true;
+  return false;
+}
+function followAcOf() {
+  const n = compactId(followFlt);
+  if (!n || n.length < 2) return null;
+  return RAW.find((a) => matchesFollowFlight(a, followFlt)) || SKY.find((a) => matchesFollowFlight(a, followFlt)) || null;
+}
+function rivalAirports() {
+  const apt = currentApt();
+  return AIRPORTS.filter((a) => a[0] !== apt[0] && kmLL([a[2], a[3]], [apt[2], apt[3]]) < 45);
+}
 function nearbyRwy() {
   if (!runwaysOn) return [];
-  const key = center[0] + "," + center[1] + "," + radiusKm + "," + AIRPORTS.length;
+  const homeIata = currentApt()[0];
+  const key = center[0] + "," + center[1] + "," + radiusKm + "," + AIRPORTS.length + "," + homeIata;
   if (rwyNear.key === key) return rwyNear.list;
-  if (radiusKm > 110) {
-    rwyNear = { key: key, list: [] };
-    return rwyNear.list;
-  }
-  const maxD = Math.min(radiusKm * 0.95, 110);
+  const includeNearby = radiusKm <= 110;
+  const maxD = includeNearby ? Math.min(radiusKm * 0.95, 110) : 0;
   const skip = { EPA: 1, FDO: 1 };
   const out = [];
   for (let i = 0; i < AIRPORTS.length; i++) {
@@ -528,10 +630,15 @@ function nearbyRwy() {
     const rows = RUNWAYS[a[0]];
     if (!rows || !rows.length) continue;
     const d = kmLL(center, [a[2], a[3]]);
-    if (d > maxD) continue;
+    const isHome = a[0] === homeIata;
+    if (!isHome && (!includeNearby || d > maxD)) continue;
     out.push({ iata: a[0], lat: a[2], lon: a[3], rows: rows, d: d });
   }
-  out.sort((a, b) => a.d - b.d);
+  out.sort((a, b) => {
+    if (a.iata === homeIata) return -1;
+    if (b.iata === homeIata) return 1;
+    return a.d - b.d;
+  });
   rwyNear = { key: key, list: out.slice(0, 10) };
   return rwyNear.list;
 }
@@ -576,12 +683,23 @@ function relatedToAirport(a) {
   const apt = currentApt();
   const pub = publishedRoute(a);
   if (pub) return pub.origin === apt[0] || pub.dest === apt[0];
-  const dSel = kmLL([a.lat, a.lon], [apt[2], apt[3]]);
-  if (dSel >= 6) return false;
-  if (isGnd(a)) return true;
+  const here = [a.lat, a.lon];
+  const dSel = kmLL(here, [apt[2], apt[3]]);
+  const rivals = rivalAirports();
+  const dRival = rivals.reduce((m, r) => Math.min(m, kmLL(here, [r[2], r[3]])), Infinity);
+  if (dSel < 50 && isFinite(dRival) && dRival + 6 < dSel) return false;
+  if (dSel < 6) {
+    if (isGnd(a)) return true;
+    const alt = Number(a.alt) || 0;
+    const gs = Number(a.gs) || 0;
+    if (alt < 2500 && gs < 200) return true;
+  }
   const alt = Number(a.alt) || 0;
   const gs = Number(a.gs) || 0;
-  return alt < 2500 && gs < 200;
+  if (dSel < 28 && alt > 0 && alt < 7000 && gs > 50 && a.track != null) {
+    if (hdgDelta(a.track, bearingLL(here, [apt[2], apt[3]])) < 25) return true;
+  }
+  return false;
 }
 function setLoad(show, msg) {
   if (msg) statusEl.textContent = msg;
@@ -716,17 +834,19 @@ function applyFilters() {
     if (!want[k]) return false;
     if (isGnd(a) && !includeGround) return false;
     if (alHit && !matchAirline(a.flight, alHit)) return false;
-    if (followFlt && !compactId(a.flight).includes(compactId(followFlt)) && compactId(a.r || "").indexOf(compactId(followFlt)) < 0) return false;
     return a.lat != null;
   });
-  const zone = pool.filter((a) => distNmOf(a) <= radiusNm * 1.08);
+  const zone = pool.filter((a) => distNmOf(a) <= radiusNm * 1.08 || relatedToAirport(a));
   zone.sort((a, b) => (relatedToAirport(b) - relatedToAirport(a)) || (looksAir(b) - looksAir(a)) || (distNmOf(a) - distNmOf(b)));
-  SKY = zone.slice(0, Math.max(maxN, 24));
+  SKY = zone.slice(0, 80);
   SKY.forEach(enrich);
-  const local = pool.filter(relatedToAirport);
-  local.forEach(enrich);
-  local.sort((a, b) => distNmOf(a) - distNmOf(b));
-  AC = local.slice(0, maxN);
+  const hit = followAcOf();
+  if (compactId(followFlt) && hit) {
+    enrich(hit);
+    AC = [hit];
+  } else {
+    AC = SKY.slice(0, maxN);
+  }
   setMeta();
 }
 async function pullJson(url, ms) {
@@ -812,12 +932,31 @@ async function fetchSky(lat, lon, nm) {
     await ingest("https://api.adsb.lol/v2/lat/" + lat + "/lon/" + lon + "/dist/" + wide, "adsb.lol", 8000);
   }
   const list = Object.keys(byHex).map((h) => byHex[h]);
-  if (list.length) return { list: list, src: sources.join("+") || "vivo" };
-  try {
-    return await fetchSnapshot(lat, lon);
-  } catch (e) {
-    throw e;
+  return list.length ? { list: list, src: sources.join("+") || "vivo" } : await fetchSnapshot(lat, lon);
+}
+async function pullCallsign(cs) {
+  const n = compactId(cs);
+  if (!n) return [];
+  const keys = [n];
+  const slim = n.replace(/^([A-Z]{2,3})0+(\d)/, "$1$2");
+  if (slim !== n) keys.push(slim);
+  const byHex = {};
+  for (let k = 0; k < keys.length && k < 3; k++) {
+    const key = keys[k];
+    const urls = [
+      "https://opendata.adsb.fi/api/v2/callsign/" + encodeURIComponent(key),
+      "https://api.adsb.lol/v2/callsign/" + encodeURIComponent(key),
+    ];
+    for (let i = 0; i < urls.length; i++) {
+      try {
+        const data = await pullJson(urls[i], 6000);
+        normList(data).forEach((a) => { if (a && a.hex) byHex[a.hex] = a; });
+        if (Object.keys(byHex).length) break;
+      } catch (e) { /* next */ }
+    }
+    if (Object.keys(byHex).length) break;
   }
+  return Object.keys(byHex).map((h) => byHex[h]);
 }
 async function fillRoutes(list) {
   const pending = list.filter((a) => {
@@ -888,6 +1027,16 @@ async function loadLive(showOverlay) {
     srcLabel = got.src;
     lastOk = { list: got.list, src: got.src, at: Date.now() };
     RAW = got.list.map(norm).filter((a) => a.lat != null && a.hex);
+    if (compactId(followFlt)) {
+      try {
+        const extra = await pullCallsign(followFlt);
+        extra.forEach((row) => {
+          const a = norm(row);
+          if (!a.hex || a.lat == null) return;
+          if (!RAW.some((x) => x.hex === a.hex)) RAW.push(a);
+        });
+      } catch (e) { /* seguir igual con el radar local */ }
+    }
     applyFilters();
     const commercial = RAW.filter((a) => looksAir(a) && !isGnd(a));
     const inside = commercial.filter((a) => distNmOf(a) * 1.852 <= radiusKm * 1.05);
@@ -905,7 +1054,16 @@ async function loadLive(showOverlay) {
     renderWall();
     fillRoutes(RAW).then(() => { applyFilters(); renderWall(); });
     const now = performance.now();
-    SKY.forEach((a) => { POS[a.hex] = { lat: a.lat, lon: a.lon, t: now, gs: a.gs, track: a.track }; });
+    RAW.forEach((a) => {
+      POS[a.hex] = { lat: a.lat, lon: a.lon, t: now, gs: a.gs, track: a.track };
+      const trail = TRAIL[a.hex] || [];
+      const last = trail[trail.length - 1];
+      if (!last || gcKm(last, [a.lat, a.lon]) > 1.4) {
+        trail.push([a.lat, a.lon]);
+        if (trail.length > 140) trail.shift();
+        TRAIL[a.hex] = trail;
+      }
+    });
     lastSweep = now;
     lastRot = performance.now();
     const alQ = (document.getElementById("followAl").value || "").trim();
@@ -915,7 +1073,10 @@ async function loadLive(showOverlay) {
     else {
       const gndN = AC.filter(isGnd).length;
       const airN = AC.filter((a) => looksAir(a) && !isGnd(a)).length;
-      statusEl.textContent = RAW.length + " aeronaves · " + apt[0] + " · " + srcLabel + (gndN ? " · " + gndN + " en tierra" : "") + (airN === 0 && RAW.length ? " · poca cobertura comercial" : "");
+      const ezeN = SKY.filter(relatedToAirport).length;
+      const hit = followAcOf();
+      if (hit) statusEl.textContent = "Siguiendo " + displayId(hit) + " · " + srcLabel;
+      else statusEl.textContent = RAW.length + " aeronaves · " + SKY.length + " en radar · " + ezeN + " de " + apt[0] + " · " + srcLabel + (gndN ? " · " + gndN + " en tierra" : "") + (airN === 0 && RAW.length ? " · poca cobertura comercial" : "");
     }
     foot.textContent = (srcLabel === "snapshot" ? "ADS-B (copia local) · " : "ADS-B en vivo · ") + srcLabel;
   } catch (e) {
@@ -976,8 +1137,10 @@ function cardHTML(a) {
   const destLL = aptCoord(route.dest);
   if (!gnd && destLL) extraBits.push(Math.round(kmLL([a.lat, a.lon], destLL)) + " km a " + route.dest);
   const pill = '<span class="' + pillClass(st) + '">' + st + "</span>";
+  const following = compactId(followFlt) && matchesFollowFlight(a, followFlt);
+  const hint = following ? "Siguiendo · toca para soltar" : "Toca para seguir";
   return (
-    '<div class="fa-card">' +
+    '<div class="fa-card' + (following ? " following" : "") + '" data-hex="' + a.hex + '" role="button" tabindex="0">' +
       '<div class="fa-row"><div class="logo">' + logoHTML(a) + '</div><div class="fa-meta">' +
         '<div class="fa-top"><span class="fa-id">' + id + "</span>" + pill + "</div>" +
         '<div class="fa-air">' + sub + "</div>" +
@@ -994,7 +1157,7 @@ function cardHTML(a) {
         '<div><span class="lbl">Rumbo</span><b>' + (gnd || a.track == null ? "—" : '<span class="hdg"><span class="arr" style="transform:rotate(' + Number(a.track) + 'deg)"></span> ' + fmtHdg(a.track) + "</span>") + "</b></div>" +
       "</div>" +
       (extraBits.length ? '<div class="fa-extra">' + extraBits.join(" · ") + "</div>" : "") +
-      '<div class="fa-foot"><span>' + foot + "</span>" + pill + "</div>" +
+      '<div class="fa-foot"><span>' + foot + '</span><span class="fa-follow">' + hint + "</span>" + pill + "</div>" +
     "</div>"
   );
 }
@@ -1062,13 +1225,21 @@ function renderWall() {
   wall.classList.toggle("hybrid", view === "hybrid");
   wall.classList.toggle("full", view === "wall");
   if (!AC.length) {
-    wall.innerHTML = SKY.length
-      ? '<div class="empty"><div>Sin vuelos de ' + currentApt()[0] + ' ahora</div><p class="fa-air">Hay tráfico en la zona, ninguno con origen o destino ' + currentApt()[0] + " en el ADS-B. El radar los sigue mostrando.</p></div>"
+    wall.innerHTML = compactId(followFlt)
+      ? '<div class="empty"><div>Buscando ' + followFlt + "…</div><p class=\"fa-air\">Lo busco por indicativo en el ADS-B, aunque esté lejos del aeropuerto.</p></div>"
+      : SKY.length
+      ? '<div class="empty"><div>Sin vuelos de ' + currentApt()[0] + ' ahora</div><p class="fa-air">Hay tráfico en la zona, ninguno entra en esta radio.</p></div>'
       : '<div class="empty"><div>' + (loading ? "Cargando el cielo…" : "Sin vuelos en este radio") + '</div><p class="fa-air">' + (statusEl.textContent || "") + "</p></div>";
     return;
   }
-  const list = visibleList();
-  if (listStyle === "fids") {
+  const followOne = compactId(followFlt) && AC.length === 1;
+  const list = followOne ? AC : visibleList();
+  if (followOne || listStyle === "carousel" || (view === "wall" && list.length === 1 && listStyle !== "fids")) {
+    wall.innerHTML = '<div class="carousel-wrap' + (list.length === 1 ? " hero" : list.length <= 3 ? " lg" : "") + '" style="grid-template-rows:repeat(' + list.length + ',minmax(0,1fr))">' +
+      list.map(cardHTML).join("") + "</div>";
+    wall.classList.toggle("hero", list.length === 1);
+    wall.classList.toggle("lg", list.length > 1 && list.length <= 3);
+  } else if (listStyle === "fids") {
     const compact = view === "hybrid";
     const shortSt = (st) => st === "APROXIMANDO" ? "APROX" : st === "EN TIERRA" ? "TIERRA" : st === "EN VUELO" ? "VUELO" : st;
     wall.innerHTML = '<table class="fids"><thead><tr><th></th><th>VUELO</th><th>RUTA</th>' +
@@ -1084,7 +1255,7 @@ function renderWall() {
         const eta = (st === "EN TIERRA" || !a.arrAt) ? "—" : (Math.max(0, Math.round((a.arrAt - Date.now()) / 60000)) + " min");
         const cities = compact ? "" : '<div class="fid-sub">' + (aptCity(route.origin) || route.origin) + " → " + (aptCity(route.dest) || route.dest) + "</div>";
         const sub = compact ? "" : '<div class="fid-sub">' + (isReg(id) ? "Matrícula" : pair[1]) + (a.r && !isReg(id) ? " · " + String(a.r).replace(/[^A-Z0-9]/gi, "").toUpperCase() : "") + "</div>";
-        return '<tr><td><div class="logo" style="width:26px;height:26px;font-size:9px">' + logoHTML(a) + "</div></td>" +
+        return '<tr data-hex="' + a.hex + '" role="button" tabindex="0"><td><div class="logo" style="width:26px;height:26px;font-size:9px">' + logoHTML(a) + "</div></td>" +
           "<td>" + id + sub + "</td>" +
           '<td class="' + (compact ? "" : "wrap") + '">' + route.origin + " → " + route.dest + cities + "</td>" +
           (compact ? "" : "<td>" + (a.t || "—") + "</td>") +
@@ -1093,19 +1264,10 @@ function renderWall() {
           '<td><span class="' + pillClass(st) + '">' + (compact ? shortSt(st) : st) + "</span></td></tr>";
       }).join("") +
       "</tbody></table>";
-  } else if (listStyle === "carousel") {
-    const list = visibleList();
-    wall.innerHTML = '<div class="carousel-wrap' + (list.length === 1 ? " hero" : list.length <= 3 ? " lg" : "") + '" style="grid-template-rows:repeat(' + list.length + ',minmax(0,1fr))">' +
-      list.map(cardHTML).join("") + "</div>";
   } else {
     const hero = view === "wall" && list.length === 1;
     const lg = view === "wall" && list.length <= 3;
-    if (view === "wall" && list.length === 1) {
-      wall.innerHTML = '<div class="carousel-wrap hero" style="grid-template-rows:repeat(1,minmax(0,1fr))">' +
-        list.map(cardHTML).join("") + "</div>";
-    } else {
-      wall.innerHTML = list.map(cardHTML).join("");
-    }
+    wall.innerHTML = list.map(cardHTML).join("");
     wall.classList.toggle("hero", hero);
     wall.classList.toggle("lg", lg && !hero);
   }
@@ -1116,6 +1278,130 @@ function angDiff(a, b) {
   while (d > Math.PI) d -= Math.PI * 2;
   while (d < -Math.PI) d += Math.PI * 2;
   return d;
+}
+function drawJourney(ctx, W, H, left, fg, ac) {
+  const x0 = 18, y0 = 36;
+  const x1 = W * left - 16, y1 = H - 18;
+  const boxW = Math.max(80, x1 - x0), boxH = Math.max(80, y1 - y0);
+  const pNow = displayPos(ac);
+  const route = resolveRoute(ac);
+  const orig = AIRPORTS.find((x) => x[0] === route.origin) || null;
+  const dest = AIRPORTS.find((x) => x[0] === route.dest) || null;
+  const oApt = orig || ((!dest) ? currentApt() : null);
+  const dApt = dest;
+  const flown = TRAIL[ac.hex] || [];
+  const pts = [[pNow.lat, pNow.lon]].concat(flown);
+  if (oApt) pts.push([oApt[2], oApt[3]]);
+  if (dApt) pts.push([dApt[2], dApt[3]]);
+  if (pts.length < 2 && ac.track != null) {
+    pts.push(projectKm(pNow.lat, pNow.lon, ac.track, 320));
+    pts.push(projectKm(pNow.lat, pNow.lon, (ac.track + 180) % 360, 80));
+  }
+  const anchorLon = oApt ? oApt[3] : (dApt ? dApt[3] : pNow.lon);
+  const lons = pts.map((p) => wrapLon(p[1], anchorLon));
+  const lats = pts.map((p) => p[0]);
+  let minLat = Math.min.apply(null, lats), maxLat = Math.max.apply(null, lats);
+  let minLon = Math.min.apply(null, lons), maxLon = Math.max.apply(null, lons);
+  const latPad = Math.max(4, (maxLat - minLat) * 0.18 + 2.4);
+  const lonPad = Math.max(4, (maxLon - minLon) * 0.18 + 2.4);
+  minLat -= latPad; maxLat += latPad; minLon -= lonPad; maxLon += lonPad;
+  const latSpan = Math.max(6, maxLat - minLat), lonSpan = Math.max(6, maxLon - minLon);
+  const scale = Math.min(boxW / lonSpan, boxH / latSpan);
+  const midLat = (minLat + maxLat) / 2, midLon = (minLon + maxLon) / 2;
+  const toXY = (lat, lon) => ({
+    x: x0 + boxW / 2 + (wrapLon(lon, anchorLon) - midLon) * scale,
+    y: y0 + boxH / 2 - (lat - midLat) * scale,
+  });
+  ctx.strokeStyle = fg + "22"; ctx.lineWidth = 1;
+  ctx.strokeRect(x0, y0, boxW, boxH);
+  const latStep = latSpan > 40 ? 10 : latSpan > 18 ? 5 : 2;
+  const lonStep = lonSpan > 40 ? 10 : lonSpan > 18 ? 5 : 2;
+  ctx.font = "10px ui-monospace, monospace"; ctx.fillStyle = fg;
+  for (let lat = Math.ceil(minLat / latStep) * latStep; lat <= maxLat; lat += latStep) {
+    const p = toXY(lat, midLon);
+    ctx.globalAlpha = 0.18; ctx.beginPath(); ctx.moveTo(x0, p.y); ctx.lineTo(x0 + boxW, p.y); ctx.stroke();
+    ctx.globalAlpha = 0.45; ctx.fillText(lat.toFixed(0) + "°", x0 + 4, p.y - 3);
+  }
+  for (let lon = Math.ceil(minLon / lonStep) * lonStep; lon <= maxLon; lon += lonStep) {
+    const p = toXY(midLat, lon);
+    ctx.globalAlpha = 0.18; ctx.beginPath(); ctx.moveTo(p.x, y0); ctx.lineTo(p.x, y0 + boxH); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  const oLL = oApt ? [oApt[2], oApt[3]] : null;
+  const dLL = dApt ? [dApt[2], dApt[3]] : null;
+  const fullRoute = oLL && dLL ? gcPath(oLL, dLL, 56) : [];
+  const remain = dLL ? gcPath([pNow.lat, pNow.lon], dLL, 40) : [];
+  const path = remain.length ? remain : fullRoute;
+  if (fullRoute.length) {
+    ctx.globalAlpha = 0.35; ctx.strokeStyle = fg; ctx.lineWidth = 1.2; ctx.setLineDash([4, 8]);
+    ctx.beginPath();
+    fullRoute.forEach((pt, i) => { const p = toXY(pt[0], pt[1]); if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  if (remain.length) {
+    ctx.globalAlpha = 0.95; ctx.strokeStyle = fg; ctx.lineWidth = 2; ctx.setLineDash([8, 5]);
+    ctx.beginPath();
+    remain.forEach((pt, i) => { const p = toXY(pt[0], pt[1]); if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  if (flown.length > 1) {
+    ctx.globalAlpha = 0.9; ctx.strokeStyle = fg; ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    flown.forEach((pt, i) => { const p = toXY(pt[0], pt[1]); if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+    ctx.stroke();
+  }
+  const used = {};
+  if (oApt) used[oApt[0]] = 1;
+  if (dApt) used[dApt[0]] = 1;
+  if (path.length) {
+    [0.18, 0.36, 0.54, 0.72, 0.88].forEach((f) => {
+      const pt = path[Math.round(f * (path.length - 1))];
+      let best = null, bestD = 220;
+      for (let i = 0; i < AIRPORTS.length; i++) {
+        const a = AIRPORTS[i];
+        if (used[a[0]]) continue;
+        const d = gcKm([a[2], a[3]], pt);
+        if (d < bestD) { bestD = d; best = a; }
+      }
+      ctx.fillStyle = fg; ctx.font = "10px ui-monospace, monospace";
+      if (best) {
+        used[best[0]] = 1;
+        const p = toXY(best[2], best[3]);
+        ctx.globalAlpha = 0.85; ctx.beginPath(); ctx.arc(p.x, p.y, 3.2, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.7; ctx.fillText(best[0], p.x + 6, p.y - 5);
+      } else {
+        const p = toXY(pt[0], pt[1]);
+        ctx.globalAlpha = 0.85; ctx.beginPath(); ctx.arc(p.x, p.y, 3.2, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.7; ctx.fillText(Math.round(f * 100) + "%", p.x + 6, p.y - 5);
+      }
+    });
+  }
+  [[oApt, "ORIGEN"], [dApt, "DESTINO"]].forEach((pair) => {
+    const apt = pair[0], tag = pair[1];
+    if (!apt) return;
+    const p = toXY(apt[2], apt[3]);
+    ctx.globalAlpha = 1; ctx.strokeStyle = fg; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = fg; ctx.font = "13px ui-monospace, monospace";
+    ctx.fillText(apt[0], p.x + 10, p.y - 6);
+    ctx.globalAlpha = 0.7; ctx.font = "10px sans-serif";
+    ctx.fillText(tag + " · " + (apt[1] || apt[5] || ""), p.x + 10, p.y + 8);
+  });
+  const plane = toXY(pNow.lat, pNow.lon);
+  ctx.globalAlpha = 0.9; ctx.strokeStyle = fg;
+  ctx.beginPath(); ctx.arc(plane.x, plane.y, 14, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = fg;
+  ctx.save(); ctx.translate(plane.x, plane.y); ctx.rotate(((ac.track || 0) * Math.PI) / 180);
+  ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(5.5, 8); ctx.lineTo(-5.5, 8); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  ctx.font = "12px ui-monospace, monospace";
+  ctx.fillText((ac.flight || "").trim() || ac.hex, plane.x + 16, plane.y - 8);
+  const rem = dLL && ac.alt !== "ground" ? Math.round(gcKm([pNow.lat, pNow.lon], dLL)) : null;
+  ctx.globalAlpha = 1; ctx.fillStyle = fg; ctx.font = "12px ui-monospace, monospace";
+  ctx.fillText(((ac.flight || "").trim() || currentApt()[0]) + "  " + route.origin + " → " + route.dest, 10, 18);
+  ctx.globalAlpha = 0.7; ctx.font = "11px sans-serif";
+  ctx.fillText(rem != null ? ("Ruta del viaje · " + rem + " km al destino") : "Ruta del viaje", 10, 32);
+  ctx.globalAlpha = 1;
 }
 function loop() {
   const view = shownView();
@@ -1129,14 +1415,20 @@ function loop() {
   const pair = THEMES[theme] || THEMES.crt_amber;
   ctx.fillStyle = pair.bg; ctx.fillRect(0, 0, w, h);
   const left = view === "hybrid" ? 0.54 : 1;
+  const tripAc = compactId(followFlt) ? followAcOf() : null;
+  if (performance.now() - lastSweep > (tripAc ? 20000 : 55000)) { lastSweep = performance.now(); loadLive(false); }
+  if (performance.now() - lastRot > rotateS * 1000) { lastRot = performance.now(); page++; renderWall(); }
+  if (tripAc) {
+    drawJourney(ctx, w, h, left, pair.fg, tripAc);
+    requestAnimationFrame(loop);
+    return;
+  }
   const cx = w * left * 0.5, cy = h * 0.52;
   const R = Math.min(cx, cy) * 0.86;
   ctx.strokeStyle = pair.fg + "28"; ctx.lineWidth = 1;
   [0.25, 0.5, 0.75, 1].forEach((r) => { ctx.beginPath(); ctx.arc(cx, cy, R * r, 0, Math.PI * 2); ctx.stroke(); });
   ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
   beam += 0.012; if (beam > Math.PI * 3) beam -= Math.PI * 2;
-  if (performance.now() - lastSweep > 55000) { lastSweep = performance.now(); loadLive(false); }
-  if (performance.now() - lastRot > rotateS * 1000) { lastRot = performance.now(); page++; renderWall(); }
   ctx.strokeStyle = pair.fg; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(beam) * R, cy + Math.sin(beam) * R); ctx.stroke();
   ctx.fillStyle = pair.fg; ctx.font = "12px ui-monospace, monospace";
   ctx.fillText(currentApt()[0], 10, 18);
@@ -1145,62 +1437,84 @@ function loop() {
   ctx.globalAlpha = 1;
   const span = Math.max(0.25, radiusKm / 111);
   const toXY = (lat, lon) => ({ x: cx + ((lon - center[1]) / span) * R, y: cy - ((lat - center[0]) / span) * R });
-  if (radiusKm <= 110) {
-    const sets = nearbyRwy();
-    sets.forEach((set) => {
-      const rows = set.rows;
+  const sets = nearbyRwy();
+  const apxKm = approachKm(radiusKm);
+  const homeIata = currentApt()[0];
+  sets.forEach((set) => {
+    const rows = set.rows;
+    const isHome = set.iata === homeIata;
+    rows.forEach((rw) => {
+      const a = toXY(rw[4], rw[5]), b = toXY(rw[6], rw[7]);
+      ctx.strokeStyle = pair.fg; ctx.globalAlpha = isHome ? 0.95 : 0.72;
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      ctx.lineCap = "butt"; ctx.lineJoin = "miter";
+      ctx.lineWidth = Math.max(1.15, Math.min(2.4, len * 0.14));
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      if ((isHome || radiusKm < 90) && len > 10) {
+        ctx.globalAlpha = 0.9; ctx.font = "10px ui-monospace, monospace"; ctx.fillStyle = pair.fg;
+        ctx.fillText(String(rw[0]), a.x + 6, a.y - 4);
+        ctx.fillText(String(rw[1]), b.x + 6, b.y - 4);
+      }
+    });
+    const mid = toXY(set.lat, set.lon);
+    ctx.globalAlpha = isHome ? 0.95 : 0.7; ctx.font = "11px ui-monospace, monospace"; ctx.fillStyle = pair.fg;
+    ctx.fillText(set.iata, mid.x + 8, mid.y + 14);
+    const scored = {};
+    SKY.forEach((ac) => {
+      if (!looksAir(ac) || isGnd(ac) || ac.track == null) return;
+      const alt = Number(ac.alt) || 0, gs = Number(ac.gs) || 0;
+      if (alt > 12000 || gs < 80) return;
       rows.forEach((rw) => {
-        const a = toXY(rw[4], rw[5]), b = toXY(rw[6], rw[7]);
-        ctx.strokeStyle = pair.fg; ctx.globalAlpha = 0.92;
-        const len = Math.hypot(b.x - a.x, b.y - a.y);
-        ctx.lineCap = "butt"; ctx.lineJoin = "miter";
-        ctx.lineWidth = Math.max(1.15, Math.min(2.4, len * 0.14));
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-        if (radiusKm < 90 && len > 14) {
-          ctx.globalAlpha = 0.9; ctx.font = "10px ui-monospace, monospace"; ctx.fillStyle = pair.fg;
-          ctx.fillText(String(rw[0]), a.x + 6, a.y - 4);
-          ctx.fillText(String(rw[1]), b.x + 6, b.y - 4);
-        }
-      });
-      const mid = toXY(set.lat, set.lon);
-      ctx.globalAlpha = 0.8; ctx.font = "11px ui-monospace, monospace"; ctx.fillStyle = pair.fg;
-      ctx.fillText(set.iata, mid.x + 8, mid.y + 14);
-      if (radiusKm > 70) return;
-      const scored = {};
-      SKY.forEach((ac) => {
-        if (!looksAir(ac) || isGnd(ac) || ac.track == null) return;
-        const alt = Number(ac.alt) || 0, gs = Number(ac.gs) || 0;
-        if (alt > 9000 || gs < 80) return;
-        rows.forEach((rw) => {
-          [[rw[0], rw[2], rw[4], rw[5]], [rw[1], rw[3], rw[6], rw[7]]].forEach((end) => {
-            const ident = String(end[0]), hdg = Number(end[1]), lat = end[2], lon = end[3];
-            if (!ident || !isFinite(hdg)) return;
-            if (hdgDelta(ac.track, hdg) > 10) return;
-            const km = kmLL([ac.lat, ac.lon], [lat, lon]);
-            const along = Math.cos((ac.track - bearingLL([ac.lat, ac.lon], [lat, lon])) * Math.PI / 180) * km;
-            if (along <= 2 || along >= 22) return;
-            scored[ident] = scored[ident] || { ident, hdg, lat, lon, n: 0, minAlong: 99 };
-            scored[ident].n += 1;
-            if (along < scored[ident].minAlong) scored[ident].minAlong = along;
-          });
+        [[rw[0], rw[2], rw[4], rw[5]], [rw[1], rw[3], rw[6], rw[7]]].forEach((end) => {
+          const ident = String(end[0]), hdg = Number(end[1]), lat = end[2], lon = end[3];
+          if (!ident || !isFinite(hdg)) return;
+          if (hdgDelta(ac.track, hdg) > 12) return;
+          const km = kmLL([ac.lat, ac.lon], [lat, lon]);
+          const along = Math.cos((ac.track - bearingLL([ac.lat, ac.lon], [lat, lon])) * Math.PI / 180) * km;
+          if (along <= 1.5 || along >= 40) return;
+          scored[ident] = scored[ident] || { ident, hdg, lat, lon, n: 0, minAlong: 99 };
+          scored[ident].n += 1;
+          if (along < scored[ident].minAlong) scored[ident].minAlong = along;
         });
       });
-      const ranked = Object.keys(scored).map((k) => scored[k]).sort((a, b) => b.n - a.n || a.minAlong - b.minAlong);
-      const hit = ranked[0];
-      if (!hit) return;
-      const rec = (hit.hdg + 180) % 360;
-      const rad = rec * Math.PI / 180;
-      const backKm = Math.min(22, radiusKm * 0.5);
-      const back = [hit.lat + Math.cos(rad) * backKm / 111, hit.lon + Math.sin(rad) * backKm / (111 * Math.cos(hit.lat * Math.PI / 180))];
-      const s = toXY(back[0], back[1]), t = toXY(hit.lat, hit.lon);
-      ctx.setLineDash([8, 6]); ctx.strokeStyle = pair.fg; ctx.globalAlpha = 0.8; ctx.lineWidth = 1.6;
-      ctx.lineCap = "butt";
-      ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(t.x, t.y); ctx.stroke();
-      ctx.setLineDash([]); ctx.fillStyle = pair.fg; ctx.globalAlpha = 0.95; ctx.font = "11px ui-monospace, monospace";
-      ctx.fillText("APX " + hit.ident, s.x + 4, s.y - 4);
     });
-    ctx.globalAlpha = 1;
-  }
+    const ranked = Object.keys(scored).map((k) => scored[k]).sort((a, b) => b.n - a.n || a.minAlong - b.minAlong);
+    const hitIds = {};
+    if (ranked[0]) hitIds[ranked[0].ident] = 1;
+    function drawApx(lat, lon, hdg, ident, strong) {
+      const back = projectKm(lat, lon, (hdg + 180) % 360, apxKm);
+      let s = toXY(back[0], back[1]);
+      const t = toXY(lat, lon);
+      const dx = s.x - t.x, dy = s.y - t.y;
+      const plen = Math.hypot(dx, dy);
+      if (isHome && plen < 56 && plen > 0.2) {
+        const k = 56 / plen;
+        s = { x: t.x + dx * k, y: t.y + dy * k };
+      }
+      ctx.setLineDash(strong ? [10, 5] : [7, 7]);
+      ctx.strokeStyle = pair.fg;
+      ctx.globalAlpha = strong ? 0.95 : isHome ? 0.62 : 0.28;
+      ctx.lineCap = "butt";
+      ctx.lineWidth = strong ? 2.2 : isHome ? 1.5 : 1.2;
+      ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(t.x, t.y); ctx.stroke();
+      ctx.setLineDash([]);
+      if (isHome || strong) {
+        ctx.fillStyle = pair.fg;
+        ctx.globalAlpha = strong ? 0.95 : 0.7;
+        ctx.font = "11px ui-monospace, monospace";
+        ctx.fillText(strong ? "APX " + ident : ident, s.x + 4, s.y - 4);
+      }
+    }
+    if (isHome) {
+      rows.forEach((rw) => {
+        if (rw[0] && isFinite(Number(rw[2]))) drawApx(rw[4], rw[5], Number(rw[2]), String(rw[0]), !!hitIds[rw[0]]);
+        if (rw[1] && isFinite(Number(rw[3]))) drawApx(rw[6], rw[7], Number(rw[3]), String(rw[1]), !!hitIds[rw[1]]);
+      });
+    } else if (radiusKm <= 70 && ranked[0]) {
+      drawApx(ranked[0].lat, ranked[0].lon, ranked[0].hdg, ranked[0].ident, true);
+    }
+  });
+  ctx.globalAlpha = 1;
   const labeled = new Set(visibleList().map((a) => a.hex));
   SKY.forEach((a) => {
     const pos = displayPos(a);
@@ -1258,7 +1572,7 @@ function grabForm() {
   document.querySelectorAll(".checks label").forEach((l) => l.classList.toggle("on", l.querySelector("input").checked));
   const rwyLive = document.getElementById("rwyLive");
   if (rwyLive) rwyLive.textContent = runwaysOn
-    ? "Las pistas se dibujan hasta 110 km. La aproximación punteada aparece solo si hay un vuelo comercial en final, y como máximo hasta 70 km."
+    ? "Las pistas de " + currentApt()[0] + " se dibujan siempre. La aproximación punteada se alarga con el radio (hasta ~32 km)."
     : "Pistas apagadas. El cliente las puede volver a prender.";
   const rwyClient = document.getElementById("rwyClientNote");
   if (rwyClient) rwyClient.hidden = runwaysOn;
@@ -1320,6 +1634,7 @@ document.querySelectorAll("[data-preset]").forEach((b) => {
 ["fAir", "fGa", "fBiz", "fHeli", "ground", "house", "followFlt", "max", "rotate", "carN", "rwyOn"].forEach((id) => {
   document.getElementById(id).addEventListener("change", () => { grabForm(); applyFilters(); renderWall(); });
 });
+document.getElementById("followFlt").addEventListener("input", () => { grabForm(); applyFilters(); renderWall(); });
 document.getElementById("followAl").addEventListener("input", () => { grabForm(); applyFilters(); renderWall(); });
 document.getElementById("carN").addEventListener("input", () => {
   carouselN = Math.max(1, Math.min(4, Number(document.getElementById("carN").value) || 1));
@@ -1373,6 +1688,35 @@ document.getElementById("demoHouse").onclick = function () {
   grabForm(); running = true; if (!looping) loop(); updateOver();
 };
 
+function toggleFollow(a) {
+  const id = compactId(a.flight) || compactId(a.r || "") || a.hex;
+  const inp = document.getElementById("followFlt");
+  if (followFlt && matchesFollowFlight(a, followFlt)) {
+    followFlt = "";
+    if (inp) inp.value = "";
+  } else {
+    followFlt = id;
+    if (inp) inp.value = id;
+  }
+  applyFilters();
+  renderWall();
+  running = true;
+  if (followFlt) loadLive(false);
+  if (shownView() !== "wall" && !looping) loop();
+}
+function pickFromEvent(e) {
+  const el = e.target.closest("[data-hex]");
+  if (!el) return;
+  const hex = el.dataset.hex;
+  const a = RAW.find((x) => x.hex === hex) || AC.find((x) => x.hex === hex) || SKY.find((x) => x.hex === hex);
+  if (a) toggleFollow(a);
+}
+wall.addEventListener("click", pickFromEvent);
+wall.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  e.preventDefault();
+  pickFromEvent(e);
+});
 async function loadCatalogs() {
   try {
     const [ap, al] = await Promise.all([
