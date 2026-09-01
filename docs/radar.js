@@ -1,4 +1,4 @@
-/* Pico Radar v29 — lista=radar, pistas EZE, seguir vuelo = mapa de viaje. */
+/* Pico Radar v30 — typeahead de vuelo, mapa continental, flyover sin recortes. */
 const PUBLIC_SKY = "https://pico-vga-radar-sky.vercel.app/api";
 const SKY_API = (function () {
   const q = new URLSearchParams(location.search).get("api");
@@ -101,6 +101,7 @@ let ALINES = SEED_AL.slice();
 const ROUTECACHE = {};
 const POS = {};
 const TRAIL = {};
+let LAND = [];
 let home = null, demoOver = false, srcLabel = "";
 let RAW = [], AC = [], SKY = [], running = false, looping = false;
 let view = "hybrid", theme = "crt_amber", listStyle = "fa";
@@ -608,7 +609,7 @@ function matchesFollowFlight(ac, needle) {
 }
 function followAcOf() {
   const n = compactId(followFlt);
-  if (!n || n.length < 2) return null;
+  if (!n || n.length < 2 || !/\d/.test(n)) return null;
   return RAW.find((a) => matchesFollowFlight(a, followFlt)) || SKY.find((a) => matchesFollowFlight(a, followFlt)) || null;
 }
 function rivalAirports() {
@@ -793,6 +794,85 @@ bindSuggest(
     renderWall();
   },
 );
+function flightSuggestRows() {
+  const seen = {};
+  const out = [];
+  function add(a) {
+    const id = compactId(a.flight);
+    if (!id || seen[id]) return;
+    if (isReg(id) && !isFlightNumber(id)) return;
+    seen[id] = 1;
+    const route = resolveRoute(a);
+    const al = airlineOf(a.flight);
+    out.push([id, displayId(a), (route.origin || "—") + " → " + (route.dest || "—"), al[1] || "", al[0] || "", a.hex]);
+  }
+  AC.forEach(add);
+  SKY.forEach(add);
+  RAW.forEach(add);
+  return out;
+}
+(function bindFlightSuggest() {
+  const input = document.getElementById("followFlt");
+  const listEl = document.getElementById("sugFlt");
+  if (!input || !listEl) return;
+  function hits(q) {
+    const rows = flightSuggestRows();
+    const s = compactId(q);
+    const f = fold(q);
+    if (!s && !f) return rows.slice(0, 8);
+    const ranked = [];
+    rows.forEach((r) => {
+      const id = compactId(r[0]);
+      const al = fold(r[3] || "");
+      const iata = compactId(r[4] || "");
+      let n = 0;
+      if (s && id === s) n = 100;
+      else if (s && id.startsWith(s)) n = 90;
+      else if (s && iata && (s === iata || id.startsWith(iata) && s.startsWith(iata))) n = 80;
+      else if (s && id.includes(s)) n = 60;
+      else if (f && al.includes(f)) n = 70;
+      else if (f && fold(r[2]).includes(f)) n = 40;
+      if (n) ranked.push({ r: r, n: n });
+    });
+    ranked.sort((a, b) => b.n - a.n);
+    return ranked.slice(0, 12).map((x) => x.r);
+  }
+  function show(q) {
+    const found = hits(q);
+    listEl.innerHTML = found.map((r) =>
+      '<button type="button" data-v="' + r[0] + '"><b>' + r[1] + "</b> " + r[2] + (r[3] ? " · " + r[3] : "") + "</button>"
+    ).join("") || '<button type="button" disabled>Sin vuelos que coincidan</button>';
+    listEl.style.display = "block";
+  }
+  function pick(code) {
+    input.value = code;
+    followFlt = code;
+    listEl.style.display = "none";
+    grabForm();
+    applyFilters();
+    renderWall();
+    running = true;
+    loadLive(false);
+    if (shownView() !== "wall" && !looping) loop();
+  }
+  input.addEventListener("input", () => show(input.value));
+  input.addEventListener("focus", () => show(input.value));
+  input.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    const first = listEl.querySelector("button[data-v]");
+    if (!first) return;
+    e.preventDefault();
+    pick(first.dataset.v);
+  });
+  listEl.addEventListener("mousedown", (e) => {
+    const b = e.target.closest("button");
+    if (!b || !b.dataset.v) return;
+    pick(b.dataset.v);
+  });
+  document.addEventListener("click", (e) => {
+    if (!listEl.contains(e.target) && e.target !== input) listEl.style.display = "none";
+  });
+})();
 
 function enrich(a) {
   const now = Date.now();
@@ -841,7 +921,7 @@ function applyFilters() {
   SKY = zone.slice(0, 80);
   SKY.forEach(enrich);
   const hit = followAcOf();
-  if (compactId(followFlt) && hit) {
+  if (hit) {
     enrich(hit);
     AC = [hit];
   } else {
@@ -1162,8 +1242,8 @@ function cardHTML(a) {
   );
 }
 function clipCards() {
+  if (wall.querySelector(".carousel-wrap")) return;
   if (listStyle === "carousel" || listStyle === "fids") return;
-  if (view === "wall" && wall.querySelector(".carousel-wrap.hero")) return;
   const box = wall.getBoundingClientRect();
   [].slice.call(wall.querySelectorAll(".fa-card")).forEach((c) => {
     const r = c.getBoundingClientRect();
@@ -1184,9 +1264,9 @@ function visibleList() {
     return out;
   }
   const h = wall.clientHeight || 300;
-  const n = listStyle === "fids"
-    ? Math.max(1, Math.floor((h - 22) / (view === "wall" ? 64 : 36)))
-    : Math.max(1, Math.floor((h - 16) / (view === "wall" ? 320 : 158)));
+  const v = shownView();
+  const minH = listStyle === "fids" ? (v === "wall" ? 64 : 36) : (v === "wall" ? 210 : 168);
+  const n = Math.max(1, Math.floor((h - 16) / minH));
   const start = (page * n) % Math.max(1, AC.length);
   const out = [];
   for (let i = 0; i < Math.min(n, AC.length); i++) out.push(AC[(start + i) % AC.length]);
@@ -1232,13 +1312,14 @@ function renderWall() {
       : '<div class="empty"><div>' + (loading ? "Cargando el cielo…" : "Sin vuelos en este radio") + '</div><p class="fa-air">' + (statusEl.textContent || "") + "</p></div>";
     return;
   }
-  const followOne = compactId(followFlt) && AC.length === 1;
+  const followOne = !!followAcOf() && AC.length === 1;
   const list = followOne ? AC : visibleList();
-  if (followOne || listStyle === "carousel" || (view === "wall" && list.length === 1 && listStyle !== "fids")) {
-    wall.innerHTML = '<div class="carousel-wrap' + (list.length === 1 ? " hero" : list.length <= 3 ? " lg" : "") + '" style="grid-template-rows:repeat(' + list.length + ',minmax(0,1fr))">' +
+  if (followOne || listStyle === "carousel" || listStyle === "fa") {
+    const cls = list.length === 1 ? " hero" : list.length <= 2 ? " lg" : list.length === 3 ? " md" : "";
+    wall.innerHTML = '<div class="carousel-wrap' + cls + '" style="grid-template-rows:repeat(' + list.length + ',minmax(0,1fr))">' +
       list.map(cardHTML).join("") + "</div>";
     wall.classList.toggle("hero", list.length === 1);
-    wall.classList.toggle("lg", list.length > 1 && list.length <= 3);
+    wall.classList.toggle("lg", list.length > 1 && list.length <= 2);
   } else if (listStyle === "fids") {
     const compact = view === "hybrid";
     const shortSt = (st) => st === "APROXIMANDO" ? "APROX" : st === "EN TIERRA" ? "TIERRA" : st === "EN VUELO" ? "VUELO" : st;
@@ -1265,11 +1346,10 @@ function renderWall() {
       }).join("") +
       "</tbody></table>";
   } else {
-    const hero = view === "wall" && list.length === 1;
-    const lg = view === "wall" && list.length <= 3;
-    wall.innerHTML = list.map(cardHTML).join("");
-    wall.classList.toggle("hero", hero);
-    wall.classList.toggle("lg", lg && !hero);
+    wall.innerHTML = '<div class="carousel-wrap' + (list.length === 1 ? " hero" : list.length <= 2 ? " lg" : "") + '" style="grid-template-rows:repeat(' + list.length + ',minmax(0,1fr))">' +
+      list.map(cardHTML).join("") + "</div>";
+    wall.classList.toggle("hero", list.length === 1);
+    wall.classList.toggle("lg", list.length > 1 && list.length <= 2);
   }
   requestAnimationFrame(clipCards);
 }
@@ -1312,21 +1392,55 @@ function drawJourney(ctx, W, H, left, fg, ac) {
     x: x0 + boxW / 2 + (wrapLon(lon, anchorLon) - midLon) * scale,
     y: y0 + boxH / 2 - (lat - midLat) * scale,
   });
-  ctx.strokeStyle = fg + "22"; ctx.lineWidth = 1;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x0, y0, boxW, boxH);
+  ctx.clip();
+  if (LAND.length) {
+    ctx.fillStyle = fg;
+    ctx.strokeStyle = fg;
+    for (let i = 0; i < LAND.length; i++) {
+      const ring = LAND[i];
+      if (!ring || ring.length < 4) continue;
+      let a = 90, b = -90, c = 1e9, d = -1e9;
+      for (let j = 0; j < ring.length; j++) {
+        const lat = ring[j][0], lon = wrapLon(ring[j][1], anchorLon);
+        if (lat < a) a = lat; if (lat > b) b = lat;
+        if (lon < c) c = lon; if (lon > d) d = lon;
+      }
+      if (b < minLat || a > maxLat || d < minLon || c > maxLon) continue;
+      ctx.beginPath();
+      for (let j = 0; j < ring.length; j++) {
+        const p = toXY(ring[j][0], ring[j][1]);
+        if (j === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+      }
+      ctx.closePath();
+      ctx.globalAlpha = 0.16;
+      ctx.fill();
+      ctx.globalAlpha = 0.5;
+      ctx.lineWidth = 1.15;
+      ctx.stroke();
+    }
+  }
+  ctx.strokeStyle = fg; ctx.globalAlpha = 0.22; ctx.lineWidth = 1;
   ctx.strokeRect(x0, y0, boxW, boxH);
   const latStep = latSpan > 40 ? 10 : latSpan > 18 ? 5 : 2;
   const lonStep = lonSpan > 40 ? 10 : lonSpan > 18 ? 5 : 2;
   ctx.font = "10px ui-monospace, monospace"; ctx.fillStyle = fg;
   for (let lat = Math.ceil(minLat / latStep) * latStep; lat <= maxLat; lat += latStep) {
     const p = toXY(lat, midLon);
-    ctx.globalAlpha = 0.18; ctx.beginPath(); ctx.moveTo(x0, p.y); ctx.lineTo(x0 + boxW, p.y); ctx.stroke();
-    ctx.globalAlpha = 0.45; ctx.fillText(lat.toFixed(0) + "°", x0 + 4, p.y - 3);
+    ctx.globalAlpha = 0.12; ctx.beginPath(); ctx.moveTo(x0, p.y); ctx.lineTo(x0 + boxW, p.y); ctx.stroke();
+    ctx.globalAlpha = 0.4; ctx.fillText(lat.toFixed(0) + "°", x0 + 4, p.y - 3);
   }
   for (let lon = Math.ceil(minLon / lonStep) * lonStep; lon <= maxLon; lon += lonStep) {
     const p = toXY(midLat, lon);
-    ctx.globalAlpha = 0.18; ctx.beginPath(); ctx.moveTo(p.x, y0); ctx.lineTo(p.x, y0 + boxH); ctx.stroke();
+    ctx.globalAlpha = 0.12; ctx.beginPath(); ctx.moveTo(p.x, y0); ctx.lineTo(p.x, y0 + boxH); ctx.stroke();
   }
-  ctx.globalAlpha = 1;
+  ctx.restore();
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x0, y0, boxW, boxH);
+  ctx.clip();
   const oLL = oApt ? [oApt[2], oApt[3]] : null;
   const dLL = dApt ? [dApt[2], dApt[3]] : null;
   const fullRoute = oLL && dLL ? gcPath(oLL, dLL, 56) : [];
@@ -1396,6 +1510,7 @@ function drawJourney(ctx, W, H, left, fg, ac) {
   ctx.restore();
   ctx.font = "12px ui-monospace, monospace";
   ctx.fillText((ac.flight || "").trim() || ac.hex, plane.x + 16, plane.y - 8);
+  ctx.restore();
   const rem = dLL && ac.alt !== "ground" ? Math.round(gcKm([pNow.lat, pNow.lon], dLL)) : null;
   ctx.globalAlpha = 1; ctx.fillStyle = fg; ctx.font = "12px ui-monospace, monospace";
   ctx.fillText(((ac.flight || "").trim() || currentApt()[0]) + "  " + route.origin + " → " + route.dest, 10, 18);
@@ -1415,7 +1530,7 @@ function loop() {
   const pair = THEMES[theme] || THEMES.crt_amber;
   ctx.fillStyle = pair.bg; ctx.fillRect(0, 0, w, h);
   const left = view === "hybrid" ? 0.54 : 1;
-  const tripAc = compactId(followFlt) ? followAcOf() : null;
+  const tripAc = followAcOf();
   if (performance.now() - lastSweep > (tripAc ? 20000 : 55000)) { lastSweep = performance.now(); loadLive(false); }
   if (performance.now() - lastRot > rotateS * 1000) { lastRot = performance.now(); page++; renderWall(); }
   if (tripAc) {
@@ -1738,6 +1853,10 @@ async function loadCatalogs() {
       if (rw && typeof rw === "object") RUNWAYS = rw;
     } catch (e) { /* optional */ }
   } catch (e) { /* seed is enough for EZE/Tokio/Cabo */ }
+  try {
+    const land = await pullJson("land.json", 8000);
+    if (Array.isArray(land) && land.length) LAND = land;
+  } catch (e) { /* optional */ }
 }
 
 async function boot() {
