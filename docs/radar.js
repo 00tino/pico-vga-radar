@@ -1,4 +1,4 @@
-/* Pico Radar v32 — lista solo del aeropuerto, sin fallback a Aeroparque, barrido suave. */
+/* Pico Radar v33 — pistas a escala, aproximacion visible, tarjetas sin recorte, lista aeropuerto centrada. */
 const PUBLIC_SKY = "https://pico-vga-radar-sky.vercel.app/api";
 const SKY_API = (function () {
   const q = new URLSearchParams(location.search).get("api");
@@ -435,6 +435,16 @@ function airlineOf(cs) {
   }
   return ["", L.slice(0, 3) || "ACFT", "#334155"];
 }
+function airlinerType(t) {
+  const T = (t || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!T) return false;
+  if (/^(A1[89]N|A2[01]N|A3[0-9]{2}|A35[0-9K]|A388)$/.test(T)) return true;
+  if (/^(B7[0-9]{2}|B3[89]M|B46[23]|B712|B77[LWX])$/.test(T)) return true;
+  if (/^(E1[0-9]{2}|E2[0-9]{2}|E29[05])$/.test(T)) return true;
+  if (/^(CRJ[0-9X]|CRJ[0-9]{3})$/.test(T)) return true;
+  if (/^(AT[0-9]{2}|DH8[A-D]|BCS[13]|MD1[01]|MD8[0-9]|MD9[0-9]|SU95|RJ[0-9]{2,3}|F100|F70|SF34|C919|A748)$/.test(T)) return true;
+  return false;
+}
 function kindOf(a) {
   const t = (a.t || "").toUpperCase();
   const cs = (a.flight || "").toUpperCase().trim();
@@ -446,7 +456,7 @@ function kindOf(a) {
   if (t === "TWR" || /^SSM\d/.test(compact) || /^SAETTA/.test(compact) || /^@+$/.test(cs)) return "ga";
   if (isReg(compact) || !flightNo) {
     if (/^(LJ|C25|C56|GLF|GLEX)/.test(t)) return "biz";
-    if (/^(A3|A2|B7|B38|E1|E19|CRJ)/.test(t)) return "air";
+    if (airlinerType(t) || /^(A3|A2|B7|B38|E1|E19|CRJ)/.test(t)) return "air";
     return "ga";
   }
   if (known || flightNo) return "air";
@@ -481,7 +491,8 @@ function distNmOf(a) {
 function looksAir(a) {
   const cs = compactId(a.flight);
   const t = (a.t || "").toUpperCase();
-  if (t === "TWR" || /^(RSCU|HEMS|SSM|SAETTA)/.test(cs) || isReg(cs) || !isFlightNumber(cs)) return false;
+  if (t === "TWR" || /^(RSCU|HEMS|SSM|SAETTA)/.test(cs)) return false;
+  if (isReg(cs) || !isFlightNumber(cs)) return airlinerType(t);
   return kindOf(a) === "air";
 }
 function phaseOf(a) {
@@ -1241,7 +1252,32 @@ function cardHTML(a) {
     "</div>"
   );
 }
+const SHRINK_ORDER = [".fa-extra", ".fa-foot", ".fa-cities", ".fa-air", ".fa-times", ".metrics"];
+function fitCards() {
+  [].slice.call(wall.querySelectorAll(".fa-card")).forEach((c) => {
+    SHRINK_ORDER.forEach((sel) => {
+      const el = c.querySelector(sel);
+      if (el) el.style.display = "";
+    });
+    for (let i = 0; i < SHRINK_ORDER.length && c.scrollHeight > c.clientHeight + 1; i++) {
+      const el = c.querySelector(SHRINK_ORDER[i]);
+      if (el && el.offsetHeight) el.style.display = "none";
+    }
+  });
+}
+function fitFids() {
+  const table = wall.querySelector("table.fids");
+  if (!table) return;
+  const body = table.tBodies[0];
+  if (!body) return;
+  let guard = 60;
+  while (guard-- > 0 && body.rows.length > 1 && table.offsetHeight > wall.clientHeight) {
+    body.deleteRow(body.rows.length - 1);
+  }
+}
 function clipCards() {
+  fitCards();
+  fitFids();
   if (wall.querySelector(".carousel-wrap")) return;
   if (listStyle === "carousel" || listStyle === "fids") return;
   const box = wall.getBoundingClientRect();
@@ -1300,6 +1336,7 @@ function renderWall() {
   applyTheme();
   applyDisp();
   updateOver();
+  wall.classList.remove("fidsmode");
   radar.style.display = view === "wall" ? "none" : "block";
   wall.classList.toggle("on", view !== "radar");
   wall.classList.toggle("hybrid", view === "hybrid");
@@ -1314,6 +1351,7 @@ function renderWall() {
   }
   const followOne = !!followAcOf() && AC.length === 1;
   const list = followOne ? AC : visibleList();
+  wall.classList.toggle("fidsmode", listStyle === "fids" && !followOne);
   if (followOne || listStyle === "carousel" || listStyle === "fa") {
     const cls = list.length === 1 ? " hero" : list.length <= 2 ? " lg" : list.length === 3 ? " md" : "";
     wall.innerHTML = '<div class="carousel-wrap' + cls + '" style="grid-template-rows:repeat(' + list.length + ',minmax(0,1fr))">' +
@@ -1581,15 +1619,15 @@ function loop() {
         if (pub && pub.origin !== homeIata && pub.dest !== homeIata) return;
       }
       const alt = Number(ac.alt) || 0, gs = Number(ac.gs) || 0;
-      if (alt > 12000 || gs < 80) return;
+      if (alt > 15000 || gs < 70) return;
       rows.forEach((rw) => {
         [[rw[0], rw[2], rw[4], rw[5]], [rw[1], rw[3], rw[6], rw[7]]].forEach((end) => {
           const ident = String(end[0]), hdg = Number(end[1]), lat = end[2], lon = end[3];
           if (!ident || !isFinite(hdg)) return;
-          if (hdgDelta(ac.track, hdg) > 12) return;
+          if (hdgDelta(ac.track, hdg) > 20) return;
           const km = kmLL([ac.lat, ac.lon], [lat, lon]);
           const along = Math.cos((ac.track - bearingLL([ac.lat, ac.lon], [lat, lon])) * Math.PI / 180) * km;
-          if (along <= 1.5 || along >= 40) return;
+          if (along <= 1.5 || along >= 55) return;
           scored[ident] = scored[ident] || { ident, hdg, lat, lon, n: 0, minAlong: 99 };
           scored[ident].n += 1;
           if (along < scored[ident].minAlong) scored[ident].minAlong = along;
@@ -1602,18 +1640,19 @@ function loop() {
     rows.forEach((rw) => {
       let a = toXY(rw[4], rw[5]), b = toXY(rw[6], rw[7]);
       let len = Math.hypot(b.x - a.x, b.y - a.y);
-      if (isHome && len > 0.2 && len < 36) {
+      const minLen = Math.max(9, Math.min(30, R * 0.075));
+      if (isHome && len > 0.2 && len < minLen) {
         const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
         const ux = (b.x - a.x) / len, uy = (b.y - a.y) / len;
-        a = { x: mx - ux * 18, y: my - uy * 18 };
-        b = { x: mx + ux * 18, y: my + uy * 18 };
-        len = 36;
+        a = { x: mx - ux * minLen / 2, y: my - uy * minLen / 2 };
+        b = { x: mx + ux * minLen / 2, y: my + uy * minLen / 2 };
+        len = minLen;
       }
       const onUse = !!(hit && (String(rw[0]) === hit.ident || String(rw[1]) === hit.ident));
       ctx.strokeStyle = pair.fg;
-      ctx.globalAlpha = isHome ? (hit ? (onUse ? 0.98 : 0.22) : 0.72) : 0.55;
+      ctx.globalAlpha = isHome ? (hit ? (onUse ? 0.98 : 0.5) : 0.72) : 0.55;
       ctx.lineCap = "butt"; ctx.lineJoin = "miter";
-      ctx.lineWidth = onUse ? 2.4 : Math.max(1.15, Math.min(2.4, len * 0.14));
+      ctx.lineWidth = onUse ? Math.max(1.8, Math.min(2.6, len * 0.12)) : Math.max(1.1, Math.min(2, len * 0.09));
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     });
     const mid = toXY(set.lat, set.lon);

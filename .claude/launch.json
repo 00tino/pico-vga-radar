@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "radar", "runtimeExecutable": "python3", "runtimeArgs": ["-m", "http.server", "8899", "--directory", "/Users/valentino/Desktop/Proyectos/PicoVga/docs"], "port": 8899 }
+  ]
+}
