@@ -177,6 +177,11 @@ class screen_800x600:
 
         dma0_config = dma0.config(read=self.H_buffer_line_address, write=DMA1_READ_ADDRESS, count=1, ctrl=dma0_ctrl, trigger=False)
         dma0.active(1)
+        # Guardar la referencia es OBLIGATORIO: si el objeto DMA queda solo como
+        # variable local, el recolector de basura lo destruye y al destruirlo
+        # aborta el canal. El video se apaga (sincronismo si, imagen no) en el
+        # primer gc.collect().
+        self.dma0 = dma0
 
         ### DMA 1
         PIO0_SM2_TXFIFO=_TXF2   # DMA Channel 1 Write Address pointer -> PIO TX FIFO 2 (sm2) adress
@@ -199,6 +204,7 @@ class screen_800x600:
 
         dma1_config = dma1.config(read=0, write=PIO0_SM2_TXFIFO, count=len(self.H_buffer_line), ctrl=dma1_ctrl, trigger=False)
         dma1.active(1)
+        self.dma1 = dma1
 
     def VGA_init(self):
         self.stopsync()

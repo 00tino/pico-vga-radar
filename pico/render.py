@@ -100,13 +100,14 @@ def draw_list(cfg, sky, x0, y0, w, h, col, page=0):
     y = y0 + 42
     for i in range(min(rows, len(view))):
         ac = view[(start + i) % len(view)]
-        flight = (ac.get("flight") or "")[:9].ljust(9)
-        typ = (ac.get("t") or "--")[:5].ljust(5)
-        alt = _fmt_alt(ac.get("alt")).rjust(6)
+        # MicroPython no tiene ljust/rjust: el ancho se pone en el formato.
+        flight = (ac.get("flight") or "")[:9]
+        typ = (ac.get("t") or "--")[:5]
+        alt = _fmt_alt(ac.get("alt"))
         gs = ac.get("gs")
-        vel = ("%d kt" % gs) if gs else "  --"
+        vel = ("%d kt" % gs) if gs else "--"
         s.settextcursor(x0 + 8, y)
-        s.printh("%s  %s %s  %s" % (flight, typ, alt, vel.rjust(7)))
+        s.printh("%-9s  %-5s %6s  %7s" % (flight, typ, alt, vel))
         y += line_h
 
 

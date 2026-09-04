@@ -9,13 +9,48 @@
 
 import gc
 import machine
+import sys
 import time
 
-import portal
-import render
-import sky
-import store
-import ui
+
+def log(msg):
+    """Deja rastro de cada paso del arranque en boot.log, para poder leerlo
+    despues aunque no haya nadie mirando el puerto serie."""
+    try:
+        with open("boot.log", "a") as f:
+            f.write(str(msg) + "\n")
+    except Exception:
+        pass
+    print(msg)
+
+
+try:
+    with open("boot.log", "w") as f:
+        f.write("--- arranque ---\n")
+except Exception:
+    pass
+
+log("0. arrancando, importando modulos")
+try:
+    import portal
+    log("   portal ok")
+    import store
+    log("   store ok")
+    import ui
+    log("   ui ok")
+    import render
+    log("   render ok")
+    import sky
+    log("   sky ok")
+except Exception as _e:
+    try:
+        with open("boot.log", "a") as f:
+            f.write("FALLO IMPORTANDO:\n")
+            sys.print_exception(_e, f)
+    except Exception:
+        pass
+    sys.print_exception(_e)
+    raise
 
 SETUP_QR_S = 25          # cuanto queda el QR en pantalla al conectar
 CFG = None
@@ -37,18 +72,47 @@ def _on_config(q):
 
 def run():
     global CFG, PENDING
+    log("1. dibujando pantalla de inicio")
     ui.screen_boot("INICIANDO RADAR")
+    log("2. leyendo config")
     CFG = store.load_config()
     gc.collect()
 
+    log("3. importando wifi")
     import wifi
     creds = CFG.get("wifi") or {}
+    log("4. intentando conectar a: " + repr(creds.get("ssid", "")))
     ip = wifi.connect(creds.get("ssid", ""), creds.get("pass", ""))
+    log("   resultado: " + repr(ip))
 
     if not ip:
+        log("5. levantando punto de acceso")
         name, password, ip = wifi.start_ap()
+        log("   AP: " + name + " en " + ip)
+        gc.collect()
+        log("6. abriendo servidor web. RAM: " + str(gc.mem_free()))
         srv = portal.Portal(ip)
+        log("7. dibujando pantalla del QR")
         ui.screen_ap(name, password, "http://" + ip)
+        try:
+            from machine import mem32
+            sc = ui.screen()
+            buf = sc.H_buffer_line
+            nz = 0
+            tot = 0
+            for i in range(0, len(buf), 53):
+                tot += 1
+                if buf[i]:
+                    nz += 1
+            log("   framebuffer: %d de %d palabras con contenido" % (nz, tot))
+            log("   direccion del buffer: %x" % sc.H_buffer_line_address[0])
+            log("   PIO1 CTRL: %08x  (los 3 bits bajos = SM 0,1,2 andando)" % mem32[0x50300000])
+            log("   DMA0 CTRL: %08x" % mem32[0x50000010])
+            log("   DMA1 CTRL: %08x" % mem32[0x5000004c])
+            log("   DMA1 transferencias restantes: %d" % mem32[0x50000048])
+        except Exception as _d:
+            log("   fallo el diagnostico: " + str(_d))
+        log("8. LISTO, esperando al celular")
         while True:
             if srv.poll(_on_wifi, _on_config, True) == "wifi":
                 ui.screen_boot("REINICIANDO...")
@@ -98,8 +162,14 @@ try:
     run()
 except Exception as e:
     try:
+        with open("boot.log", "a") as f:
+            f.write("EXCEPCION:\n")
+            sys.print_exception(e, f)
+    except Exception:
+        pass
+    sys.print_exception(e)
+    try:
         ui.screen_error("ERROR", str(e)[:60])
     except Exception:
         pass
-    time.sleep(20)
-    machine.reset()
+    time.sleep(30)
