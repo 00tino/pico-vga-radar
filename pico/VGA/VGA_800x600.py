@@ -131,7 +131,7 @@ class screen_800x600:
             wait(1,irq,0)                 # Wait for hsync to go high and Set pin low
             jmp(x_dec,"V_syncpulse")        # Remain in Syncpulse mode, decrementing counter
         #     # BACKPORCH
-            set(x,24)                     .side(0)# Setting x for the loop, Vertical backporch is 23 lines in 800x600 resolution
+            set(x,22)                     .side(0)# Backporch: 23 lineas segun la norma (x=22 -> 23 vueltas)
             label("V_backporch")
             wait(1,irq,0)                 # Wait for hsync to go high and Set pin low
             jmp(x_dec,"V_backporch")        # Remain in Syncpulse mode, decrementing counter
@@ -320,8 +320,14 @@ class screen_800x600:
         p1=n1%int(self.usable_bits)
         nword=(int(len(self.H_buffer_line))//int(self.V_res))
         mask= ((int(self.pixel_bitmask) << p1)^0x3FFFFFFF)
+        # El buffer esta direccionado con un corrimiento de una palabra, asi que
+        # el indice tiene que dar la vuelta. Sin esto, una vertical que arranca
+        # en x=0,y=0 escribe fuera del array y corrompe la memoria de al lado.
+        L=int(len(self.H_buffer_line))
         for i in range(y2-y1):
-            Data[k1+i*nword]=(Data[k1+i*nword] & mask) | (col << p1)
+            idx=k1+i*nword
+            if idx>=L: idx-=L
+            Data[idx]=(Data[idx] & mask) | (col << p1)
 
     def draw_line(self, x1,y1,x2,y2,col):
         if (x1<0):x1=-1
