@@ -56,10 +56,8 @@ def draw_radar(cfg, sky, x0, y0, w, h, col):
     s.draw_line(cx, cy - R, cx, cy + R, col)
     s.draw_line(cx - R, cy, cx + R, cy, col)
 
-    _beam += 0.05
-    if _beam > math.pi * 2:
-        _beam -= math.pi * 2
-    s.draw_line(cx, cy, int(cx + math.cos(_beam) * R), int(cy + math.sin(_beam) * R), col)
+    # Sin barrido giratorio: dibujar un cuadro completo en MicroPython tarda
+    # demasiado como para animarlo. Vuelve cuando el render pase a C.
 
     span = max(0.25, cfg["radius_km"] / 111.0)
     lat0 = cfg["lat"]

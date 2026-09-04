@@ -134,6 +134,10 @@ def run():
     last_poll = 0
     last_page = time.ticks_ms()
 
+    # Solo se redibuja cuando hay algo nuevo. Redibujar todo el tiempo hacia
+    # que la pantalla parpadeara: se veia el borrado bajar y el dibujo subir.
+    cambio = True
+
     while True:
         now = time.ticks_ms()
 
@@ -142,19 +146,24 @@ def run():
             got = sky.fetch(CFG["lat"], CFG["lon"], CFG["radius_km"])
             if got is not None:
                 data = render.filtered(got, CFG)
+                cambio = True
             gc.collect()
 
-        if time.ticks_diff(now, last_page) > CFG["rotate_s"] * 1000:
+        if len(data) > CFG["max_n"] and time.ticks_diff(now, last_page) > CFG["rotate_s"] * 1000:
             last_page = now
             page += 1
+            cambio = True
 
-        render.draw(CFG, data, page)
+        if cambio:
+            render.draw(CFG, data, page)
+            cambio = False
 
         # Se sigue atendiendo al celular mientras el radar corre.
         for _ in range(20):
             if srv.poll(_on_wifi, _on_config, False) == "config":
                 last_poll = 0
                 page = 0
+                cambio = True
             time.sleep_ms(25)
 
 
