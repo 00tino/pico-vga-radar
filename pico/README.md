@@ -163,11 +163,20 @@ Lo que está **escrito y andando en la parte que se puede probar sin la placa**:
 el generador de QR (verificado contra un lector real), la lógica de
 configuración y el servidor web.
 
-Lo que está **escrito pero sin probar en hardware**, porque hace falta la Pico
-con el monitor cableado: el video, el WiFi y el dibujado. La librería de video
-es de terceros y está probada por su autor en una Pico 2, pero nadie la probó
-todavía **con el WiFi prendido al mismo tiempo** — ese es el punto de riesgo,
-y por eso está el interruptor `PIO_UNIT`.
+**Verificado en la placa real (2026-09-04):** MicroPython 1.29.0, 442 KB de RAM
+libre, todos los módulos importan, el QR se genera en 53 ms, el WiFi ve 16 redes.
+
+**El conflicto video/WiFi era real y ya está resuelto.** Con `PIO_UNIT = 0` la
+placa se cuelga al inicializar el video, porque el chip de WiFi también usa PIO0
+y la librería le borra el programa. Con **`PIO_UNIT = 1`** el PIO y el DMA
+levantan en 26 ms y la señal se sostiene minutos sin colgarse. Ya viene puesto
+en 1; no lo cambies.
+
+**Lo único sin verificar es la salida de video en el monitor.** La Pico genera
+señal (comprobado), pero el monitor de prueba nunca salió del LED naranja, o
+sea que no detecta sincronismo. Ese monitor nunca se había probado por VGA con
+ninguna otra fuente, así que falta descartar el monitor, el gender changer y la
+numeración del adaptador DE-15, que se espeja según de qué lado se mire.
 
 Lo que **falta**: el radar dibuja puntos y la lista es texto. Las tarjetas con
 logo de aerolínea, ruta, horarios y barra de progreso —lo que se ve en la web—

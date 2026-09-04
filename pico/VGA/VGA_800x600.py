@@ -10,7 +10,7 @@ from VGA.VGA_fonts import Font
 # Que PIO usa el video. El WiFi de la Pico 2 W (chip CYW43) tambien usa PIO0,
 # asi que si la imagen parpadea o desaparece al conectar el WiFi, cambia esto
 # a 1 y el video se muda a PIO1, que no lo usa nadie.
-PIO_UNIT = 0
+PIO_UNIT = 1
 # ---------------------------------------------------------------------------
 _PIO_BASE = 0x50200000 if PIO_UNIT == 0 else 0x50300000
 _SM_OFFSET = 0 if PIO_UNIT == 0 else 4          # ids de StateMachine
