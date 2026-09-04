@@ -32,7 +32,21 @@ La Pico viene vacía. Hay que ponerle dos cosas, en este orden:
 
 ---
 
-## Paso 2 — Instalar Thonny (una sola vez)
+## Paso 2 — Copiar los archivos (la forma facil)
+
+En esta Mac ya esta instalado `mpremote`, que hace todo desde la terminal.
+Con la Pico enchufada, corre:
+
+```
+./cargar.sh
+```
+
+Copia todo solo y te dice si no encuentra la placa. Si esto te funciona,
+saltea los pasos 2b y 3 y anda directo al Paso 4.
+
+---
+
+## Paso 2b — Thonny (opcional, solo si preferis una ventana)
 
 Thonny es el programa para pasarle archivos a la Pico.
 
@@ -44,7 +58,7 @@ Thonny es el programa para pasarle archivos a la Pico.
 
 ---
 
-## Paso 3 — Copiar los archivos
+## Paso 3 — Copiar los archivos con Thonny (si no usaste `cargar.sh`)
 
 En el panel de arriba buscá esta carpeta (`pico/`). Copiá **todo el
 contenido** a la Pico, respetando las subcarpetas:
