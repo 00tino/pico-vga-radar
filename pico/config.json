@@ -1,0 +1,18 @@
+{
+  "wifi": {"ssid": "", "pass": ""},
+  "apt": "EZE",
+  "lat": -34.822,
+  "lon": -58.536,
+  "radius_km": 80,
+  "view": "hybrid",
+  "list": "fa",
+  "theme": "crt_amber",
+  "runways": true,
+  "rotate_s": 7,
+  "max_n": 8,
+  "follow_al": "",
+  "follow_flt": "",
+  "want": {"air": true, "ga": false, "biz": false, "heli": false},
+  "ground": true,
+  "poll_s": 25
+}

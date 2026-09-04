@@ -268,14 +268,42 @@ function setMeta() {
   if (screenMeta) screenMeta.textContent = line;
 }
 function cfgQuery() {
+  const apt = currentApt();
   const p = new URLSearchParams();
-  p.set("apt", currentApt()[0]);
+  p.set("apt", apt[0]);
+  p.set("lat", String(apt[2]));
+  p.set("lon", String(apt[3]));
   p.set("view", shownView());
   p.set("list", listStyle);
   p.set("theme", theme);
   p.set("r", String(radiusKm));
-  if (!runwaysOn) p.set("rwy", "0");
+  p.set("rwy", runwaysOn ? "1" : "0");
+  p.set("gnd", includeGround ? "1" : "0");
+  p.set("n", String(maxN));
+  p.set("rot", String(rotateS));
+  ["air", "ga", "biz", "heli"].forEach((k) => p.set(k, want[k] ? "1" : "0"));
+  if (followAl) p.set("al", followAl);
+  if (followFlt) p.set("flt", followFlt);
   return p.toString();
+}
+/* IP del equipo: viene en el QR que muestra el monitor (?pico=192.168.x.x). */
+const PICO_IP = (function () {
+  const v = new URLSearchParams(location.search).get("pico") || "";
+  return /^[0-9.]{7,15}$/.test(v) ? v : "";
+})();
+function setupPicoSave() {
+  if (!PICO_IP || document.getElementById("picoSave")) return;
+  const inst = document.getElementById("tabInst");
+  if (inst) inst.hidden = true;          // el cliente no ve la instalacion
+  const box = document.createElement("div");
+  box.innerHTML = '<button type="button" class="primary" id="picoSave">Guardar en el radar</button>' +
+    '<p class="rwy-note" id="picoNote">Equipo en ' + PICO_IP + '. Guarda y el monitor cambia al toque.</p>';
+  const tabs = document.querySelector(".tabs");
+  if (tabs && tabs.parentNode) tabs.parentNode.insertBefore(box, tabs.nextSibling);
+  document.getElementById("picoSave").addEventListener("click", () => {
+    grabForm();
+    location.href = "http://" + PICO_IP + "/save?" + cfgQuery();
+  });
 }
 function installQuery() {
   const L = layoutOf(spec);
@@ -403,6 +431,7 @@ function applyQuery() {
   }
   if (q.get("install") === "1" || q.get("tab") === "install") showPane("tabInst");
   else if (q.get("tab") === "client") showPane("tabCfg");
+  setupPicoSave();
 }
 
 function isReg(s) {
