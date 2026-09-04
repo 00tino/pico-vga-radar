@@ -114,12 +114,14 @@ def draw(cfg, sky, page=0):
     col = ui.THEMES.get(cfg.get("theme"), ui.YELLOW)
     ui.clear()
     view = cfg.get("view", "hybrid")
+    # Todo se dibuja dentro del area que el monitor realmente muestra.
+    x0, y0, w, h = ui.X0, ui.Y0, ui.AW, ui.AH
     if view == "radar":
-        draw_radar(cfg, sky, 0, 0, ui.W, ui.H, col)
+        draw_radar(cfg, sky, x0, y0, w, h, col)
     elif view == "wall":
-        draw_list(cfg, sky, 0, 0, ui.W, ui.H, col, page)
+        draw_list(cfg, sky, x0, y0, w, h, col, page)
     else:
-        split = int(ui.W * 0.54)
-        draw_radar(cfg, sky, 0, 0, split, ui.H, col)
-        ui.screen().draw_fastVline(split, 0, ui.H - 1, col)
-        draw_list(cfg, sky, split + 1, 0, ui.W - split - 1, ui.H, col, page)
+        split = x0 + int(w * 0.54)
+        draw_radar(cfg, sky, x0, y0, split - x0, h, col)
+        ui.screen().draw_fastVline(split, y0, y0 + h - 1, col)
+        draw_list(cfg, sky, split + 1, y0, x0 + w - split - 1, h, col, page)

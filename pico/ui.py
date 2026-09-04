@@ -15,6 +15,26 @@ WHITE = 0b111
 W = 800
 H = 600
 
+# Area util: lo que el monitor realmente muestra. Los margenes salen de
+# install.json, porque cada monitor recorta distinto. En el ViewSonic VA1703wb
+# de prueba se pierden las ultimas ~20 filas.
+def _margen():
+    try:
+        import json
+        m = (json.load(open("install.json")).get("margen") or {})
+    except Exception:
+        m = {}
+    return (int(m.get("arriba", 0)), int(m.get("abajo", 0)),
+            int(m.get("izquierda", 0)), int(m.get("derecha", 0)))
+
+_T, _B, _L, _R = _margen()
+X0 = _L                 # primera columna visible
+Y0 = _T                 # primera fila visible
+X1 = W - 1 - _R         # ultima columna visible
+Y1 = H - 1 - _B         # ultima fila visible
+AW = X1 - X0 + 1        # ancho util
+AH = Y1 - Y0 + 1        # alto util
+
 THEMES = {
     "crt_amber": YELLOW,
     "crt_green": GREEN,
@@ -48,7 +68,7 @@ def text(x, y, msg, col=WHITE):
 
 
 def center(y, msg, col=WHITE, char_w=10):
-    text(max(2, (W - len(msg) * char_w) // 2), y, msg, col)
+    text(max(X0 + 2, X0 + (AW - len(msg) * char_w) // 2), y, msg, col)
 
 
 def draw_qr(text_url, x, y, scale=8, col=WHITE):
