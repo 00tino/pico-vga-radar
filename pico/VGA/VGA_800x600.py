@@ -17,6 +17,22 @@ _SM_OFFSET = 0 if PIO_UNIT == 0 else 4          # ids de StateMachine
 _TXF2 = _PIO_BASE + 0x18                        # FIFO TX del state machine 2
 _DREQ_TX2 = 2 if PIO_UNIT == 0 else 10          # DREQ del TX2 de ese PIO
 
+# ---------------------------------------------------------------------------
+# A que pines de la placa sale el video. Los tres colores tienen que estar en
+# pines CONSECUTIVOS: el PIO los escribe de a tres con una sola instruccion.
+# Los dos sincronismos pueden ir en cualquier pin suelto.
+#
+# Cableado de Valentino (probado 2026-09-04, da imagen):
+COLOR_BASE_PIN = 0      # rojo=GP0, verde=GP1, azul=GP2
+HSYNC_PIN = 16
+VSYNC_PIN = 17
+#
+# Cableado del manual (pico/CABLEADO.md), los seis pines juntos:
+#   COLOR_BASE_PIN = 18   -> rojo=GP18, verde=GP19, azul=GP20
+#   HSYNC_PIN = 22
+#   VSYNC_PIN = 21
+# ---------------------------------------------------------------------------
+
 class screen_800x600:
     def __init__(self):
         # VGA settings
@@ -30,11 +46,11 @@ class screen_800x600:
         self.SM1_FREQ=150000000 # Vertical sync SM - Max freq (timings are driven by Hsync SM0 IRQ)
         self.SM2_FREQ=80000000  # Pixel clock (twice the expected because the jump loop in the PIO state machine adds a cycle)
         # Pinout
-        self.H_PIN = Pin(22)
-        self.V_PIN = Pin(21)
-        self.RED_PIN = Pin(18,mode=Pin.ALT,alt=Pin.ALT_SIO)
-        self.GREEN_PIN = Pin(19,mode=Pin.ALT,alt=Pin.ALT_SIO)
-        self.BLUE_PIN = Pin(20)
+        self.H_PIN = Pin(HSYNC_PIN)
+        self.V_PIN = Pin(VSYNC_PIN)
+        self.RED_PIN = Pin(COLOR_BASE_PIN,mode=Pin.ALT,alt=Pin.ALT_SIO)
+        self.GREEN_PIN = Pin(COLOR_BASE_PIN+1,mode=Pin.ALT,alt=Pin.ALT_SIO)
+        self.BLUE_PIN = Pin(COLOR_BASE_PIN+2)
         # Building the Data array buffer ###################################################################
         self.buffer_initialize()
         # Done building the Data array buffer

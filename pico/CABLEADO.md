@@ -30,3 +30,25 @@ Los pines 5, 6, 7, 8 y 10 del VGA van todos juntos a un mismo GND de la Pico.
 - El modo de video es **800x600 a 60 Hz**. Cualquier monitor VGA lo toma.
 - Si el monitor dice "sin señal", el problema casi siempre es el GND o que
   HSYNC y VSYNC están cruzados (13 y 14).
+
+
+---
+
+## Cableado real de la primera unidad (probado 2026-09-04)
+
+La primera unidad quedó armada sobre el esquema viejo de 5 bits por color, y
+funciona. Los pines de video se eligen con tres constantes arriba de
+`VGA/VGA_800x600.py`:
+
+```python
+COLOR_BASE_PIN = 0      # rojo=GP0, verde=GP1, azul=GP2
+HSYNC_PIN = 16
+VSYNC_PIN = 17
+```
+
+Los tres colores tienen que estar en pines **consecutivos**: el PIO los escribe
+de a tres con una sola instrucción. Los sincronismos pueden ir en cualquier pin.
+
+**Las tres resistencias de color tienen que ser del mismo valor.** Si no, los
+colores salen con brillos distintos: con una resistencia alta en el azul, el
+cyan se ve verde oscuro y el blanco se ve naranja.
