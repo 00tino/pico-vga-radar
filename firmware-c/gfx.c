@@ -119,3 +119,28 @@ int gfx_ancho_texto(const char *s, int escala) {
 int gfx_texto_centrado(int cx, int y, const char *s, uint8_t c, int escala) {
     return gfx_texto(cx - gfx_ancho_texto(s, escala) / 2, y, s, c, escala);
 }
+
+static const uint8_t bayer4[16] = {
+     0,  8,  2, 10,
+    12,  4, 14,  6,
+     3, 11,  1,  9,
+    15,  7, 13,  5,
+};
+
+// Sube un escalon el canal cuando el resto supera el umbral de la celda.
+static inline uint8_t canal(int v, int max, int umbral) {
+    int t = v * max * 16 / 255;
+    int n = t / 16 + ((t % 16) > umbral ? 1 : 0);
+    return (uint8_t)(n > max ? max : n);
+}
+
+uint8_t gfx_rgb_dither(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
+    int u = bayer4[(y & 3) * 4 + (x & 3)];
+    return vga_color(canal(r, 7, u), canal(g, 7, u), canal(b, 3, u));
+}
+
+void gfx_rect_dither(int x, int y, int an, int al, uint8_t r, uint8_t g, uint8_t b) {
+    for (int j = 0; j < al; j++)
+        for (int i = 0; i < an; i++)
+            gfx_punto(x + i, y + j, gfx_rgb_dither(x + i, y + j, r, g, b));
+}

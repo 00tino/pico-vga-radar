@@ -30,3 +30,10 @@ int  gfx_ancho_texto(const char *s, int escala);
 int  gfx_texto_centrado(int cx, int y, const char *s, uint8_t c, int escala);
 
 #endif
+
+// --- Color con dithering ordenado ---------------------------------
+// Con 3-3-2 bits un degradado da bandas y vira de tono. El dither reparte
+// el error entre pixeles vecinos usando una matriz de Bayer 4x4, asi que
+// hace falta la posicion en pantalla para elegir el umbral.
+uint8_t gfx_rgb_dither(int x, int y, uint8_t r, uint8_t g, uint8_t b);
+void gfx_rect_dither(int x, int y, int an, int al, uint8_t r, uint8_t g, uint8_t b);

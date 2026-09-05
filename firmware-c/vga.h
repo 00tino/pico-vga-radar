@@ -22,8 +22,12 @@ static inline uint8_t vga_color(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 // Desde 0-255 por canal, como se piensa un color en la web.
+// Redondea en vez de truncar: con >>5 un 232 caia en el nivel 7 (=255) y
+// todos los colores salian mas claros y desbalanceados de lo pedido.
 static inline uint8_t vga_rgb(uint8_t r, uint8_t g, uint8_t b) {
-    return vga_color(r >> 5, g >> 5, b >> 6);
+    return vga_color((uint8_t)((r * 7 + 127) / 255),
+                     (uint8_t)((g * 7 + 127) / 255),
+                     (uint8_t)((b * 3 + 127) / 255));
 }
 
 extern uint8_t vga_fb[VGA_ANCHO * VGA_ALTO];

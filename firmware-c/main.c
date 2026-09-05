@@ -82,14 +82,19 @@ int main(void) {
                  (i & 1) ? tenue : apagado);
     gfx_texto(450, 372, "contorno y relleno", apagado, 1);
 
-    // --- RAMPA DE COLOR: 64 escalones del ambar al negro ---
-    gfx_texto(20, 410, "RAMPA", tenue, 1);
-    for (int i = 0; i < 64; i++) {
-        int n = 255 * i / 63;
-        gfx_rect_lleno(80 + i * 8, 408, 8, 20,
-                       vga_rgb(0xe8 * n / 255, 0xb8 * n / 255, 0x6d * n / 255));
+    // --- RAMPA DE COLOR: la misma ambar dos veces, para comparar ---
+    // Arriba tal cual la cuantiza el hardware (3-3-2 bits): se ven bandas y
+    // vira de tono. Abajo con dithering ordenado: deberia verse pareja.
+    gfx_texto(20, 408, "RAMPA", tenue, 1);
+    gfx_texto(20, 424, "cruda", apagado, 1);
+    gfx_texto(20, 440, "dither", apagado, 1);
+    for (int i = 0; i < 128; i++) {
+        int n = 255 * i / 127;
+        uint8_t r = 0xe8 * n / 255, g = 0xb8 * n / 255, b = 0x6d * n / 255;
+        gfx_rect_lleno(80 + i * 4, 420, 4, 16, vga_rgb(r, g, b));
+        gfx_rect_dither(80 + i * 4, 438, 4, 16, r, g, b);
     }
-    gfx_texto_centrado(320, 438, "si la rampa se ve pareja, los 256 colores estan bien", apagado, 1);
+    gfx_texto_centrado(320, 458, "si la de abajo se ve pareja, el dither sirve", apagado, 1);
 
     printf("patron dibujado\n");
     while (true) {
