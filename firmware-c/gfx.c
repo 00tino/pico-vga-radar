@@ -120,19 +120,71 @@ void gfx_circulo_lleno(int cx, int cy, int r, uint8_t c) {
 }
 
 // La fuente guarda cada caracter como 7 columnas de 14 bits: bit 0 arriba.
+//
+// Agrandada, la letra no se dibuja como bloques cuadrados: eso deja las
+// diagonales y las curvas escalonadas y se ve feo justo donde mas se mira.
+// Se usa la idea de Scale2x: donde dos trazos se cruzan en angulo recto queda
+// un rincon, y ese rincon se rellena con un cuarto de bloque. La escalera se
+// convierte en diagonal sin tocar el grosor del trazo. No inventa colores
+// intermedios, que con 256 colores y fondos de cualquier tono saldrian
+// sucios: la letra sigue siendo de un solo color.
 static int dibujar_char(int x, int y, char ch, uint8_t c, int escala) {
     if (ch < 32 || ch > 127) ch = '?';
     const uint8_t *g = &gfx_fuente[(ch - 32) * 15];
     int avance = g[0];
-    for (int col = 0; col < 7; col++) {
-        uint16_t bits = (uint16_t)(g[1 + col * 2] | (g[2 + col * 2] << 8));
-        if (!bits) continue;
-        for (int fila = 0; fila < GFX_FUENTE_ALTO; fila++) {
-            if (!(bits & (1u << fila))) continue;
-            if (escala == 1) gfx_punto(x + col, y + fila, c);
-            else gfx_rect_lleno(x + col * escala, y + fila * escala, escala, escala, c);
+
+    uint16_t col[7];
+    for (int i = 0; i < 7; i++)
+        col[i] = (uint16_t)(g[1 + i * 2] | (g[2 + i * 2] << 8));
+
+    #define ENC(cc, ff) ((cc) >= 0 && (cc) < 7 && (ff) >= 0 && (ff) < GFX_FUENTE_ALTO \
+                         && (col[cc] & (1u << (ff))))
+
+    // Con escala impar el bloque no se parte en cuatro partes iguales, asi
+    // que ahi se dibuja macizo como siempre.
+    const int mitad = escala / 2;
+    const int suavizar = (escala >= 2 && (escala % 2) == 0);
+
+    // Camino rapido, el de siempre, para el texto chico: es el 99 por ciento
+    // de lo que se dibuja y no hay que hacerle nada.
+    if (!suavizar) {
+        for (int cc = 0; cc < 7; cc++) {
+            if (!col[cc]) continue;
+            for (int ff = 0; ff < GFX_FUENTE_ALTO; ff++) {
+                if (!(col[cc] & (1u << ff))) continue;
+                if (escala == 1) gfx_punto(x + cc, y + ff, c);
+                else gfx_rect_lleno(x + cc * escala, y + ff * escala, escala, escala, c);
+            }
+        }
+        return avance * escala;
+    }
+
+    for (int cc = 0; cc < 7; cc++) {
+        // Si ni esta columna ni las de al lado tienen nada, no hay rincon que
+        // rellenar y no hay para que recorrerla.
+        if (!col[cc] && !(cc > 0 && col[cc - 1]) && !(cc < 6 && col[cc + 1])) continue;
+        for (int ff = 0; ff < GFX_FUENTE_ALTO; ff++) {
+            const int px = x + cc * escala, py = y + ff * escala;
+
+            if (col[cc] & (1u << ff)) {
+                gfx_rect_lleno(px, py, escala, escala, c);
+                continue;
+            }
+            // Apagado: se le rellena el cuarto que cierra un escalon, o sea
+            // cuando los dos vecinos que tocan esa esquina estan prendidos.
+            // Rellenar los rincones y no comer las puntas es lo que suaviza
+            // sin adelgazar: comiendolas, con un trazo de un pixel de ancho
+            // la letra quedaba mordida y con agujeros.
+            const int arr = ENC(cc, ff - 1) != 0, aba = ENC(cc, ff + 1) != 0;
+            const int izq = ENC(cc - 1, ff) != 0, der = ENC(cc + 1, ff) != 0;
+            if (arr && izq) gfx_rect_lleno(px, py, mitad, mitad, c);
+            if (arr && der) gfx_rect_lleno(px + mitad, py, escala - mitad, mitad, c);
+            if (aba && izq) gfx_rect_lleno(px, py + mitad, mitad, escala - mitad, c);
+            if (aba && der) gfx_rect_lleno(px + mitad, py + mitad,
+                                           escala - mitad, escala - mitad, c);
         }
     }
+    #undef ENC
     return avance * escala;
 }
 

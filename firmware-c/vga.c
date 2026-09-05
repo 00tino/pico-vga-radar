@@ -22,10 +22,12 @@ static uint8_t *const fb_ptr = vga_fb;
 // Llega una vez por cuadro, durante el borrado vertical: el momento en que la
 // maquina de pixeles esta parada esperando y se puede tocar sin romper nada.
 volatile uint32_t vga_cuadros = 0;
+volatile uint32_t vga_us_vsync = 0;
 
 static void vga_cuadro_nuevo(void) {
     pio_interrupt_clear(VGA_PIO, 0);
     vga_cuadros++;
+    vga_us_vsync = time_us_32();
     dma_channel_abort(dma_datos);
     pio_sm_clear_fifos(VGA_PIO, 2);
     dma_channel_set_read_addr(dma_datos, vga_fb, true);

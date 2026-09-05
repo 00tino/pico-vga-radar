@@ -57,6 +57,10 @@ bool radar_pistas_on = true;
 
 // Cabecera en uso: la que mas aviones tiene alineados aproximando. Se calcula
 // una vez por cuadro en radar_avanzar y se dibuja despues.
+// Se prende cuando cambia el texto del encabezado, o al cambiar de vista: es
+// lo unico que obliga a rehacerlo. Rehacerlo en cada cuadro era casi todo lo
+// que costaban las dos bandas de arriba, que son las de menos margen.
+static int encabezado_sucio = 1;
 static const pista_t *senda_pista;
 static int senda_es_b;            // 0 = cabecera A, 1 = cabecera B
 static int senda_hay;
@@ -91,6 +95,7 @@ void radar_marcar_sucio(void) {
     // quedaban restos de la anterior: pedazos del mapa detras de las
     // tarjetas y al costado del scope.
     limpiar_todo = 1;
+    encabezado_sucio = 1;
 }
 
 uint8_t radar_tono(int alpha255);
@@ -242,6 +247,20 @@ void radar_avanzar(void) {
     ordenar_por_cercania();
     elegir_senda();
 
+    // Quien esta pasando sobre la casa. Se elige el mas cercano dentro del
+    // radio, y se sostiene hasta que se va: el aviso de abajo a la izquierda
+    // es la razon de ser de la casa, y hasta ahora nunca se prendia porque
+    // esto no se calculaba en ningun lado.
+    casa_encima = -1;
+    if (radar_casa_on) {
+        int mejor = radar_casa_km + 1;
+        for (int i = 0; i < radar_cantidad; i++) {
+            int d = geo_km(radar_aviones[i].lat, radar_aviones[i].lon,
+                           radar_casa_lat, radar_casa_lon);
+            if (d <= radar_casa_km && d < mejor) { mejor = d; casa_encima = i; }
+        }
+    }
+
     // El carrusel cambia de pagina cada tantos segundos, no cada cuadro, y la
     // lista se congela mientras la pagina esta a la vista: si se reordenara
     // en vivo las tarjetas se irian cambiando de a una, que es lo que pasaba.
@@ -286,9 +305,27 @@ static void radar_pintar(void) {
     // 54 por ciento del ancho y las tarjetas el resto, igual que left=0.54.
     const int ANS = (radar_vista == VISTA_HIBRIDA) ? AN * 54 / 100 : AN;
 
+    // El encabezado no cambia casi nunca, y borrarlo y rehacerlo en cada
+    // cuadro era casi todo lo que costaban las dos bandas de arriba, que son
+    // las que menos margen tienen contra el haz. Se rehace solo cuando su
+    // texto cambia.
+    char meta[72];
+    snprintf(meta, sizeof meta, "%d en radar - %d km", radar_cantidad, radar_apt.radio_km);
+    static char meta_visto[72];
+    if (gfx_banda_y0 == 0 && strncmp(meta, meta_visto, sizeof meta)) {
+        snprintf(meta_visto, sizeof meta_visto, "%s", meta);
+        encabezado_sucio = 1;
+    }
+    const int y_bajo_enc = Y + 30;
+
     // Se limpia solo la banda que se esta dibujando, y solo el ancho del
     // scope: la columna de las tarjetas queda como estaba.
-    vga_limpiar_rect(0, gfx_banda_y0, X + ANS + 4, gfx_banda_y1, fondo);
+    {
+        int ly0 = gfx_banda_y0;
+        if (!encabezado_sucio && ly0 < y_bajo_enc) ly0 = y_bajo_enc;
+        if (ly0 <= gfx_banda_y1)
+            vga_limpiar_rect(0, ly0, X + ANS + 4, gfx_banda_y1, fondo);
+    }
     const int cx = X + ANS / 2;
     const int cy = Y + 30 + (AL - 30) * 52 / 100;
     const int semi = (ANS / 2 < (AL - 30) * 52 / 100 ? ANS / 2 : (AL - 30) * 52 / 100);
@@ -299,11 +336,9 @@ static void radar_pintar(void) {
     // banda lo dejaba llegando tarde, y titilaba.
     // Barra de arriba con el resumen, igual que la web.
     {
-        char meta[72];
-        snprintf(meta, sizeof meta, "%d en radar - %d km", radar_cantidad, radar_apt.radio_km);
         // En la vista hibrida la barra ocupa solo el ancho del scope: si no,
         // el resumen de la derecha cae encima de la primera tarjeta.
-        encabezado(meta, ANS);
+        if (encabezado_sucio) encabezado(meta, ANS);
         // El aviso va con el encabezado, no al final: esta en las filas de
         // arriba y dibujarlo despues de los anillos lo dejaba llegando tarde,
         // cortado por la mitad.
@@ -485,7 +520,6 @@ static void radar_pintar(void) {
     // izquierda, hasta que se va del radio. La casa se dibuja siempre, para
     // saber donde esta respecto del aeropuerto.
     if (radar_casa_on) {
-        const int hay_encima = (casa_encima >= 0);
 
         int hx = PROY_X(radar_casa_lat, radar_casa_lon);
         int hy = PROY_Y(radar_casa_lat, radar_casa_lon);
@@ -496,11 +530,9 @@ static void radar_pintar(void) {
             gfx_rect(hx - 4, hy - 2, 9, 7, c3);
             gfx_linea(hx - 6, hy - 2, hx, hy - 7, c3);
             gfx_linea(hx, hy - 7, hx + 6, hy - 2, c3);
-            // El nombre solo cuando no hay nadie encima: con el aviso del
-            // avion se encimaban los dos textos.
-            if (!hay_encima) gfx_texto(hx + 10, hy - 6, radar_casa_nombre, c3, 1);
-            // El radio de aviso.
-            gfx_circulo(hx, hy, radar_casa_km * R / radar_apt.radio_km, radar_tono(70));
+            // Ni nombre ni circulo de radio: la casita sola se entiende, y
+            // el circulo ensuciaba el scope. Quien esta encima se sabe por el
+            // color del avion y por el aviso de abajo a la izquierda.
         }
 
         const int encima = casa_encima;
@@ -530,8 +562,9 @@ static void radar_pintar(void) {
         }
     }
 
-    if (radar_vista != VISTA_HIBRIDA || !tarjetas_sucias) return;
-    radar_pintar_tarjetas(X + ANS + 8, Y + 32, AN - ANS - 16, AL - 36, 0);
+    // Las tarjetas NO se dibujan aca: ver radar_cuadro. Estan arriba, y
+    // dibujarlas mientras el haz esta llegando arriba lo hacia alcanzar al
+    // dibujo por hasta dos milisegundos: esa franja salia rota y titilando.
 }
 
 // La columna, o la pared entera. Muestra la pagina que toca del carrusel, o
@@ -550,7 +583,7 @@ void radar_pintar_tarjetas(int x, int y, int an, int al, int grande) {
         // Cuatro pasadas, una por cuadro, para no hacer toda la tabla junta.
         if (tarjeta_en_curso == 0)
             vga_limpiar_rect(x - 4, gfx_banda_y0, an + 8, gfx_banda_y1, radar_tono(0));
-        fids_dibujar(x, y, an, al, v, n, tarjeta_en_curso % 4, 4);
+        fids_dibujar(x, y, an, al, v, n, tarjeta_en_curso % 8, 8);
         return;
     }
     const int sep = 6;
@@ -593,12 +626,20 @@ static void pintar_pared(void) {
 }
 
 uint32_t radar_us_banda[RADAR_BANDAS];
+int32_t radar_us_antes;
+int32_t radar_margen_banda[RADAR_BANDAS] = {
+    0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff,
+    0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff };
 
 // Las bandas no son todas iguales: arriba son finas y abajo anchas.
 // Al arrancar solo se lleva de ventaja el borrado vertical, mil cuatrocientos
 // microsegundos, y una banda pareja de cuarenta y ocho filas ya costaba mas
 // que eso. Cuanto mas abajo, mas ventaja acumulada y menos falta afinar.
-static const uint8_t BANDA_ALTO[RADAR_BANDAS] = { 24, 24, 32, 40, 56, 64, 64, 64, 56, 56 };
+// Finas arriba y anchas abajo: al arrancar el cuadro el dibujo solo se lleva
+// de ventaja el borrado vertical (1400 us), y despues va ganando terreno. La
+// segunda banda es la mas ajustada de todas, asi que se le dan 8 px de mas a
+// costa de la ultima, que sobra con 6500 us de margen.
+static const uint8_t BANDA_ALTO[RADAR_BANDAS] = { 24, 40, 32, 40, 56, 64, 64, 56, 56, 48 };
 
 // El mapa de la vista de seguimiento se dibuja entero una sola vez y despues
 // no se toca: son 30 ms de trabajo, imposible de repetir sesenta veces por
@@ -653,6 +694,10 @@ void radar_cuadro(void) {
         return;
     }
 
+    {   // Cuanto se comio el trabajo de antes de empezar a dibujar.
+        int32_t usado = (int32_t)(time_us_32() - vga_us_vsync);
+        if (usado > radar_us_antes) radar_us_antes = usado;
+    }
     int y0 = 0;
     for (int b = 0; b < RADAR_BANDAS; b++) {
         int y1 = y0 + BANDA_ALTO[b] - 1;
@@ -661,18 +706,46 @@ void radar_cuadro(void) {
         uint32_t tb = time_us_32();
         switch (radar_vista) {
             case VISTA_LOGOS:  { void logos_pantalla_pintar(void); logos_pantalla_pintar(); } break;
-            case VISTA_PARED:  pintar_pared(); break;
+            case VISTA_PARED:  break;   // se dibuja despues del bucle, ver abajo
             case VISTA_SEGUIR:
             case VISTA_SEGUIR_HIBRIDA: break;   // se dibuja aparte, ver abajo
             default:           radar_pintar(); break;
         }
         radar_us_banda[b] = time_us_32() - tb;
+        if (y1 >= VGA_ALTO - 1) encabezado_sucio = 0;
+        // Margen contra el haz: cuanto falta para que llegue al final de esta
+        // banda, en el momento en que se termino de dibujar. Si da negativo,
+        // el haz ya paso por ahi y esa franja sale rota.
+        {
+            int32_t haz = 1400 + (int32_t)((int64_t)(y1 + 1) * 15200 / VGA_ALTO);
+            int32_t margen = haz - (int32_t)(time_us_32() - vga_us_vsync);
+            if (margen < radar_margen_banda[b]) radar_margen_banda[b] = margen;
+        }
         y0 = y1 + 1;
     }
     gfx_banda(0, VGA_ALTO - 1);
+
+    // La tarjeta que toca se dibuja recien ahora, con el cuadro ya pintado y
+    // el haz abajo del todo: la columna de tarjetas esta arriba, asi que el
+    // haz ya paso por ahi y lo que se escriba se vera entero en el cuadro que
+    // viene. Mientras estaba adentro del bucle de bandas costaba mas de lo
+    // que el haz tardaba en llegar y rompia las bandas 1 a 7.
+    // La pared va por el mismo camino: su tabla esta arriba y dibujarla
+    // mientras el haz llega arriba lo hacia alcanzar al dibujo por 800 us.
+    // Repartida en ocho pasadas, cada una cuesta poco y entra holgada aca.
+    if (radar_vista == VISTA_PARED) pintar_pared();
+
+    if (radar_vista == VISTA_HIBRIDA && tarjetas_sucias) {
+        const int X = area.x, Y = area.y, AN = area.an, AL = area.al;
+        const int ANS = AN * 54 / 100;
+        radar_pintar_tarjetas(X + ANS + 8, Y + 32, AN - ANS - 16, AL - 36, 0);
+    }
+
     if (tarjetas_sucias) {
+        // Ocho pasadas y no cuatro: con cuatro, la pasada que cae en las
+        // bandas de arriba costaba mas de lo que el haz tardaba en llegar.
         const int pasos = (radar_lista == LISTA_FIDS)
-                        ? 4 : (radar_tarjetas < 1 ? 1 : radar_tarjetas);
+                        ? 8 : (radar_tarjetas < 1 ? 1 : radar_tarjetas);
         if (++tarjeta_en_curso >= pasos) { tarjetas_sucias = 0; tarjeta_en_curso = 0; }
     }
 }

@@ -251,6 +251,25 @@ Pasó dos veces en esta sesión. Síntomas y qué hacer:
     sobre el mismo buffer que el monitor lee, así que **hay que pintar por
     bandas de arriba hacia abajo**, cada una antes de que el haz llegue. Sin
     esto, lo que se dibuja último arriba nunca se ve.
+10b. **Lo que va arriba hay que dibujarlo cuando el haz esta abajo.** Las
+    tarjetas y la tabla del formato aeropuerto estan en la mitad de arriba, y
+    se dibujaban adentro del bucle de bandas, o sea justo cuando el haz venia
+    llegando ahi: las alcanzaba por hasta 2 ms y esas franjas salian rotas y
+    titilando. **Esas eran las "franjas negras" que Valentino veia.** Ahora se
+    dibujan despues del bucle, con el haz abajo del todo: lo que se escribe se
+    ve entero en el cuadro siguiente.
+
+10c. **El encabezado no se redibuja si no cambio.** Borrarlo y rehacerlo cada
+    cuadro era casi todo lo que costaban las dos bandas de arriba, que son las
+    que menos margen tienen.
+
+10d. **Medir el margen contra el haz, no el tiempo por banda.** Comparar cada
+    banda contra 1520 us no dice nada: las bandas son de distinto alto y el
+    dibujo arranca con la ventaja del borrado vertical. Lo que importa es
+    cuanto falta para que el haz llegue al final de la banda en el momento en
+    que se termino de dibujar. El firmware lo imprime por escena; en negativo
+    esa franja se rompe.
+
 11. **Las bandas no pueden ser todas iguales.** Al arrancar sólo se lleva de
     ventaja el borrado vertical (1400 µs) y una banda pareja ya costaba más.
     Ahora son finas arriba y anchas abajo: `BANDA_ALTO` en `radar.c`.
@@ -271,6 +290,15 @@ Pasó dos veces en esta sesión. Síntomas y qué hacer:
     para ella sola. Cada vista limpia sólo su parte y quedaban restos.
 18. **`vga_rgb` redondea, no trunca.** Y **el azul no se dithera**: tiene 4
     niveles, escalones de 85, y un píxel encendido en zona oscura se ve sucio.
+
+18b. **Agrandar la letra repitiendo cada pixel deja todo escalonado.** Se
+    rellenan los rincones con un cuarto de bloque (la idea de Scale2x): la
+    escalera se vuelve diagonal sin adelgazar el trazo. **Comer las puntas en
+    vez de rellenar los rincones no sirve**: con un trazo de un pixel la letra
+    queda mordida y con agujeros. Y el camino de la letra chica tiene que
+    seguir salteando las columnas vacias: sin eso, el texto chico (que es
+    casi todo lo que se dibuja) se encarece y el haz vuelve a alcanzar al
+    dibujo.
 
 ### Mapa
 
@@ -376,6 +404,15 @@ sobre fondo oscuro parecen vacíos. Por eso la pantalla de logos les pone marco.
 
 Esta es la lista viva de Valentino. Lo de arriba es lo urgente.
 
+18b. **Agrandar la letra repitiendo cada pixel deja todo escalonado.** Se
+    rellenan los rincones con un cuarto de bloque (la idea de Scale2x): la
+    escalera se vuelve diagonal sin adelgazar el trazo. **Comer las puntas en
+    vez de rellenar los rincones no sirve**: con un trazo de un pixel la letra
+    queda mordida y con agujeros. Y el camino de la letra chica tiene que
+    seguir salteando las columnas vacias: sin eso, el texto chico (que es
+    casi todo lo que se dibuja) se encarece y el haz vuelve a alcanzar al
+    dibujo.
+
 ### Mapas (dijo "urgente, sí o sí")
 
 1. **El mapa de Ezeiza a Miami quedó muy raro** — *arreglado y verificado*:
@@ -404,6 +441,18 @@ Esta es la lista viva de Valentino. Lo de arriba es lo urgente.
 6. **El cartel dice sólo el número de cabecera** ("11 EN USO") — *hecho*.
 
 ### La casa
+
+6b. **El cartel de "sobre mi casa" no aparecía nunca** — *arreglado*: la
+    variable `casa_encima` se leía en tres lugares y **no se le asignaba en
+    ninguno**. Ahora se calcula en `radar_avanzar()`.
+
+6c. **Fuera el círculo del radio de la casa y el rótulo "CASA"** — *hecho*:
+    queda sólo la casita. El círculo ensuciaba el scope.
+
+6d. **Fuera el círculo alrededor del avión en el mapa** — *hecho*: llegando al
+    destino se juntaba con los dos anillos del aeropuerto y se veían tres
+    círculos y un triángulo amontonados. El rótulo del avión ahora va debajo y
+    el del aeropuerto arriba.
 
 7. **El rumbo del avión sobre la casa cambiaba todo el tiempo** — *arreglado*:
    el vuelo de prueba ahora pasa recto con rumbo fijo, como uno de verdad.

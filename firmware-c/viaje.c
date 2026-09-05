@@ -426,7 +426,9 @@ void radar_viaje_avion(void) {
 
         int pxx = avion_x, pyy = avion_y;
         const uint8_t c = radar_tono(255);
-        gfx_circulo(pxx, pyy, 13, radar_tono(170));
+        // Sin circulo alrededor: cuando el avion llega al destino se juntaba
+        // con los dos anillos del aeropuerto y se veian tres circulos y un
+        // triangulo amontonados, sin entenderse nada.
         int t = trig_de_grados(ac->track);
         int s = trig_sen(t), co = trig_cos(t);
         #define RX(a, b) (pxx + ((a) * co - (b) * s) / TRIG_UNO)
@@ -434,6 +436,8 @@ void radar_viaje_avion(void) {
         gfx_triangulo_lleno(RX(0, -9), RY(0, -9), RX(6, 8), RY(6, 8), RX(-6, 8), RY(-6, 8), c);
         #undef RX
         #undef RY
-        gfx_texto(pxx + 16, pyy - 8, ac->vuelo, c, 1);
+        // El rotulo va por debajo, y el del aeropuerto por arriba: llegando
+        // al destino los dos caian en el mismo renglon.
+        gfx_texto(pxx + 12, pyy + 4, ac->vuelo, c, 1);
     
 }

@@ -217,9 +217,20 @@ int main(void) {
                us_peor > 15200 ? "  <-- SE PASA" : "");
         {
             extern uint32_t radar_us_banda[];
+            extern int32_t radar_margen_banda[];
             printf("    por banda (us):");
             for (int b = 0; b < 10; b++) printf(" %lu", (unsigned long)radar_us_banda[b]);
-            printf("   | el haz tarda 1520 us por banda\n");
+            printf("\n    margen contra el haz (us, el peor de la escena):");
+            int roto = 0;
+            for (int b = 0; b < 10; b++) {
+                printf(" %ld", (long)radar_margen_banda[b]);
+                if (radar_margen_banda[b] < 0) roto = 1;
+                radar_margen_banda[b] = 0x7fffffff;
+            }
+            printf("%s\n", roto ? "   <-- EL HAZ ALCANZA AL DIBUJO" : "");
+            extern int32_t radar_us_antes;
+            printf("    antes de dibujar se van %ld us\n", (long)radar_us_antes);
+            radar_us_antes = 0;
             extern int radar_senda_rumbo;
             if (radar_senda_rumbo >= 0)
                 printf("    cabecera en uso: rumbo verdadero %d (el numero de la pista es magnetico)\n", radar_senda_rumbo);

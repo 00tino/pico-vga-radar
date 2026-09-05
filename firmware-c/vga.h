@@ -37,6 +37,11 @@ extern uint8_t vga_fb[VGA_ANCHO * VGA_ALTO];
 // justo despues del borrado vertical y que no se parta la imagen.
 extern volatile uint32_t vga_cuadros;
 
+// Cuando empezo el borrado vertical del cuadro que se esta dibujando. Sirve
+// para saber por cuanto le gana el dibujo al haz en cada banda: si el haz lo
+// alcanza, esa franja de la pantalla queda rota y titila.
+extern volatile uint32_t vga_us_vsync;
+
 // Espera al proximo cuadro.
 static inline void vga_esperar_cuadro(void) {
     uint32_t n = vga_cuadros;
