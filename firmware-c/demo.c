@@ -5,21 +5,24 @@
 #include "trig.h"
 #include <string.h>
 
-static const struct { const char *vuelo, *al; int dlat, dlon, track, gs, alt; } SEMILLA[] = {
-    { "AR1301", "AR",  4200, -6100,  52, 430, 31000 },
-    { "LA7724",  "LA", -3100,  5200, 228, 390, 27000 },
-    { "AA954",   "AA",  7600,  2400, 195, 460, 35000 },
-    { "IB6841",  "IB", -6200, -4300,  15, 440, 33000 },
-    { "JJ8003",  "LA",  1200,  8100, 275, 410, 29000 },
-    { "AF228",   "AF", -8400,  1100,  78, 470, 37000 },
-    { "UA820",   "UA",  5300,  7200, 310, 420, 32000 },
-    { "AR1885",  "AR", -1800, -7600, 132, 300, 12000 },
-    { "AZ680",   "AZ",  8900, -2100, 168, 450, 36000 },
-    { "EK247",   "EK", -4700,  6800, 340, 480, 38000 },
-    { "QF17",    "QF",  2600, -8800,  95, 400, 30000 },
-    { "AR2451",  "AR",  -900,  1400, 240, 180,  4500 },
-    { "LA4090",  "LA",  1100,  -600,  62, 160,  2800 },
-    { "BA245",   "BA", -7300, -5400, 288, 455, 34000 },
+static const struct {
+    const char *vuelo, *al, *tipo, *ori, *des, *ciudad_o, *ciudad_d, *dep, *arr, *estado;
+    int dlat, dlon, track, gs, alt, pct;
+} SEMILLA[] = {
+    { "AR1301", "AR", "A330-200", "EZE", "MAD", "Buenos Aires", "Madrid",     "23:55", "16:20", "EN VUELO",    4200, -6100,  52, 430, 31000, 62 },
+    { "LA7724", "LA", "A320neo",  "SCL", "EZE", "Santiago",     "Buenos Aires","08:10", "11:05", "APROXIMANDO",-3100,  5200, 228, 390, 27000, 88 },
+    { "AA954",  "AA", "B788",     "MIA", "EZE", "Miami",        "Buenos Aires","22:40", "09:15", "EN VUELO",   7600,  2400, 195, 460, 35000, 74 },
+    { "IB6841", "IB", "A350-900", "MAD", "EZE", "Madrid",       "Buenos Aires","12:00", "21:30", "EN VUELO",  -6200, -4300,  15, 440, 33000, 55 },
+    { "JJ8003", "LA", "B777",     "GRU", "EZE", "Sao Paulo",    "Buenos Aires","07:25", "10:35", "EN VUELO",   1200,  8100, 275, 410, 29000, 41 },
+    { "AF228",  "AF", "B777-300", "CDG", "EZE", "Paris",        "Buenos Aires","23:20", "08:45", "EN VUELO",  -8400,  1100,  78, 470, 37000, 80 },
+    { "UA820",  "UA", "B789",     "IAH", "EZE", "Houston",      "Buenos Aires","21:50", "10:10", "EN VUELO",   5300,  7200, 310, 420, 32000, 67 },
+    { "AR1885", "AR", "B737-800", "COR", "EZE", "Cordoba",      "Buenos Aires","09:40", "10:55", "APROXIMANDO",-1800, -7600, 132, 300, 12000, 92 },
+    { "AZ680",  "AZ", "A330-900", "FCO", "EZE", "Roma",         "Buenos Aires","22:15", "08:30", "EN VUELO",   8900, -2100, 168, 450, 36000, 71 },
+    { "EK247",  "EK", "B777-300", "DXB", "EZE", "Dubai",        "Buenos Aires","03:30", "17:45", "EN VUELO",  -4700,  6800, 340, 480, 38000, 58 },
+    { "QF17",   "QF", "B789",     "SYD", "EZE", "Sydney",       "Buenos Aires","11:30", "12:15", "EN VUELO",   2600, -8800,  95, 400, 30000, 63 },
+    { "AR2451", "AR", "E190",     "AEP", "MDZ", "Buenos Aires", "Mendoza",     "10:05", "11:50", "EN VUELO",   -900,  1400, 240, 180,  4500, 12 },
+    { "LA4090", "LA", "A320",     "EZE", "LIM", "Buenos Aires", "Lima",        "10:20", "14:35", "EN TIERRA",  1100,  -600,  62, 160,     0,  2 },
+    { "BA245",  "BA", "B788",     "LHR", "EZE", "Londres",      "Buenos Aires","22:05", "09:40", "EN VUELO",  -7300, -5400, 288, 455, 34000, 76 },
 };
 
 void demo_init(void) {
@@ -33,6 +36,15 @@ void demo_init(void) {
         a->alt = SEMILLA[i].alt;
         strncpy(a->vuelo, SEMILLA[i].vuelo, sizeof a->vuelo - 1);
         strncpy(a->aerolinea, SEMILLA[i].al, 2);
+        strncpy(a->tipo, SEMILLA[i].tipo, sizeof a->tipo - 1);
+        strncpy(a->origen, SEMILLA[i].ori, 3);
+        strncpy(a->destino, SEMILLA[i].des, 3);
+        strncpy(a->ciudad_o, SEMILLA[i].ciudad_o, sizeof a->ciudad_o - 1);
+        strncpy(a->ciudad_d, SEMILLA[i].ciudad_d, sizeof a->ciudad_d - 1);
+        strncpy(a->dep, SEMILLA[i].dep, 5);
+        strncpy(a->arr, SEMILLA[i].arr, 5);
+        strncpy(a->estado, SEMILLA[i].estado, sizeof a->estado - 1);
+        a->pct = SEMILLA[i].pct;
         a->brillo = 82;
     }
 }

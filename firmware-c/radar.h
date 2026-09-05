@@ -18,6 +18,14 @@ typedef struct {
     char vuelo[9];
     char aerolinea[3];     // IATA, para el logo
     uint8_t brillo;        // 0-255, el fosforo que deja el barrido
+
+    // Lo que va en la tarjeta, igual que cardHTML() en la web.
+    char tipo[8];          // modelo, por ejemplo A333
+    char origen[4], destino[4];
+    char ciudad_o[18], ciudad_d[18];
+    char dep[6], arr[6];   // horarios hh:mm
+    uint8_t pct;           // avance del vuelo, 0-100
+    char estado[12];       // EN VUELO, APROXIMANDO, EN TIERRA
 } avion_t;
 
 typedef struct {
@@ -41,5 +49,9 @@ extern int radar_cantidad;
 void radar_init(void);
 void radar_avanzar(void);    // gira el barrido y apaga el fosforo
 void radar_cuadro(void);     // redibuja, por bandas de arriba hacia abajo
+
+// Vista: solo el scope, o el scope al 54% con las tarjetas al costado.
+typedef enum { VISTA_RADAR, VISTA_HIBRIDA } vista_t;
+extern vista_t radar_vista;
 
 #endif

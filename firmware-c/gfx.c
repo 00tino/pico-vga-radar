@@ -104,6 +104,9 @@ static int dibujar_char(int x, int y, char ch, uint8_t c, int escala) {
 
 int gfx_texto(int x, int y, const char *s, uint8_t c, int escala) {
     if (escala < 1) escala = 1;
+    // Fuera de la banda no se dibuja nada, pero hay que devolver el ancho.
+    if (y + GFX_FUENTE_ALTO * escala < gfx_banda_y0 || y > gfx_banda_y1)
+        return gfx_ancho_texto(s, escala);
     int x0 = x;
     for (; *s; s++) x += dibujar_char(x, y, *s, c, escala);
     return x - x0;
