@@ -34,6 +34,15 @@ void demo_init(void);
 
 // Cambia el aeropuerto del radar y vuelve a repartir el trafico alrededor.
 // Sin esto los aviones se quedan en las coordenadas del aeropuerto anterior.
+// La casa de prueba: a unos 12 km al noreste de Ezeiza, para que se vea que
+// no tiene por que estar pegada al aeropuerto.
+void demo_casa(void) {
+    radar_casa_on = true;
+    radar_casa_lat = radar_apt.lat + 800;
+    radar_casa_lon = radar_apt.lon + 900;
+    radar_casa_km = 3;
+}
+
 void demo_aeropuerto(const char *iata) {
     const aeropuerto_dato_t *a = aeropuerto_buscar(iata);
     if (!a) return;
@@ -42,6 +51,7 @@ void demo_aeropuerto(const char *iata) {
     radar_apt.lat = a->lat;
     radar_apt.lon = a->lon;
     demo_init();
+    demo_casa();
 }
 
 void demo_init(void) {
@@ -100,6 +110,17 @@ void demo_avanzar(void) {
         resto_lon[i] += paso * trig_sen(t) / TRIG_UNO;
         a->lat += resto_lat[i] / 1000; resto_lat[i] %= 1000;
         a->lon += resto_lon[i] / 1000; resto_lon[i] %= 1000;
+
+        // AR2451 da vueltas alrededor de la casa, para que se vea el aviso.
+        if (!strncmp(a->vuelo, "AR2451", 6) && radar_casa_on) {
+            static int vuelta = 0;
+            vuelta = (vuelta + 1) % 1024;
+            int t = trig_de_grados(vuelta * 360 / 1024);
+            a->lat = radar_casa_lat + (int32_t)(trig_cos(t) * 40 / TRIG_UNO);
+            a->lon = radar_casa_lon + (int32_t)(trig_sen(t) * 40 / TRIG_UNO);
+            a->track = (vuelta * 360 / 1024 + 90) % 360;
+            continue;
+        }
 
         // El vuelo que viene aproximando se manda de nuevo al principio de la
         // senda cuando pasa la cabecera, asi la aproximacion siempre se ve.

@@ -140,6 +140,7 @@ int main(void) {
 
     radar_init();
     demo_init();
+    { void demo_casa(void); demo_casa(); }
     printf("radar andando\n");
 
     // Recorrido por todas las vistas y alcances, para poder revisarlas. Cada
@@ -168,7 +169,7 @@ int main(void) {
     };
     const int ESCENAS = sizeof ESCENA / sizeof ESCENA[0];
 
-    int esc = 10;   // PRUEBA: arrancar en el mapa de America
+    int esc = 0;
     uint32_t desde = time_us_32();
     char apt_actual[4] = "";
     for (;;) {

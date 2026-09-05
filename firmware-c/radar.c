@@ -4,6 +4,7 @@
 #include "trig.h"
 #include "geo.h"
 #include "pistas.h"
+#include "logos.h"
 #include <stdio.h>
 #include <string.h>
 #include "pico/stdlib.h"
@@ -44,6 +45,13 @@ vista_t radar_vista = VISTA_HIBRIDA;
 int radar_tarjetas = 3;
 int radar_rotacion_s = 8;
 char radar_seguir[9] = "";
+
+// La casa, con sus propias coordenadas: puede estar a cualquier distancia del
+// aeropuerto que muestra el radar.
+bool    radar_casa_on = false;
+int32_t radar_casa_lat = 0, radar_casa_lon = 0;
+int     radar_casa_km = 3;
+char    radar_casa_nombre[20] = "CASA";
 bool radar_pistas_on = true;
 
 // Cabecera en uso: la que mas aviones tiene alineados aproximando. Se calcula
@@ -441,25 +449,64 @@ static void radar_pintar(void) {
         if (etiquetar && a->vuelo[0]) gfx_texto(x + 8, y - 12, a->vuelo, c, 1);
     }
 
-    // Sobre casa: el vuelo que esta pasando por encima del aeropuerto se
-    // marca con un circulo y su tarjeta salta a la vista, como demoOver.
-    {
-        int mejor = -1, mejor_km = 6;
-        for (int i = 0; i < radar_cantidad; i++) {
-            int km = geo_km(radar_aviones[i].lat, radar_aviones[i].lon,
-                            radar_apt.lat, radar_apt.lon);
-            if (km < mejor_km) { mejor_km = km; mejor = i; }
+    // Sobre la casa: el vuelo que esta pasando por encima de la ubicacion
+    // propia se marca con un circulo y saca su tarjeta chica abajo a la
+    // izquierda, hasta que se va del radio. La casa se dibuja siempre, para
+    // saber donde esta respecto del aeropuerto.
+    if (radar_casa_on) {
+        int hay_encima = 0;
+        for (int i = 0; i < radar_cantidad && !hay_encima; i++)
+            if (geo_km(radar_aviones[i].lat, radar_aviones[i].lon,
+                       radar_casa_lat, radar_casa_lon) <= radar_casa_km) hay_encima = 1;
+
+        int hx = PROY_X(radar_casa_lat, radar_casa_lon);
+        int hy = PROY_Y(radar_casa_lat, radar_casa_lon);
+        int hdx = hx - cx, hdy = hy - cy;
+        if (hdx * hdx + hdy * hdy <= R * R) {
+            const uint8_t c3 = radar_tono(200);
+            // Una casita: cuadrado con techo.
+            gfx_rect(hx - 4, hy - 2, 9, 7, c3);
+            gfx_linea(hx - 6, hy - 2, hx, hy - 7, c3);
+            gfx_linea(hx, hy - 7, hx + 6, hy - 2, c3);
+            // El nombre solo cuando no hay nadie encima: con el aviso del
+            // avion se encimaban los dos textos.
+            if (!hay_encima) gfx_texto(hx + 10, hy - 6, radar_casa_nombre, c3, 1);
+            // El radio de aviso.
+            gfx_circulo(hx, hy, radar_casa_km * R / radar_apt.radio_km, radar_tono(70));
         }
-        if (mejor >= 0) {
-            const avion_t *a = &radar_aviones[mejor];
-            int x = cx + (int)((int64_t)(a->lon - radar_apt.lon) * R / span);
-            int y = cy - (int)((int64_t)(a->lat - radar_apt.lat) * R / span);
-            // Con el color del tema, no un blanco fijo: en los temas claros
-            // el blanco fijo salia amarillo y desentonaba.
+
+        int encima = -1;
+        for (int i = 0; i < radar_cantidad; i++) {
+            if (geo_km(radar_aviones[i].lat, radar_aviones[i].lon,
+                       radar_casa_lat, radar_casa_lon) <= radar_casa_km) { encima = i; break; }
+        }
+        if (encima >= 0) {
+            const avion_t *a = &radar_aviones[encima];
+            int x = PROY_X(a->lat, a->lon);
+            int y = PROY_Y(a->lat, a->lon);
             const uint8_t c2 = radar_tono(255);
             gfx_circulo(x, y, 18, c2);
             gfx_circulo(x, y, 17, c2);
-            gfx_texto(x + 22, y - 8, "SOBRE CASA", c2, 1);
+            char aviso[40];
+            snprintf(aviso, sizeof aviso, "SOBRE %s", radar_casa_nombre);
+
+            // Tarjeta chica abajo a la izquierda, mientras siga encima.
+            const int tw = 250, th = 92;
+            const int tx3 = X + 8, ty3 = Y + AL - th - 8;
+            vga_limpiar_rect(tx3, ty3 > gfx_banda_y0 ? ty3 : gfx_banda_y0, tw,
+                             (ty3 + th < gfx_banda_y1) ? ty3 + th : gfx_banda_y1, fondo);
+            gfx_rect(tx3, ty3, tw, th, c2);
+            gfx_texto(tx3 + 8, ty3 + 6, aviso, c2, 1);
+            const uint8_t *logo = logo_buscar(a->aerolinea);
+            if (logo) gfx_blit(tx3 + 8, ty3 + 22, LOGO_LADO, LOGO_LADO, logo);
+            gfx_texto(tx3 + 8 + LOGO_LADO + 8, ty3 + 24, a->vuelo, c2, 1);
+            char linea[40];
+            snprintf(linea, sizeof linea, "%s > %s", a->origen, a->destino);
+            gfx_texto(tx3 + 8 + LOGO_LADO + 8, ty3 + 40, linea, radar_tono(190), 1);
+            if (a->alt <= 0) snprintf(linea, sizeof linea, "EN TIERRA");
+            else snprintf(linea, sizeof linea, "FL%03d  %d kt  RUMBO %03d",
+                          (int)(a->alt / 100), a->gs, a->track);
+            gfx_texto(tx3 + 8, ty3 + 66, linea, radar_tono(190), 1);
         }
     }
 

@@ -163,6 +163,10 @@ void radar_pintar_viaje(void) {
             for (int j = 0; j < cant; j++) {
                 int32_t la = (int32_t)costas_lat[desde + j] * 100;
                 int32_t lo = (int32_t)costas_lon[desde + j] * 100;
+                // Cerca de los polos esta proyeccion estira sin fin: la
+                // Antartida salia como una franja aplastada de punta a punta.
+                if (la < -780000) la = -780000;
+                if (la >  780000) la =  780000;
                 px[j] = MX(la, lo);
                 py[j] = MY(la, lo);
             }

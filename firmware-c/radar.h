@@ -83,6 +83,15 @@ extern int radar_rotacion_s;
 
 // Indicativo del vuelo que se sigue en VISTA_SEGUIR.
 extern char radar_seguir[9];
+
+// La casa: una ubicacion propia, aparte del aeropuerto. Cuando pasa un avion
+// a menos de radar_casa_km, se lo marca en el scope y sale su tarjeta chica
+// abajo a la izquierda, hasta que se va de esa zona. La casa puede estar
+// lejos del aeropuerto elegido, asi que lleva sus propias coordenadas.
+extern bool    radar_casa_on;
+extern int32_t radar_casa_lat, radar_casa_lon;   // grados x 10000
+extern int     radar_casa_km;                    // radio, en kilometros
+extern char    radar_casa_nombre[20];
 extern bool radar_pistas_on;
 
 #endif
