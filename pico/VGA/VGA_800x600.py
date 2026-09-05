@@ -23,9 +23,9 @@ _DREQ_TX2 = 2 if PIO_UNIT == 0 else 10          # DREQ del TX2 de ese PIO
 # Los dos sincronismos pueden ir en cualquier pin suelto.
 #
 # Cableado de Valentino (probado 2026-09-04, da imagen):
-COLOR_BASE_PIN = 0      # rojo=GP0, verde=GP1, azul=GP2
-HSYNC_PIN = 16
-VSYNC_PIN = 17
+COLOR_BASE_PIN = 5      # provisorio: los 3 bits del rojo, para verificar la escalera
+HSYNC_PIN = 8
+VSYNC_PIN = 9
 #
 # Cableado del manual (pico/CABLEADO.md), los seis pines juntos:
 #   COLOR_BASE_PIN = 18   -> rojo=GP18, verde=GP19, azul=GP20
