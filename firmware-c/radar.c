@@ -122,6 +122,34 @@ static uint8_t orden[RADAR_MAX_AVIONES];   // aviones ordenados por cercania
 static uint8_t lista[RADAR_MAX_AVIONES];   // la que ven las tarjetas, congelada
 static int lista_n = 0;
 
+// El carrusel de la lista se guarda y se repone al cambiar de pantalla: si se
+// reiniciara, volviendo a la lista de vuelos siempre se verian los mismos
+// cuatro. Lo que se quiere es que siga donde iba: primero el 1 al 4, y en la
+// vuelta siguiente el 5 al 8, hasta completar todos.
+int radar_pagina_actual(void) { return pagina; }
+
+void radar_carrusel_guardar(int *pag, uint32_t *cuadros) {
+    *pag = pagina;
+    *cuadros = cuadros_pagina;
+}
+
+void radar_carrusel_poner(int pag, uint32_t cuadros) {
+    pagina = pag;
+    cuadros_pagina = cuadros;
+    // La lista se rearma con la pagina repuesta, pero SIN avanzarla: la
+    // pagina avanza por el paso del tiempo, no por cambiar de pantalla.
+    // Poniendo lista_n en cero se entraba por la rama de arriba, que resetea
+    // el reloj y no incrementa la pagina, y entonces cada visita mostraba los
+    // mismos cuatro vuelos.
+    lista_n = radar_cantidad;
+    for (int i = 0; i < radar_cantidad; i++) lista[i] = orden[i];
+    const int por_pagina = radar_tarjetas < 1 ? 1 : radar_tarjetas;
+    const int paginas = (radar_cantidad + por_pagina - 1) / por_pagina;
+    if (paginas > 0) pagina %= paginas;    // el aeropuerto pudo cambiar
+    tarjetas_sucias = 1;
+}
+
+
 // La web usa alpha sobre el color del tema. Aca se mezcla contra el fondo,
 // que da el mismo resultado porque el fondo es plano.
 uint8_t radar_tono(int alpha255) {

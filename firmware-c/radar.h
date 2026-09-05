@@ -65,6 +65,11 @@ extern int radar_cantidad;
 
 void radar_init(void);
 void radar_marcar_sucio(void);   // pide que se redibujen las tarjetas
+
+// Estado del carrusel de la lista, para que cada pantalla siga donde iba.
+void radar_carrusel_guardar(int *pag, uint32_t *cuadros);
+void radar_carrusel_poner(int pag, uint32_t cuadros);
+int  radar_pagina_actual(void);
 void radar_avanzar(void);    // gira el barrido y apaga el fosforo
 void radar_cuadro(void);     // redibuja, por bandas de arriba hacia abajo
 

@@ -15,6 +15,8 @@
 #include "trig.h"
 #include "instalacion.h"
 #include "monitor.h"
+#include "arranques.h"
+#include "pantallas.h"
 #include "pico/stdlib.h"
 #include <stdio.h>
 #include <string.h>
@@ -122,10 +124,64 @@ static void dibujar_patron(void) {
     gfx_texto(X + AN - 16 - gfx_ancho_texto("824 logos", 1), ry + 2, "824 logos", apagado, 1);
 }
 
+// Lo que se ve cuando el cliente pide configurar cortando la corriente tres
+// veces. Por ahora es el cartel: el QR va a ir aca cuando este el wifi.
+static void pantalla_configuracion(void) {
+    const int X = area.x, Y = area.y, AN = area.an, AL = area.al;
+    const uint8_t fondo = vga_rgb(0x0a, 0x08, 0x05);
+    const uint8_t ambar = vga_rgb(0xe8, 0xb8, 0x6d);
+    const uint8_t tenue = vga_rgb(0x7a, 0x60, 0x38);
+    vga_limpiar(fondo);
+    gfx_rect(X, Y, AN, AL, tenue);
+    gfx_texto_centrado(X + AN / 2, Y + AL / 2 - 60, "MODO CONFIGURACION", ambar, 3);
+    gfx_texto_centrado(X + AN / 2, Y + AL / 2 + 10,
+                       "Aca va a ir el codigo QR para configurar el radar", tenue, 1);
+    gfx_texto_centrado(X + AN / 2, Y + AL / 2 + 34,
+                       "desde el celular. Falta el wifi.", tenue, 1);
+    gfx_texto_centrado(X + AN / 2, Y + AL - 40,
+                       "Para volver al radar, cortar la corriente una vez", tenue, 1);
+}
+
+// Las pantallas del cliente. Hasta que este el portal se arman aca; despues
+// van a llegar de la web y a guardarse en la flash.
+//
+// Esta es la que describio Valentino: los vuelos de Ezeiza y un vuelo que
+// sigue, cinco segundos cada uno. Con cuatro tarjetas por vez y veinte vuelos
+// en la lista, la primera vuelta muestra del 1 al 4, la siguiente del 5 al 8,
+// y asi hasta completarlos: el carrusel no se reinicia al volver.
+static void pantallas_de_ejemplo(void) {
+    pantallas_n = 0;
+    pantalla_t *p;
+
+    p = &pantallas[pantallas_n++];
+    snprintf(p->nombre, sizeof p->nombre, "vuelos de Ezeiza");
+    p->vista = VISTA_HIBRIDA;  p->lista = LISTA_TARJETAS;
+    snprintf(p->apt, sizeof p->apt, "EZE");
+    p->radio_km = 220;  p->tarjetas = 4;
+    snprintf(p->tema, sizeof p->tema, "crt_amber");
+    p->seguir[0] = 0;   p->segundos = 5;
+
+    p = &pantallas[pantallas_n++];
+    snprintf(p->nombre, sizeof p->nombre, "siguiendo AA954");
+    p->vista = VISTA_SEGUIR_HIBRIDA;  p->lista = LISTA_TARJETAS;
+    snprintf(p->apt, sizeof p->apt, "EZE");
+    p->radio_km = 220;  p->tarjetas = 1;
+    snprintf(p->tema, sizeof p->tema, "crt_amber");
+    snprintf(p->seguir, sizeof p->seguir, "AA954");
+    p->segundos = 5;
+
+    // Que la lista pase de pagina justo cuando la pantalla se va: asi cada
+    // visita muestra el grupo siguiente y no repite el mismo.
+    radar_rotacion_s = 5;
+}
+
 int main(void) {
     stdio_init_all();
     sleep_ms(2500);                       // margen para que el Mac tome el puerto
     printf("arrancando firmware en C\n");
+    // Antes del video: si hubo un borrado de flash, aca no molesta a nadie.
+    const bool pedir_config = arranques_contar();
+
     vga_init();
     printf("video inicializado: %dx%d, 256 colores\n", VGA_ANCHO, VGA_ALTO);
 
@@ -144,126 +200,83 @@ int main(void) {
              INSTALACION_MARGEN_IZQUIERDA, INSTALACION_MARGEN_DERECHA);
     printf("area util: %dx%d en %d,%d\n", area.an, area.al, area.x, area.y);
 
+    if (pedir_config) {
+        pantalla_configuracion();
+        printf("en modo configuracion: esperando\n");
+        for (;;) tight_loop_contents();
+    }
+
     radar_init();
     demo_init();
     { void demo_casa(void); demo_casa(); }
     printf("radar andando\n");
 
-    // Recorrido por todas las vistas y alcances, para poder revisarlas. Cada
-    // escena dura unos segundos y avisa por consola cual esta mostrando.
-    static const struct {
-        const char *nombre; vista_t vista; lista_t lista;
-        int tarjetas, radio; const char *apt, *seguir, *tema;
-    } ESCENA[] = {
-        { "hibrida 3 tarjetas, 150 km", VISTA_HIBRIDA, LISTA_TARJETAS, 3, 150, "EZE", "", "crt_amber" },
-        { "hibrida 4 tarjetas",         VISTA_HIBRIDA, LISTA_TARJETAS, 4, 150, "EZE", "", "crt_amber" },
-        { "formato aeropuerto (FIDS)",  VISTA_HIBRIDA, LISTA_FIDS,     3, 150, "EZE", "", "crt_amber" },
-        { "solo radar, 80 km",          VISTA_RADAR,   LISTA_TARJETAS, 3,  80, "EZE", "", "crt_amber" },
-        { "solo radar, 20 km",          VISTA_RADAR,   LISTA_TARJETAS, 3,  20, "EZE", "", "crt_amber" },
-        { "pared de tarjetas",          VISTA_PARED,   LISTA_TARJETAS, 3, 150, "EZE", "", "crt_amber" },
-        { "una sola tarjeta grande",    VISTA_PARED,   LISTA_TARJETAS, 1, 150, "EZE", "", "crt_amber" },
-        { "pared formato aeropuerto",   VISTA_PARED,   LISTA_FIDS,     3, 150, "EZE", "", "crt_amber" },
-        { "seguir QF17, solo mapa",     VISTA_SEGUIR,  LISTA_TARJETAS, 1, 150, "EZE", "QF17", "crt_amber" },
-        { "seguir QF17 con tarjeta",    VISTA_SEGUIR_HIBRIDA, LISTA_TARJETAS, 1, 150, "EZE", "QF17", "crt_amber" },
-        { "seguir AA954, mapa America", VISTA_SEGUIR,  LISTA_TARJETAS, 1, 150, "EZE", "AA954", "crt_amber" },
-        { "seguir AA954 con tarjeta",   VISTA_SEGUIR_HIBRIDA, LISTA_TARJETAS, 1, 150, "EZE", "AA954", "crt_amber" },
-        { "tema verde",                 VISTA_HIBRIDA, LISTA_TARJETAS, 3, 150, "EZE", "", "crt_green" },
-        { "tema atc azul",              VISTA_HIBRIDA, LISTA_TARJETAS, 3, 150, "EZE", "", "atc_dark" },
-        { "tema hielo",                 VISTA_RADAR,   LISTA_TARJETAS, 3,  80, "EZE", "", "ice" },
-        { "Madrid",                     VISTA_HIBRIDA, LISTA_TARJETAS, 3, 150, "MAD", "", "crt_amber" },
-        { "Narita",                     VISTA_HIBRIDA, LISTA_TARJETAS, 3,  80, "NRT", "", "crt_amber" },
-        { "pantalla de logos",          VISTA_LOGOS,   LISTA_TARJETAS, 3, 150, "EZE", "", "crt_amber" },
-    };
-    const int ESCENAS = sizeof ESCENA / sizeof ESCENA[0];
+    // Modo normal: rota entre las pantallas del cliente. El recorrido de las
+    // 18 escenas de prueba sigue disponible con la tecla 'e'.
+    pantallas_de_ejemplo();
+    pantallas_init();
 
-    int esc = 0;
-    uint32_t desde = time_us_32();
-    char apt_actual[4] = "";
+    uint32_t cuadros = 0, us_total = 0, us_peor = 0;
+    const uint32_t encendido = time_us_32();
+    bool marcado_largo = false;
+    uint32_t desde_informe = time_us_32();
     for (;;) {
-        if (strncmp(apt_actual, ESCENA[esc].apt, 3)) {
-            snprintf(apt_actual, sizeof apt_actual, "%s", ESCENA[esc].apt);
-            demo_aeropuerto(apt_actual);
+        int c = getchar_timeout_us(0);
+        if (c == 'v') volcado_fb();
+        else if (c == 'm') monitor_informe();
+        else if (c == 'M') monitor_diagnostico();
+        else if (c == 'W') monitor_vigilar(180);
+        else if (c == 'n') pantallas_forzar_siguiente();
+        else if (c == 'd') {
+            dibujar_patron();
+            while (getchar_timeout_us(0) != 'd') tight_loop_contents();
+            radar_marcar_sucio();
         }
-        radar_vista = ESCENA[esc].vista;
-        radar_lista = ESCENA[esc].lista;
-        radar_tema_poner(ESCENA[esc].tema);
-        radar_marcar_sucio();
-        { void radar_viaje_rehacer(void); radar_viaje_rehacer();
-          void logos_pantalla_rehacer(void); logos_pantalla_rehacer(); }
-        radar_tarjetas = ESCENA[esc].tarjetas;
-        radar_apt.radio_km = ESCENA[esc].radio;
-        snprintf(radar_seguir, sizeof radar_seguir, "%s", ESCENA[esc].seguir);
-        printf("ESCENA %d: %s\n", esc, ESCENA[esc].nombre);
+        else if (c == 'c') {
+            area_calibrar(vga_rgb(0x0a, 0x08, 0x05), vga_rgb(0xe8, 0xb8, 0x6d),
+                          vga_color(7, 7, 3));
+            printf("calibracion en pantalla: leer desde que numero se ve cada regla\n");
+            while (getchar_timeout_us(0) != 'c') tight_loop_contents();
+            radar_marcar_sucio();
+        }
 
-        uint32_t cuadros = 0, us_total = 0, us_peor = 0;
-        while (time_us_32() - desde < 15000000u) {
-            // Comandos por consola: 'v' vuelca el framebuffer para poder
-            // mirarlo desde la Mac, 'n' salta a la escena siguiente, 'p' se
-            // queda en esta. Sin esto habia que esperar la vuelta completa.
-            int c = getchar_timeout_us(0);
-            if (c == 'v') { volcado_fb(); desde = time_us_32(); }
-            else if (c == 'm') { monitor_informe(); desde = time_us_32(); }
-            else if (c == 'M') { monitor_diagnostico(); desde = time_us_32(); }
-            else if (c == 'W') { monitor_vigilar(180); desde = time_us_32(); }
-            else if (c == 'd') {
-                // El patron de primitivas, a pedido: sirve para ver de una si
-                // el texto, las lineas, los circulos y los logos siguen bien.
-                dibujar_patron();
-                while (getchar_timeout_us(0) != 'd') tight_loop_contents();
-                radar_marcar_sucio();
-                desde = time_us_32();
-            }
-            else if (c == 'c') {
-                // Pantalla de calibracion, para medir cuanto recorta un
-                // monitor nuevo sin tener que recompilar nada.
-                area_calibrar(vga_rgb(0x0a, 0x08, 0x05), vga_rgb(0xe8, 0xb8, 0x6d),
-                              vga_color(7, 7, 3));
-                printf("calibracion en pantalla: leer desde que numero se ve cada regla\n");
-                while (getchar_timeout_us(0) != 'c') tight_loop_contents();
-                radar_marcar_sucio();
-                desde = time_us_32();
-            }
-            else if (c == 'n') break;
-            else if (c == 'p') { desde = time_us_32(); }
-            vga_esperar_cuadro();
-            uint32_t t0 = time_us_32();
-            demo_avanzar();
-            radar_avanzar();
-            radar_cuadro();
-            uint32_t d = time_us_32() - t0;
-            us_total += d;
-            if (d > us_peor) us_peor = d;
-            cuadros++;
+        if (!marcado_largo &&
+            (time_us_32() - encendido) / 1000000u >= ARRANQUES_SEGUNDOS) {
+            marcado_largo = true;
+            arranques_fue_largo();
         }
-        // El haz tarda 15200 us en bajar la pantalla: si el dibujo se pasa de
-        // ahi, lo alcanza y la imagen titila.
-        printf("  %lu cuadros, %lu por segundo | dibujo %lu us promedio, %lu us el peor%s\n",
-               (unsigned long)cuadros, (unsigned long)(cuadros / 15),
-               (unsigned long)(cuadros ? us_total / cuadros : 0), (unsigned long)us_peor,
-               us_peor > 15200 ? "  <-- SE PASA" : "");
-        {
-            extern uint32_t radar_us_banda[];
-            extern int32_t radar_margen_banda[];
-            printf("    por banda (us):");
-            for (int b = 0; b < 10; b++) printf(" %lu", (unsigned long)radar_us_banda[b]);
-            printf("\n    margen contra el haz (us, el peor de la escena):");
-            int roto = 0;
-            for (int b = 0; b < 10; b++) {
-                printf(" %ld", (long)radar_margen_banda[b]);
-                if (radar_margen_banda[b] < 0) roto = 1;
-                radar_margen_banda[b] = 0x7fffffff;
+
+        vga_esperar_cuadro();
+        uint32_t t0 = time_us_32();
+        demo_avanzar();
+        radar_avanzar();
+        pantallas_avanzar();
+        radar_cuadro();
+        uint32_t d = time_us_32() - t0;
+        us_total += d;
+        if (d > us_peor) us_peor = d;
+        cuadros++;
+
+        // Un informe cada quince segundos, para no llenar la consola.
+        if (time_us_32() - desde_informe >= 15000000u) {
+            desde_informe = time_us_32();
+            printf("  %lu cuadros, %lu por segundo | dibujo %lu us promedio, %lu us el peor%s\n",
+                   (unsigned long)cuadros, (unsigned long)(cuadros / 15),
+                   (unsigned long)(cuadros ? us_total / cuadros : 0), (unsigned long)us_peor,
+                   us_peor > 15200 ? "  <-- SE PASA" : "");
+            {
+                extern int32_t radar_margen_banda[];
+                printf("    margen contra el haz (us):");
+                int roto = 0;
+                for (int b = 0; b < 10; b++) {
+                    printf(" %ld", (long)radar_margen_banda[b]);
+                    if (radar_margen_banda[b] < 0) roto = 1;
+                    radar_margen_banda[b] = 0x7fffffff;
+                }
+                printf("%s\n", roto ? "   <-- EL HAZ ALCANZA AL DIBUJO" : "");
             }
-            printf("%s\n", roto ? "   <-- EL HAZ ALCANZA AL DIBUJO" : "");
-            extern int32_t radar_us_antes;
-            printf("    antes de dibujar se van %ld us\n", (long)radar_us_antes);
-            radar_us_antes = 0;
-            extern int radar_senda_rumbo;
-            if (radar_senda_rumbo >= 0)
-                printf("    cabecera en uso: rumbo verdadero %d (el numero de la pista es magnetico)\n", radar_senda_rumbo);
+            cuadros = us_total = us_peor = 0;
         }
-        {
-        }
-        desde = time_us_32();
-        esc = (esc + 1) % ESCENAS;
     }
 }
+

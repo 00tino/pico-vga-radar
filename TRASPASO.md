@@ -72,12 +72,31 @@ verificados** en todas las vistas.
 - **Los 14 temas de color** de la web.
 - **Tráfico de prueba** (`demo.c`): 15 vuelos que se mueven de verdad.
 
+### Las pantallas del cliente
+
+El equipo rota entre una lista de **pantallas** que arma el cliente, cada una
+con su propia duración: por ejemplo los vuelos de Ezeiza cinco segundos y un
+vuelo seguido otros cinco. Está en `pantallas.c`, y por ahora la lista se arma
+en `pantallas_de_ejemplo()` de `main.c`; cuando esté el portal va a llegar de
+la web y a guardarse en la flash.
+
+**Lo que hace que esto se sienta bien es que la lista no vuelve a empezar.**
+Con veinte vuelos y cuatro por pantalla, la primera visita muestra del 1 al 4,
+la siguiente del 5 al 8, y así hasta completarlos. Cada pantalla guarda su
+lugar en el carrusel y ese lugar **sólo avanza mientras esa pantalla está a la
+vista**. Verificado por consola: la pantalla de Ezeiza recorre los grupos
+2, 3, 0, 1, 2, 3 sin repetir.
+
+Ojo con `radar_carrusel_poner()`: **no puede poner `lista_n` en cero**. Eso
+entra por la rama que rearma la lista, que resetea el reloj y no incrementa la
+página, y entonces cada visita muestra los mismos cuatro vuelos.
+
 El equipo **arranca directo en el radar**: la pantalla de primitivas ya no sale
 al encender, queda como herramienta detrás del comando `d`. Valentino quiere
 poner ahí un logo propio; todavía no está hecho.
 
-`main.c` recorre **18 escenas de 15 segundos** para poder revisarlas todas.
-Cuando esté el portal, la vista saldrá de la configuración del cliente.
+El recorrido de 18 escenas de prueba se sacó de `main.c` al entrar el motor de
+pantallas; está en el historial de git si hace falta volver a mirarlo.
 
 ### Lo que falta del proyecto
 
