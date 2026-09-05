@@ -72,6 +72,9 @@ void demo_init(void) {
         strncpy(a->arr, SEMILLA[i].arr, 5);
         strncpy(a->estado, SEMILLA[i].estado, sizeof a->estado - 1);
         a->pct = SEMILLA[i].pct;
+        // Datos de puntualidad, repartidos para que se vean los dos casos.
+        a->demora = (int16_t)((i % 4 == 1) ? 10 + (i * 7) % 40 : 0);
+        a->falta_min = (int16_t)(5 + (100 - SEMILLA[i].pct) * 3);
         a->brillo = 82;
     }
 }

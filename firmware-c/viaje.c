@@ -60,6 +60,9 @@ static void interpolar(int32_t la1, int32_t lo1, int32_t la2, int32_t lo2,
     *lo = (int32_t)lrintf(atan2f(y, x) * 180.0f / (float)M_PI * 10000.0f);
 }
 
+// Donde quedo el avion en el ultimo dibujo del mapa.
+int avion_x, avion_y;
+
 void radar_pintar_viaje(void) {
     const int X = area.x, Y = area.y, AL = area.al;
     // En la vista con tarjeta al costado el mapa ocupa el 54 por ciento, igual
@@ -83,6 +86,12 @@ void radar_pintar_viaje(void) {
 
     const int x0 = X + 18, y0 = Y + 34;
     const int anc = AN - 36, alt = AL - 46;
+    // Todo lo del mapa se recorta a este recuadro: sin esto los continentes
+    // y la rejilla se desbordaban por arriba y por los costados.
+    const int recorte_y0 = y0 > gfx_banda_y0 ? y0 : gfx_banda_y0;
+    const int recorte_y1 = (y0 + alt - 1) < gfx_banda_y1 ? (y0 + alt - 1) : gfx_banda_y1;
+    const int banda_afuera_y0 = gfx_banda_y0, banda_afuera_y1 = gfx_banda_y1;
+    gfx_banda(recorte_y0, recorte_y1);
 
     // Todas las longitudes se miden respecto del origen, para que el
     // antimeridiano no parta la ruta al medio.
@@ -96,8 +105,10 @@ void radar_pintar_viaje(void) {
                                  if ((lo) < minlo) minlo = (lo); if ((lo) > maxlo) maxlo = (lo); } while (0)
     if (o) ABARCAR(o->lat, WL(o->lon));
     if (d) ABARCAR(d->lat, WL(d->lon));
-    int32_t pad_la = (maxla - minla) / 6 + 24000;
-    int32_t pad_lo = (maxlo - minlo) / 6 + 24000;
+    // Margen chico: mejor que se corte un continente por el borde y no que
+    // la ruta quede perdida en el medio de un mapa vacio.
+    int32_t pad_la = (maxla - minla) / 12 + 60000;
+    int32_t pad_lo = (maxlo - minlo) / 12 + 60000;
     minla -= pad_la; maxla += pad_la; minlo -= pad_lo; maxlo += pad_lo;
 
     // Escala: la misma en los dos ejes, para que no se deforme.
@@ -154,6 +165,14 @@ void radar_pintar_viaje(void) {
                 int32_t lo = (int32_t)costas_lon[desde + j] * 100;
                 px[j] = MX(la, lo);
                 py[j] = MY(la, lo);
+            }
+            // Los puntos muy afuera se pegan al borde del recuadro: si no, una
+            // costa que pasa lejos mete lineas cruzando toda la pantalla.
+            for (int j = 0; j < cant; j++) {
+                if (px[j] < x0 - 40)       px[j] = x0 - 40;
+                if (px[j] > x0 + anc + 40) px[j] = x0 + anc + 40;
+                if (py[j] < y0 - 40)       py[j] = y0 - 40;
+                if (py[j] > y0 + alt + 40) py[j] = y0 + alt + 40;
             }
             gfx_poligono_lleno(px, py, cant, relleno);
             for (int j = 0; j < cant; j++) {
@@ -251,20 +270,11 @@ void radar_pintar_viaje(void) {
         gfx_texto(txt_x, base + 14, buf, radar_tono(150), 1);
     }
 
-    // El avion, con su circulo y el triangulito apuntando al rumbo.
-    {
-        int pxx = MX(ac->lat, ac->lon), pyy = MY(ac->lat, ac->lon);
-        const uint8_t c = radar_tono(255);
-        gfx_circulo(pxx, pyy, 13, radar_tono(170));
-        int t = trig_de_grados(ac->track);
-        int s = trig_sen(t), co = trig_cos(t);
-        #define RX(a, b) (pxx + ((a) * co - (b) * s) / TRIG_UNO)
-        #define RY(a, b) (pyy + ((a) * s + (b) * co) / TRIG_UNO)
-        gfx_triangulo_lleno(RX(0, -9), RY(0, -9), RX(6, 8), RY(6, 8), RX(-6, 8), RY(-6, 8), c);
-        #undef RX
-        #undef RY
-        gfx_texto(pxx + 16, pyy - 8, ac->vuelo, c, 1);
-    }
+    // Donde cae el avion, para que el dibujo de encima sepa adonde ir.
+    avion_x = MX(ac->lat, ac->lon);
+    avion_y = MY(ac->lat, ac->lon);
+
+    gfx_banda(banda_afuera_y0, banda_afuera_y1);
 
     // Barra de arriba: el vuelo a la izquierda y cuanto falta a la derecha.
     snprintf(buf, sizeof buf, "%s", ac->vuelo);
@@ -287,4 +297,27 @@ void radar_pintar_viaje(void) {
         vga_limpiar_rect(X + AN + 4, gfx_banda_y0, area.an - AN - 4, gfx_banda_y1, radar_tono(0));
         tarjeta_dibujar(X + AN + 8, Y + 8, area.an - AN - 16, AL - 16, ac, 0);
     }
+}
+
+// Solo el avion, para poder moverlo sin rehacer el mapa entero.
+void radar_viaje_avion(void) {
+    extern int avion_x, avion_y;
+    const avion_t *ac = 0;
+    for (int i = 0; i < radar_cantidad; i++)
+        if (!strncmp(radar_aviones[i].vuelo, radar_seguir, sizeof radar_seguir - 1))
+            { ac = &radar_aviones[i]; break; }
+    if (!ac) return;
+
+        int pxx = avion_x, pyy = avion_y;
+        const uint8_t c = radar_tono(255);
+        gfx_circulo(pxx, pyy, 13, radar_tono(170));
+        int t = trig_de_grados(ac->track);
+        int s = trig_sen(t), co = trig_cos(t);
+        #define RX(a, b) (pxx + ((a) * co - (b) * s) / TRIG_UNO)
+        #define RY(a, b) (pyy + ((a) * s + (b) * co) / TRIG_UNO)
+        gfx_triangulo_lleno(RX(0, -9), RY(0, -9), RX(6, 8), RY(6, 8), RX(-6, 8), RY(-6, 8), c);
+        #undef RX
+        #undef RY
+        gfx_texto(pxx + 16, pyy - 8, ac->vuelo, c, 1);
+    
 }

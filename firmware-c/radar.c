@@ -51,6 +51,7 @@ bool radar_pistas_on = true;
 static const pista_t *senda_pista;
 static int senda_es_b;            // 0 = cabecera A, 1 = cabecera B
 static int senda_hay;
+static char senda_cartel[32];     // el aviso de arriba, listo para dibujar
 
 void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande);
 
@@ -64,9 +65,13 @@ static uint32_t cuadros_pagina = 0;
 // sesenta veces por segundo hacia que el cuadro tardara casi lo mismo que el
 // haz en bajar la pantalla, y las de abajo salian rasgadas. Ahora solo se
 // vuelven a dibujar cuando hay algo nuevo que mostrar.
-static int tarjetas_sucias = 1;
+// Cuantas tarjetas quedan por redibujar. Se hace de a una por cuadro: al
+// rehacerlas todas juntas el cuadro se iba a veinte milisegundos, el haz lo
+// alcanzaba y se veia el tiron cada vez que cambiaba la pagina.
+static int tarjetas_sucias = 99;
+static int tarjeta_en_curso = 0;
 
-void radar_marcar_sucio(void) { tarjetas_sucias = 1; }
+void radar_marcar_sucio(void) { tarjetas_sucias = 99; tarjeta_en_curso = 0; }
 
 uint8_t radar_tono(int alpha255);
 
@@ -181,7 +186,11 @@ static void elegir_senda(void) {
                 if (km <= 1 || km >= 55) continue;
                 n++;
             }
-            if (n > mejor) { mejor = n; senda_pista = &p[i]; senda_es_b = lado; senda_hay = 1; }
+            if (n > mejor) {
+                mejor = n; senda_pista = &p[i]; senda_es_b = lado; senda_hay = 1;
+                snprintf(senda_cartel, sizeof senda_cartel, "APROXIMACION %s EN USO",
+                         lado ? p[i].ident_b : p[i].ident_a);
+            }
         }
     }
 }
@@ -246,6 +255,7 @@ void radar_avanzar(void) {
 
 void radar_pintar_tarjetas(int x, int y, int an, int al, int grande);
 void radar_pintar_viaje(void);
+void radar_viaje_avion(void);
 
 static void radar_pintar(void) {
     const int X = area.x, Y = area.y, AN = area.an, AL = area.al;
@@ -263,6 +273,24 @@ static void radar_pintar(void) {
     const int semi = (ANS / 2 < (AL - 30) * 52 / 100 ? ANS / 2 : (AL - 30) * 52 / 100);
     const int R = semi * 86 / 100;
 
+    // El encabezado va primero: esta en las filas de mas arriba y el haz
+    // llega ahi antes que a ninguna otra cosa. Dibujarlo al final de la
+    // banda lo dejaba llegando tarde, y titilaba.
+    // Barra de arriba con el resumen, igual que la web.
+    {
+        char meta[72];
+        snprintf(meta, sizeof meta, "%d en radar - %d km", radar_cantidad, radar_apt.radio_km);
+        // En la vista hibrida la barra ocupa solo el ancho del scope: si no,
+        // el resumen de la derecha cae encima de la primera tarjeta.
+        encabezado(meta, ANS);
+        // El aviso va con el encabezado, no al final: esta en las filas de
+        // arriba y dibujarlo despues de los anillos lo dejaba llegando tarde,
+        // cortado por la mitad.
+        if (senda_hay && radar_pistas_on)
+            gfx_texto(X + ANS - gfx_ancho_texto(senda_cartel, 1) - 10, Y + 32,
+                      senda_cartel, radar_tono(245), 1);
+    }
+
     // Cuna del barrido: 0,28 radianes = 46 unidades. Va primero para que los
     // anillos y los aviones queden por encima, como en la web.
     gfx_sector(cx, cy, R, beam - 46, beam, radar_tono(36));     // alpha 0,14
@@ -274,15 +302,6 @@ static void radar_pintar(void) {
     for (int i = 1; i <= 4; i++) gfx_circulo(cx, cy, R * i / 4, rejilla);
     gfx_linea(cx, cy - R, cx, cy + R, rejilla);
     gfx_linea(cx - R, cy, cx + R, cy, rejilla);
-
-    // Barra de arriba con el resumen, igual que la web.
-    {
-        char meta[72];
-        snprintf(meta, sizeof meta, "%d en radar - %d km", radar_cantidad, radar_apt.radio_km);
-        // En la vista hibrida la barra ocupa solo el ancho del scope: si no,
-        // el resumen de la derecha cae encima de la primera tarjeta.
-        encabezado(meta, ANS);
-    }
 
     // Etiquetas de alcance sobre el eje horizontal.
     char km[12];
@@ -340,8 +359,10 @@ static void radar_pintar(void) {
             int oy = lado ? PROY_Y(senda_pista->lat_a, senda_pista->lon_a)
                           : PROY_Y(senda_pista->lat_b, senda_pista->lon_b);
 
-            // El avion viene por atras de la cabecera, o sea en el sentido
-            // contrario al que va la pista desde esa punta.
+            // El avion viene por detras de la cabecera donde aterriza: la
+            // senda sale hacia el lado opuesto al que apunta la pista desde
+            // esa punta. Con el signo al reves salia del lado de adentro de
+            // la pista, apuntando a donde no va nadie.
             int vx = tx2 - ox, vy = ty2 - oy;
             int largo_pista = 0;
             while ((largo_pista + 1) * (largo_pista + 1) <= vx * vx + vy * vy) largo_pista++;
@@ -354,8 +375,8 @@ static void radar_pintar(void) {
                 if (apxkm > 32) apxkm = 32;
                 int largo_px = apxkm * R / radar_apt.radio_km;
                 if (largo_px < 64) largo_px = 64;
-                int sx = tx2 - vx * largo_px / largo_pista;
-                int sy = ty2 - vy * largo_px / largo_pista;
+                int sx = tx2 + vx * largo_px / largo_pista;
+                int sy = ty2 + vy * largo_px / largo_pista;
 
                 const uint8_t c = radar_tono(245);
                 gfx_linea_punteada(sx, sy, tx2, ty2, 8, 6, c);
@@ -363,8 +384,6 @@ static void radar_pintar(void) {
                 char cartel[32];
                 snprintf(cartel, sizeof cartel, "APROXIMACION %s", ident);
                 gfx_texto(sx + 6, sy - 16, cartel, c, 1);
-                snprintf(cartel, sizeof cartel, "APROXIMACION %s EN USO", ident);
-                gfx_texto(X + ANS - gfx_ancho_texto(cartel, 1) - 10, Y + 32, cartel, c, 1);
             }
         }
     }
@@ -420,15 +439,16 @@ static void radar_pintar(void) {
             const avion_t *a = &radar_aviones[mejor];
             int x = cx + (int)((int64_t)(a->lon - radar_apt.lon) * R / span);
             int y = cy - (int)((int64_t)(a->lat - radar_apt.lat) * R / span);
-            const uint8_t blanco = vga_color(7, 7, 3);
-            gfx_circulo(x, y, 18, blanco);
-            gfx_circulo(x, y, 17, blanco);
-            gfx_texto(x + 22, y - 8, "SOBRE CASA", blanco, 1);
+            // Con el color del tema, no un blanco fijo: en los temas claros
+            // el blanco fijo salia amarillo y desentonaba.
+            const uint8_t c2 = radar_tono(255);
+            gfx_circulo(x, y, 18, c2);
+            gfx_circulo(x, y, 17, c2);
+            gfx_texto(x + 22, y - 8, "SOBRE CASA", c2, 1);
         }
     }
 
     if (radar_vista != VISTA_HIBRIDA || !tarjetas_sucias) return;
-    vga_limpiar_rect(X + ANS + 4, gfx_banda_y0, AN - ANS - 4, gfx_banda_y1, fondo);
     radar_pintar_tarjetas(X + ANS + 8, Y + 32, AN - ANS - 16, AL - 36, 0);
 }
 
@@ -440,19 +460,28 @@ void radar_pintar_tarjetas(int x, int y, int an, int al, int grande) {
     if (cuantas <= 0) return;
 
     if (radar_lista == LISTA_FIDS) {
-        void fids_dibujar(int x, int y, int an, int al, const avion_t **v, int n);
+        void fids_dibujar(int x, int y, int an, int al, const avion_t **v, int n,
+                          int paso, int pasos);
         const avion_t *v[RADAR_MAX_AVIONES];
         int n = radar_cantidad < 12 ? radar_cantidad : 12;
         for (int i = 0; i < n; i++) v[i] = &radar_aviones[lista_n ? lista[i] : i];
-        fids_dibujar(x, y, an, al, v, n);
+        // Cuatro pasadas, una por cuadro, para no hacer toda la tabla junta.
+        if (tarjeta_en_curso == 0)
+            vga_limpiar_rect(x - 4, gfx_banda_y0, an + 8, gfx_banda_y1, radar_tono(0));
+        fids_dibujar(x, y, an, al, v, n, tarjeta_en_curso % 4, 4);
         return;
     }
     const int sep = 6;
     const int tal = (al - (cuantas - 1) * sep) / cuantas;
     for (int i = 0; i < cuantas; i++) {
+        // De a una por cuadro, salvo que se pidan todas (cambio de vista).
+        if (tarjeta_en_curso < cuantas && i != tarjeta_en_curso) continue;
         int k = (pagina * por_pagina + i) % (lista_n ? lista_n : 1);
         int ty = y + i * (tal + sep);
         if (ty + tal < gfx_banda_y0 || ty > gfx_banda_y1) continue;
+        vga_limpiar_rect(x - 4, ty < gfx_banda_y0 ? gfx_banda_y0 : ty,
+                         an + 8, (ty + tal > gfx_banda_y1) ? gfx_banda_y1 : ty + tal,
+                         radar_tono(0));
         tarjeta_dibujar(x, ty, an, tal, &radar_aviones[lista[k]], grande);
     }
 }
@@ -478,21 +507,78 @@ static void pintar_pared(void) {
     radar_pintar_tarjetas(area.x + 8, area.y + 36, area.an - 16, area.al - 44, 1);
 }
 
+uint32_t radar_us_banda[RADAR_BANDAS];
+
+// Las bandas no son todas iguales: arriba son finas y abajo anchas.
+// Al arrancar solo se lleva de ventaja el borrado vertical, mil cuatrocientos
+// microsegundos, y una banda pareja de cuarenta y ocho filas ya costaba mas
+// que eso. Cuanto mas abajo, mas ventaja acumulada y menos falta afinar.
+static const uint8_t BANDA_ALTO[RADAR_BANDAS] = { 24, 24, 32, 40, 56, 64, 64, 64, 56, 56 };
+
+// El mapa de la vista de seguimiento se dibuja entero una sola vez y despues
+// no se toca: son 30 ms de trabajo, imposible de repetir sesenta veces por
+// segundo. Lo unico que se mueve es el avion, y para moverlo sin rehacer el
+// mapa se guarda el pedazo de fondo que tapa y se repone antes de correrlo.
+#define VIAJE_SPRITE_AN 150
+#define VIAJE_SPRITE_AL 40
+static uint8_t viaje_fondo[VIAJE_SPRITE_AN * VIAJE_SPRITE_AL];
+static int viaje_fondo_x = -1, viaje_fondo_y = -1;
+static int viaje_mapa_listo = 0;
+
+void radar_viaje_rehacer(void) { viaje_mapa_listo = 0; viaje_fondo_x = -1; }
+
+static void cuadro_viaje(void) {
+    extern int avion_x, avion_y;
+
+    if (!viaje_mapa_listo) {
+        gfx_banda(0, VGA_ALTO - 1);          // de una sola pasada, no por bandas
+        radar_pintar_viaje();
+        viaje_mapa_listo = 1;
+        viaje_fondo_x = -1;
+        return;
+    }
+
+    // Reponer el fondo donde estaba el avion.
+    if (viaje_fondo_x >= 0)
+        gfx_reponer(viaje_fondo_x, viaje_fondo_y, VIAJE_SPRITE_AN, VIAJE_SPRITE_AL, viaje_fondo);
+
+    // Volver a calcular donde va ahora, dibujarlo, y guardar lo que tapa.
+    gfx_banda(0, VGA_ALTO - 1);
+    int px = avion_x - VIAJE_SPRITE_AN / 4;
+    int py = avion_y - VIAJE_SPRITE_AL / 2;
+    viaje_fondo_x = px;
+    viaje_fondo_y = py;
+    gfx_guardar(px, py, VIAJE_SPRITE_AN, VIAJE_SPRITE_AL, viaje_fondo);
+    radar_viaje_avion();
+}
+
 void radar_cuadro(void) {
-    const int alto = (VGA_ALTO + RADAR_BANDAS - 1) / RADAR_BANDAS;
+    if (radar_vista == VISTA_SEGUIR || radar_vista == VISTA_SEGUIR_HIBRIDA) {
+        cuadro_viaje();
+        gfx_banda(0, VGA_ALTO - 1);
+        return;
+    }
+
+    int y0 = 0;
     for (int b = 0; b < RADAR_BANDAS; b++) {
-        int y0 = b * alto;
-        int y1 = y0 + alto - 1;
-        if (y1 > VGA_ALTO - 1) y1 = VGA_ALTO - 1;
+        int y1 = y0 + BANDA_ALTO[b] - 1;
+        if (b == RADAR_BANDAS - 1 || y1 > VGA_ALTO - 1) y1 = VGA_ALTO - 1;
         gfx_banda(y0, y1);
+        uint32_t tb = time_us_32();
         switch (radar_vista) {
             case VISTA_LOGOS:  { void logos_pantalla_pintar(void); logos_pantalla_pintar(); } break;
             case VISTA_PARED:  pintar_pared(); break;
             case VISTA_SEGUIR:
-            case VISTA_SEGUIR_HIBRIDA: radar_pintar_viaje(); break;
+            case VISTA_SEGUIR_HIBRIDA: break;   // se dibuja aparte, ver abajo
             default:           radar_pintar(); break;
         }
+        radar_us_banda[b] = time_us_32() - tb;
+        y0 = y1 + 1;
     }
     gfx_banda(0, VGA_ALTO - 1);
-    tarjetas_sucias = 0;
+    if (tarjetas_sucias) {
+        const int pasos = (radar_lista == LISTA_FIDS)
+                        ? 4 : (radar_tarjetas < 1 ? 1 : radar_tarjetas);
+        if (++tarjeta_en_curso >= pasos) { tarjetas_sucias = 0; tarjeta_en_curso = 0; }
+    }
 }

@@ -33,6 +33,9 @@ typedef struct {
     char dep[6], arr[6];   // horarios hh:mm
     uint8_t pct;           // avance del vuelo, 0-100
     char estado[12];       // EN VUELO, APROXIMANDO, EN TIERRA
+    int16_t demora;        // minutos de atraso; 0 o menos es a tiempo
+    int16_t falta_min;     // cuanto falta para llegar, en minutos
+    int32_t dist_km;       // distancia al aeropuerto del radar
 } avion_t;
 
 typedef struct {

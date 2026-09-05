@@ -14,6 +14,12 @@
 
 extern uint8_t radar_tono(int alpha255);
 
+// "A TIEMPO" o "DEMORADO 25 MIN", como el pie de la tarjeta en la web.
+static void puntualidad(char *dst, size_t n, const avion_t *a) {
+    if (a->demora > 0) snprintf(dst, n, "DEMORADO %d MIN", a->demora);
+    else               snprintf(dst, n, "A TIEMPO");
+}
+
 // Recorta un texto para que entre en un ancho, con puntos suspensivos.
 static void acortar(char *dst, size_t n, const char *src, int ancho_px) {
     snprintf(dst, n, "%s", src);
@@ -109,7 +115,7 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande)
     const int alto_fila = GFX_FUENTE_ALTO * esc2;
     int filas = 1;                                   // la ruta va siempre
     int usado = alto_ruta;
-    while (filas < 4 && cy + usado + 2 + alto_fila <= y_fin) { usado += alto_fila + 2; filas++; }
+    while (filas < 5 && cy + usado + 2 + alto_fila <= y_fin) { usado += alto_fila + 2; filas++; }
     // El sobrante se reparte entre las filas, pero con un tope: en una
     // tarjeta muy alta, repartir todo dejaba las filas desparramadas con
     // huecos enormes en el medio.
@@ -148,6 +154,17 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande)
         cy += alto_fila + sep;
     }
 
+    // Pie: puntualidad y cuanto falta, como el .fa-foot de la web.
+    if (filas >= 5) {
+        puntualidad(buf, sizeof buf, a);
+        gfx_texto(px, cy, buf, a->demora > 0 ? fuerte : medio, esc2);
+        if (a->alt <= 0) snprintf(buf, sizeof buf, "EN TIERRA");
+        else if (a->falta_min > 0) snprintf(buf, sizeof buf, "LLEGA EN %d MIN", a->falta_min);
+        else snprintf(buf, sizeof buf, "EN RUTA");
+        gfx_texto(px + anu - gfx_ancho_texto(buf, esc2), cy, buf, medio, esc2);
+        cy += alto_fila + sep;
+    }
+
     // Metricas: altura, velocidad y rumbo.
     if (filas >= 4) {
         if (a->alt <= 0) snprintf(buf, sizeof buf, "ALT GND");
@@ -164,7 +181,10 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande)
 // La tabla de llegadas, como listStyle "fids" en la web: una fila por vuelo
 // con logo, indicativo, ruta, horarios y estado. Es lo que se ve en las
 // pantallas de un aeropuerto de verdad.
-void fids_dibujar(int x, int y, int an, int al, const avion_t **vuelos, int n) {
+// paso y pasos reparten el dibujo en varios cuadros: la tabla entera de una
+// vez se iba a diecinueve milisegundos y el haz la alcanzaba.
+void fids_dibujar(int x, int y, int an, int al, const avion_t **vuelos, int n,
+                  int paso, int pasos) {
     const uint8_t borde  = radar_tono(60);
     const uint8_t fuerte = radar_tono(255);
     const uint8_t medio  = radar_tono(190);
@@ -179,20 +199,29 @@ void fids_dibujar(int x, int y, int an, int al, const avion_t **vuelos, int n) {
     const int c_ruta  = c_vuelo + (compacto ? 62 : an * 14 / 100);
     const int c_dep   = c_ruta + (compacto ? 78 : an * 24 / 100);
     const int c_arr   = compacto ? c_dep : c_dep + an * 10 / 100;
-    const int c_est   = compacto ? c_dep + 46 : c_arr + an * 10 / 100;
+    const int c_est   = compacto ? c_dep + 46 : c_arr + an * 9 / 100;
+    const int c_vel   = compacto ? 0 : c_est + an * 11 / 100;
+    const int c_pun   = compacto ? 0 : c_vel + an * 10 / 100;
 
-    gfx_texto(c_vuelo, y, "VUELO", suave, 1);
-    gfx_texto(c_ruta,  y, "RUTA",  suave, 1);
-    if (!compacto) gfx_texto(c_dep, y, "SALE", suave, 1);
-    gfx_texto(c_arr, y, "LLEGA", suave, 1);
-    gfx_texto(c_est, y, "ESTADO", suave, 1);
-    gfx_hlinea(x, y + 16, an, borde);
+    if (paso == 0) {
+        gfx_texto(c_vuelo, y, "VUELO", suave, 1);
+        gfx_texto(c_ruta,  y, "RUTA",  suave, 1);
+        if (!compacto) gfx_texto(c_dep, y, "SALE", suave, 1);
+        gfx_texto(c_arr, y, "LLEGA", suave, 1);
+        gfx_texto(c_est, y, "ESTADO", suave, 1);
+        if (!compacto) {
+            gfx_texto(c_vel, y, "VEL/RUMBO", suave, 1);
+            gfx_texto(c_pun, y, "PUNTUALIDAD", suave, 1);
+        }
+        gfx_hlinea(x, y + 16, an, borde);
+    }
 
     const int alto_fila = (al - 22) / (n > 0 ? n : 1);
     const int fila = alto_fila > 30 ? 30 : alto_fila;
 
     char buf[48];
     for (int i = 0; i < n; i++) {
+        if (pasos > 1 && (i % pasos) != paso) continue;
         const avion_t *a = vuelos[i];
         const int fy = y + 22 + i * alto_fila;
         if (fy + fila < gfx_banda_y0 || fy > gfx_banda_y1) continue;
@@ -207,6 +236,12 @@ void fids_dibujar(int x, int y, int an, int al, const avion_t **vuelos, int n) {
                 for (int k = 0; k < lado; k++)
                     gfx_punto(c_logo + k, fy + 2 + j,
                               logo[(j * LOGO_LADO / lado) * LOGO_LADO + (k * LOGO_LADO / lado)]);
+        } else if (lado > 6) {
+            // Sin logo va el codigo de la aerolinea, no un hueco.
+            char cod[3] = { a->aerolinea[0], a->aerolinea[1], 0 };
+            gfx_rect(c_logo, fy + 2, lado, lado, borde);
+            gfx_texto(c_logo + lado / 2 - gfx_ancho_texto(cod, 1) / 2,
+                      fy + 2 + lado / 2 - GFX_FUENTE_ALTO / 2, cod, medio, 1);
         }
 
         gfx_texto(c_vuelo, ty, a->vuelo, fuerte, 1);
@@ -221,6 +256,13 @@ void fids_dibujar(int x, int y, int an, int al, const avion_t **vuelos, int n) {
         else if (!strncmp(est, "EN TIERRA", 9)) est = "TIERRA";
         else if (!strncmp(est, "EN VUELO", 8)) est = "VUELO";
         gfx_texto(c_est, ty, est, fuerte, 1);
+
+        if (!compacto) {
+            snprintf(buf, sizeof buf, "%d kt / %03d", a->gs, a->track);
+            gfx_texto(c_vel, ty, buf, medio, 1);
+            puntualidad(buf, sizeof buf, a);
+            gfx_texto(c_pun, ty, buf, a->demora > 0 ? fuerte : medio, 1);
+        }
 
         if (i + 1 < n) gfx_hlinea(x, fy + alto_fila - 1, an, radar_tono(28));
     }

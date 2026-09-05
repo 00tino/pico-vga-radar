@@ -3,6 +3,8 @@
 
 int gfx_banda_y0 = 0, gfx_banda_y1 = VGA_ALTO - 1;
 
+static int isqrt(int v);
+
 void gfx_hlinea(int x, int y, int largo, uint8_t c) {
     if (y < gfx_banda_y0 || y > gfx_banda_y1) return;
     if (largo < 0) { x += largo + 1; largo = -largo; }
@@ -56,18 +58,46 @@ void gfx_rect_lleno(int x, int y, int an, int al, uint8_t c) {
     for (int i = 0; i < al; i++) gfx_hlinea(x, y + i, an, c);
 }
 
-// Midpoint: se calcula un octante y se refleja en los otros siete.
+// Contorno de circulo por filas, no por Bresenham.
+//
+// El cuadro se pinta una vez por banda, y con el metodo del punto medio cada
+// circulo se recorria entero diez veces aunque casi todo cayera afuera.
+//
+// El medio ancho de cada fila no se saca con una raiz: entre una fila y la
+// siguiente cambia de a poco, asi que se arranca del valor anterior y se
+// ajusta con un par de comparaciones. Una raiz por fila costaba mas que el
+// Bresenham que se queria evitar.
+//
+// El tramo horizontal entre una fila y la siguiente se pinta entero, que es
+// lo que evita los huecos arriba y abajo, donde el circulo es casi
+// horizontal y salta varias columnas por fila.
 void gfx_circulo(int cx, int cy, int r, uint8_t c) {
     if (r < 0) return;
-    int x = r, y = 0, err = 1 - r;
-    while (x >= y) {
-        gfx_punto(cx + x, cy + y, c); gfx_punto(cx - x, cy + y, c);
-        gfx_punto(cx + x, cy - y, c); gfx_punto(cx - x, cy - y, c);
-        gfx_punto(cx + y, cy + x, c); gfx_punto(cx - y, cy + x, c);
-        gfx_punto(cx + y, cy - x, c); gfx_punto(cx - y, cy - x, c);
-        y++;
-        if (err < 0) err += 2 * y + 1;
-        else { x--; err += 2 * (y - x) + 1; }
+    int dy0 = gfx_banda_y0 - cy, dy1 = gfx_banda_y1 - cy;
+    if (dy0 < -r) dy0 = -r;
+    if (dy1 >  r) dy1 =  r;
+    if (dy0 > dy1) return;
+    const int r2 = r * r;
+
+    int x = isqrt(r2 - dy0 * dy0);
+    for (int dy = dy0; dy <= dy1; dy++) {
+        // Ajuste incremental del medio ancho para esta fila.
+        while (x > 0 && x * x + dy * dy > r2) x--;
+        while ((x + 1) * (x + 1) + dy * dy <= r2) x++;
+
+        // Hasta donde llega la fila de al lado, para cerrar el tramo.
+        int siguiente = x;
+        int dy2 = dy + (dy < 0 ? 1 : -1);
+        if (dy2 >= -r && dy2 <= r) {
+            siguiente = x;
+            while (siguiente > 0 && siguiente * siguiente + dy2 * dy2 > r2) siguiente--;
+            while ((siguiente + 1) * (siguiente + 1) + dy2 * dy2 <= r2) siguiente++;
+        }
+        int desde = siguiente < x ? siguiente : x;
+        int hasta = siguiente < x ? x : siguiente;
+        int largo = hasta - desde + 1;
+        gfx_hlinea(cx + desde, cy + dy, largo, c);
+        gfx_hlinea(cx - hasta, cy + dy, largo, c);
     }
 }
 
@@ -208,7 +238,7 @@ void gfx_linea_punteada(int x0, int y0, int x1, int y1, int trazo, int hueco, ui
             gfx_punto(x0 + dx * i / pasos, y0 + dy * i / pasos, c);
 }
 
-// Raiz cuadrada entera, para el borde circular del sector.
+// Raiz cuadrada entera, para los circulos y el borde del sector.
 static int isqrt(int v) {
     if (v <= 0) return 0;
     int x = v, y = (x + 1) / 2;
@@ -244,8 +274,12 @@ void gfx_sector(int cx, int cy, int r, int a0, int a1, uint8_t c) {
     int dy0 = gfx_banda_y0 - cy, dy1 = gfx_banda_y1 - cy;
     if (dy0 < -r) dy0 = -r;
     if (dy1 >  r) dy1 =  r;
+    const int r2 = r * r;
+    int med = isqrt(r2 - dy0 * dy0);
     for (int dy = dy0; dy <= dy1; dy++) {
-        int med = isqrt(r * r - dy * dy);
+        // Mismo ajuste incremental que en gfx_circulo, por lo mismo.
+        while (med > 0 && med * med + dy * dy > r2) med--;
+        while ((med + 1) * (med + 1) + dy * dy <= r2) med++;
         int lo = -med, hi = med;
 
         // Borde de arranque: el punto tiene que quedar de un lado de a0.
@@ -262,9 +296,14 @@ void gfx_sector(int cx, int cy, int r, int a0, int a1, uint8_t c) {
     }
 }
 
-// Rellena un poligono cualquiera: por cada fila se buscan los cruces con los
-// lados, se ordenan y se pinta entre pares. Solo recorre las filas de la
-// banda activa, asi que dibujar el mapa no cuesta mas de lo que se ve.
+// Rellena un poligono: por cada fila se buscan los cruces con los lados, se
+// ordenan y se pinta entre pares.
+//
+// Es el metodo directo, sin lista de aristas activas: ordenar las aristas por
+// su fila de arranque costaba mas que esto, porque los contornos vienen en
+// orden de recorrido y la insercion se vuelve cuadratica. Lo que hace que
+// esto rinda es no llamarlo sesenta veces por segundo: el mapa se dibuja una
+// sola vez y despues solo se mueve el avion.
 void gfx_poligono_lleno(const int *xs, const int *ys, int n, uint8_t c) {
     if (n < 3) return;
     int ymin = ys[0], ymax = ys[0];
@@ -275,7 +314,7 @@ void gfx_poligono_lleno(const int *xs, const int *ys, int n, uint8_t c) {
     if (ymin < gfx_banda_y0) ymin = gfx_banda_y0;
     if (ymax > gfx_banda_y1) ymax = gfx_banda_y1;
 
-    int cruces[96];
+    int cruces[128];
     for (int y = ymin; y <= ymax; y++) {
         int m = 0;
         for (int i = 0, j = n - 1; i < n; j = i++) {
@@ -285,12 +324,34 @@ void gfx_poligono_lleno(const int *xs, const int *ys, int n, uint8_t c) {
                     cruces[m++] = xs[j] + (y - y0) * (xs[i] - xs[j]) / (y1 - y0);
             }
         }
-        for (int a = 1; a < m; a++) {          // insercion, son pocos
+        for (int a = 1; a < m; a++) {
             int v = cruces[a], b = a - 1;
             while (b >= 0 && cruces[b] > v) { cruces[b + 1] = cruces[b]; b--; }
             cruces[b + 1] = v;
         }
         for (int a = 0; a + 1 < m; a += 2)
             gfx_hlinea(cruces[a], y, cruces[a + 1] - cruces[a] + 1, c);
+    }
+}
+
+void gfx_guardar(int x, int y, int an, int al, uint8_t *dst) {
+    for (int j = 0; j < al; j++) {
+        int fy = y + j;
+        for (int i = 0; i < an; i++) {
+            int fx = x + i;
+            dst[j * an + i] = ((unsigned)fx < VGA_ANCHO && (unsigned)fy < VGA_ALTO)
+                            ? vga_fb[fy * VGA_ANCHO + fx] : 0;
+        }
+    }
+}
+
+void gfx_reponer(int x, int y, int an, int al, const uint8_t *src) {
+    for (int j = 0; j < al; j++) {
+        int fy = y + j;
+        if ((unsigned)fy >= VGA_ALTO) continue;
+        for (int i = 0; i < an; i++) {
+            int fx = x + i;
+            if ((unsigned)fx < VGA_ANCHO) vga_fb[fy * VGA_ANCHO + fx] = src[j * an + i];
+        }
     }
 }

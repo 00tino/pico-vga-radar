@@ -12,15 +12,22 @@ extern uint8_t radar_tono(int alpha255);
 
 static int pagina_logos = 0;
 static uint32_t cuadros = 0;
+static int sucio = 1;
 
 void logos_pantalla_avanzar(void) {
-    if (++cuadros >= 15 * 60) {           // quince segundos por pagina
+    if (++cuadros >= 8 * 60) {            // ocho segundos por pagina
         cuadros = 0;
         pagina_logos++;
+        sucio = 1;
     }
 }
 
+void logos_pantalla_rehacer(void) { sucio = 1; }
+
 void logos_pantalla_pintar(void) {
+    // Solo al cambiar de pagina: redibujar treinta logos sesenta veces por
+    // segundo no entra en el tiempo del cuadro y la pantalla flashea.
+    if (!sucio) return;
     const int X = area.x, Y = area.y, AN = area.an, AL = area.al;
     vga_limpiar_filas(gfx_banda_y0, gfx_banda_y1, radar_tono(0));
 
@@ -48,4 +55,5 @@ void logos_pantalla_pintar(void) {
         char cod[4] = { logos_indice[k].codigo[0], logos_indice[k].codigo[1], 0, 0 };
         gfx_texto_centrado(cx + LOGO_LADO / 2, cy + LOGO_LADO + 2, cod, radar_tono(150), 1);
     }
+    if (gfx_banda_y1 >= VGA_ALTO - 1) sucio = 0;
 }

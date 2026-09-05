@@ -180,20 +180,37 @@ int main(void) {
         radar_lista = ESCENA[esc].lista;
         radar_tema_poner(ESCENA[esc].tema);
         radar_marcar_sucio();
+        { void radar_viaje_rehacer(void); radar_viaje_rehacer();
+          void logos_pantalla_rehacer(void); logos_pantalla_rehacer(); }
         radar_tarjetas = ESCENA[esc].tarjetas;
         radar_apt.radio_km = ESCENA[esc].radio;
         snprintf(radar_seguir, sizeof radar_seguir, "%s", ESCENA[esc].seguir);
         printf("ESCENA %d: %s\n", esc, ESCENA[esc].nombre);
 
-        uint32_t cuadros = 0;
+        uint32_t cuadros = 0, us_total = 0, us_peor = 0;
         while (time_us_32() - desde < 15000000u) {
             vga_esperar_cuadro();
+            uint32_t t0 = time_us_32();
             demo_avanzar();
             radar_avanzar();
             radar_cuadro();
+            uint32_t d = time_us_32() - t0;
+            us_total += d;
+            if (d > us_peor) us_peor = d;
             cuadros++;
         }
-        printf("  %lu cuadros, %lu por segundo\n", (unsigned long)cuadros, (unsigned long)(cuadros / 15));
+        // El haz tarda 15200 us en bajar la pantalla: si el dibujo se pasa de
+        // ahi, lo alcanza y la imagen titila.
+        printf("  %lu cuadros, %lu por segundo | dibujo %lu us promedio, %lu us el peor%s\n",
+               (unsigned long)cuadros, (unsigned long)(cuadros / 15),
+               (unsigned long)(cuadros ? us_total / cuadros : 0), (unsigned long)us_peor,
+               us_peor > 15200 ? "  <-- SE PASA" : "");
+        {
+            extern uint32_t radar_us_banda[];
+            printf("    por banda (us):");
+            for (int b = 0; b < 10; b++) printf(" %lu", (unsigned long)radar_us_banda[b]);
+            printf("   | el haz tarda 1520 us por banda\n");
+        }
         desde = time_us_32();
         esc = (esc + 1) % ESCENAS;
     }
