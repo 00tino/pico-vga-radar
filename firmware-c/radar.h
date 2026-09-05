@@ -10,6 +10,7 @@
 #include <stdbool.h>
 
 #define RADAR_MAX_AVIONES 32
+#define RADAR_RASTRO 24        // posiciones guardadas de cada avion
 
 typedef struct {
     int32_t lat, lon;      // grados x 10000
@@ -20,10 +21,15 @@ typedef struct {
     char aerolinea[3];     // IATA, para el logo
     uint8_t brillo;        // 0-255, el fosforo que deja el barrido
 
+    // Por donde vino: se usa en la vista de seguimiento para dibujar el
+    // tramo ya recorrido, como el TRAIL de la web.
+    int32_t rastro_lat[RADAR_RASTRO], rastro_lon[RADAR_RASTRO];
+    uint8_t rastro_n;
+
     // Lo que va en la tarjeta, igual que cardHTML() en la web.
     char tipo[8];          // modelo, por ejemplo A333
     char origen[4], destino[4];
-    char ciudad_o[18], ciudad_d[18];
+    char ciudad_o[26], ciudad_d[26];
     char dep[6], arr[6];   // horarios hh:mm
     uint8_t pct;           // avance del vuelo, 0-100
     char estado[12];       // EN VUELO, APROXIMANDO, EN TIERRA

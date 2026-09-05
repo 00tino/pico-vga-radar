@@ -77,8 +77,8 @@ void radar_pintar_viaje(void) {
     const aeropuerto_dato_t *o = aeropuerto_buscar(ac->origen);
     const aeropuerto_dato_t *d = aeropuerto_buscar(ac->destino);
 
-    const int x0 = X + 18, y0 = Y + 40;
-    const int anc = AN - 36, alt = AL - 58;
+    const int x0 = X + 18, y0 = Y + 34;
+    const int anc = AN - 36, alt = AL - 46;
 
     // Todas las longitudes se miden respecto del origen, para que el
     // antimeridiano no parta la ruta al medio.
@@ -153,6 +153,18 @@ void radar_pintar_viaje(void) {
     }
 
     // Origen y destino.
+    // Por donde ya paso: linea continua, mas marcada que la ruta prevista.
+    if (ac->rastro_n > 1) {
+        for (int i = 1; i < ac->rastro_n; i++) {
+            int ax = MX(ac->rastro_lat[i - 1], ac->rastro_lon[i - 1]);
+            int ay = MY(ac->rastro_lat[i - 1], ac->rastro_lon[i - 1]);
+            int bx = MX(ac->rastro_lat[i], ac->rastro_lon[i]);
+            int by = MY(ac->rastro_lat[i], ac->rastro_lon[i]);
+            gfx_linea(ax, ay, bx, by, radar_tono(220));
+            gfx_linea(ax, ay + 1, bx, by + 1, radar_tono(220));
+        }
+    }
+
     // Origen y destino. El origen rotula hacia la izquierda y el destino
     // hacia la derecha, y en alturas distintas: con los dos del mismo lado se
     // pisaban cuando la ruta quedaba horizontal.
@@ -192,14 +204,17 @@ void radar_pintar_viaje(void) {
         gfx_texto(pxx + 16, pyy - 8, ac->vuelo, c, 1);
     }
 
-    // Encabezado: vuelo, ruta y cuanto falta.
-    snprintf(buf, sizeof buf, "%s  %s > %s", ac->vuelo, ac->origen, ac->destino);
+    // Barra de arriba: el vuelo a la izquierda y cuanto falta a la derecha.
+    snprintf(buf, sizeof buf, "%s", ac->vuelo);
     gfx_texto(X + 10, Y + 8, buf, radar_tono(255), 1);
+    snprintf(buf, sizeof buf, "%s > %s", ac->origen, ac->destino);
+    gfx_texto(X + 10 + gfx_ancho_texto(ac->vuelo, 1) + 10, Y + 8, buf, radar_tono(170), 1);
     if (d) {
         int km = km_gc(ac->lat, ac->lon, d->lat, d->lon);
         snprintf(buf, sizeof buf, "Ruta del viaje - %d km al destino", km);
     } else {
         snprintf(buf, sizeof buf, "Ruta del viaje");
     }
-    gfx_texto(X + 10, Y + 24, buf, radar_tono(170), 1);
+    gfx_texto(X + AN - 10 - gfx_ancho_texto(buf, 1), Y + 8, buf, radar_tono(170), 1);
+    gfx_hlinea(X + 10, Y + 26, AN - 20, radar_tono(45));
 }

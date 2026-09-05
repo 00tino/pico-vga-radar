@@ -43,6 +43,22 @@ static int tarjetas_sucias = 1;
 
 void radar_marcar_sucio(void) { tarjetas_sucias = 1; }
 
+uint8_t radar_tono(int alpha255);
+
+// La barra de arriba, como .mon-head de la web: el aeropuerto a la izquierda
+// y el resumen a la derecha, con una linea fina abajo.
+static void encabezado(const char *derecha) {
+    const int X = area.x, Y = area.y, AN = area.an;
+    char buf[72];
+    snprintf(buf, sizeof buf, "%s  %s", radar_apt.iata, radar_apt.nombre);
+    gfx_texto(X + 10, Y + 8, radar_apt.iata, radar_tono(255), 1);
+    gfx_texto(X + 10 + gfx_ancho_texto(radar_apt.iata, 1) + 10, Y + 8,
+              radar_apt.nombre, radar_tono(170), 1);
+    if (derecha && derecha[0])
+        gfx_texto(X + AN - 10 - gfx_ancho_texto(derecha, 1), Y + 8, derecha, radar_tono(170), 1);
+    gfx_hlinea(X + 10, Y + 26, AN - 20, radar_tono(45));
+}
+
 static int beam = 0;              // angulo del barrido, en unidades de trig.h
 static uint8_t orden[RADAR_MAX_AVIONES];   // aviones ordenados por cercania
 static uint8_t lista[RADAR_MAX_AVIONES];   // la que ven las tarjetas, congelada
@@ -142,7 +158,29 @@ static void elegir_senda(void) {
     }
 }
 
+// Guarda una posicion en el rastro, mas o menos una vez por segundo.
+static void anotar_rastro(void) {
+    static uint32_t cuenta = 0;
+    if (++cuenta % 60) return;
+    for (int i = 0; i < radar_cantidad; i++) {
+        avion_t *a = &radar_aviones[i];
+        if (a->rastro_n < RADAR_RASTRO) {
+            a->rastro_lat[a->rastro_n] = a->lat;
+            a->rastro_lon[a->rastro_n] = a->lon;
+            a->rastro_n++;
+        } else {
+            for (int k = 1; k < RADAR_RASTRO; k++) {
+                a->rastro_lat[k - 1] = a->rastro_lat[k];
+                a->rastro_lon[k - 1] = a->rastro_lon[k];
+            }
+            a->rastro_lat[RADAR_RASTRO - 1] = a->lat;
+            a->rastro_lon[RADAR_RASTRO - 1] = a->lon;
+        }
+    }
+}
+
 void radar_avanzar(void) {
+    anotar_rastro();
     ordenar_por_cercania();
     elegir_senda();
 
@@ -192,8 +230,8 @@ static void radar_pintar(void) {
     // scope: la columna de las tarjetas queda como estaba.
     vga_limpiar_rect(0, gfx_banda_y0, X + ANS + 4, gfx_banda_y1, fondo);
     const int cx = X + ANS / 2;
-    const int cy = Y + AL * 52 / 100;
-    const int semi = (ANS / 2 < AL * 52 / 100 ? ANS / 2 : AL * 52 / 100);
+    const int cy = Y + 30 + (AL - 30) * 52 / 100;
+    const int semi = (ANS / 2 < (AL - 30) * 52 / 100 ? ANS / 2 : (AL - 30) * 52 / 100);
     const int R = semi * 86 / 100;
 
     // Cuna del barrido: 0,28 radianes = 46 unidades. Va primero para que los
@@ -208,9 +246,12 @@ static void radar_pintar(void) {
     gfx_linea(cx, cy - R, cx, cy + R, rejilla);
     gfx_linea(cx - R, cy, cx + R, cy, rejilla);
 
-    // Encabezado: codigo y nombre del aeropuerto.
-    gfx_texto(X + 10, Y + 8, radar_apt.iata, radar_tono(255), 1);
-    gfx_texto(X + 10, Y + 24, radar_apt.nombre, radar_tono(178), 1);
+    // Barra de arriba con el resumen, igual que la web.
+    {
+        char meta[72];
+        snprintf(meta, sizeof meta, "%d en radar - %d km", radar_cantidad, radar_apt.radio_km);
+        encabezado(meta);
+    }
 
     // Etiquetas de alcance sobre el eje horizontal.
     char km[12];
@@ -284,7 +325,7 @@ static void radar_pintar(void) {
             gfx_texto(sx + 6, sy - 16, cartel, c, 1);
             // Y el aviso arriba a la derecha del scope, como en la web.
             snprintf(cartel, sizeof cartel, "SENDA %s EN USO", ident);
-            gfx_texto(X + ANS - gfx_ancho_texto(cartel, 1) - 10, Y + 8, cartel, c, 1);
+            gfx_texto(X + ANS - gfx_ancho_texto(cartel, 1) - 10, Y + 32, cartel, c, 1);
         }
     }
 
@@ -356,9 +397,15 @@ void radar_pintar_tarjetas(int x, int y, int an, int al, int grande) {
 static void pintar_pared(void) {
     if (!tarjetas_sucias) return;
     vga_limpiar_filas(gfx_banda_y0, gfx_banda_y1, radar_tono(0));
-    gfx_texto(area.x + 10, area.y + 8, radar_apt.iata, radar_tono(255), 1);
-    gfx_texto(area.x + 10, area.y + 24, radar_apt.nombre, radar_tono(178), 1);
-    radar_pintar_tarjetas(area.x + 8, area.y + 44, area.an - 16, area.al - 52, 1);
+    {
+        char meta[72];
+        const int por_pagina = radar_tarjetas < 1 ? 1 : radar_tarjetas;
+        const int paginas = (radar_cantidad + por_pagina - 1) / por_pagina;
+        snprintf(meta, sizeof meta, "%d vuelos - pagina %d de %d",
+                 radar_cantidad, pagina + 1, paginas > 0 ? paginas : 1);
+        encabezado(meta);
+    }
+    radar_pintar_tarjetas(area.x + 8, area.y + 36, area.an - 16, area.al - 44, 1);
 }
 
 void radar_cuadro(void) {

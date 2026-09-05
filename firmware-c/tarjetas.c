@@ -60,7 +60,7 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande)
     const int fila = GFX_FUENTE_ALTO * esc + 4;
 
     char buf[48];
-    int cy = y + 8;
+    int cy = y + 6;
 
     // --- Cabecera: logo, indicativo y estado ---
     const int lado = LOGO_LADO;
@@ -78,20 +78,25 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande)
     else
         pastilla(tx, cy + 2 + fila, a->estado, medio);
 
+    // El tipo va debajo del indicativo, y la cabecera crece lo que haga
+    // falta: con el indicativo al doble de tamano no entraba en el alto del
+    // logo y el tipo se montaba sobre la ruta.
+    const int y_tipo = cy + 2 + (pill_al_lado ? fila : 2 * fila + 4);
     acortar(buf, sizeof buf, a->tipo, tan);
-    gfx_texto(tx, cy + (pill_al_lado ? fila + 4 : 2 * fila + 8), buf, suave, 1);
-    cy += lado + 10;
+    gfx_texto(tx, y_tipo, buf, suave, 1);
+    const int alto_cab = y_tipo + GFX_FUENTE_ALTO - cy;
+    cy += (alto_cab > lado ? alto_cab : lado) + 8;
 
     // --- Cuerpo ---
     // Primero se ve cuantas filas entran, despues se reparte el sobrante
     // entre todas por igual: asi la tarjeta queda llena y no con el
     // contenido apelmazado arriba y un hueco abajo.
-    const int y_fin = y + al - 10;
+    const int y_fin = y + al - 6;
     const int alto_ruta = GFX_FUENTE_ALTO * esc;
     const int alto_fila = GFX_FUENTE_ALTO;
     int filas = 1;                                   // la ruta va siempre
     int usado = alto_ruta;
-    while (filas < 4 && cy + usado + 4 + alto_fila <= y_fin) { usado += alto_fila + 4; filas++; }
+    while (filas < 4 && cy + usado + 2 + alto_fila <= y_fin) { usado += alto_fila + 2; filas++; }
     const int sobra = y_fin - cy - usado;
     const int sep = filas > 1 ? sobra / (filas - 1) : 0;
 
