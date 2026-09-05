@@ -9,6 +9,12 @@
 
 extern const uint8_t gfx_fuente[96 * 15];
 
+// Los tamanos grandes tienen su propia fuente rasterizada, no son la chica
+// agrandada: repetir pixeles solo agranda los escalones. Cada caracter lleva
+// 1 byte de avance y despues una fila por linea, bit 0 = columna izquierda.
+extern const uint8_t gfx_fuente_x2[96 * 57];    // 14x28
+extern const uint8_t gfx_fuente_x3[96 * 127];   // 21x42
+
 // Banda de filas habilitada para dibujar.
 //
 // El framebuffer es el mismo que el monitor esta leyendo: no hay lugar en la

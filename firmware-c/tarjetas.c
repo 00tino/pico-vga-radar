@@ -168,12 +168,18 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande)
     // hueco de abajo era media pantalla. Las filas de mas solo salen cuando
     // hay alto de sobra; en una tarjeta chica no cambia nada.
     while (filas < 7 && cy + usado + 2 + alto_fila <= y_fin) { usado += alto_fila + 2; filas++; }
-    // El sobrante se reparte entre las filas, pero con un tope: en una
-    // tarjeta muy alta, repartir todo dejaba las filas desparramadas con
-    // huecos enormes en el medio.
+    // El sobrante se reparte entre las filas hasta llenar la tarjeta: quedaba
+    // toda la informacion apelmazada arriba y medio panel vacio abajo. El
+    // tope es el doble del alto de una fila, que alcanza para llegar al
+    // borde de abajo en las tarjetas altas sin que las filas se desparramen
+    // en las que ya venian llenas.
+    // Se reparte entre "filas" huecos y no entre "filas - 1": asi el estirado
+    // llega hasta abajo y queda un margen al pie, en vez de la ultima fila
+    // pegada al borde. El tope es solo una red por si alguna vez entran muy
+    // pocas filas en una tarjeta muy alta.
     const int sobra = y_fin - cy - usado;
-    int sep = filas > 1 ? sobra / (filas - 1) : 0;
-    const int sep_max = GFX_FUENTE_ALTO * esc2 + 10;
+    int sep = sobra > 0 ? sobra / filas : 0;
+    const int sep_max = GFX_FUENTE_ALTO * esc2 * 4;
     if (sep > sep_max) sep = sep_max;
 
     // Ruta con la barra de avance.

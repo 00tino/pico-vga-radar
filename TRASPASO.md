@@ -171,6 +171,7 @@ Por qué así y no de otra forma:
 ### Regenerar los datos
 
 ```
+python3 herramientas/fuente_grande_a_c.py  # las fuentes de escala 2 y 3
 python3 herramientas/logos_a_c.py        # 824 logos
 python3 herramientas/pistas_a_c.py       # 5600 pistas
 python3 herramientas/aeropuertos_a_c.py  # 5334 aeropuertos
@@ -291,14 +292,19 @@ Pasó dos veces en esta sesión. Síntomas y qué hacer:
 18. **`vga_rgb` redondea, no trunca.** Y **el azul no se dithera**: tiene 4
     niveles, escalones de 85, y un píxel encendido en zona oscura se ve sucio.
 
-18b. **Agrandar la letra repitiendo cada pixel deja todo escalonado.** Se
-    rellenan los rincones con un cuarto de bloque (la idea de Scale2x): la
-    escalera se vuelve diagonal sin adelgazar el trazo. **Comer las puntas en
-    vez de rellenar los rincones no sirve**: con un trazo de un pixel la letra
-    queda mordida y con agujeros. Y el camino de la letra chica tiene que
-    seguir salteando las columnas vacias: sin eso, el texto chico (que es
-    casi todo lo que se dibuja) se encarece y el haz vuelve a alcanzar al
-    dibujo.
+18b. **La letra grande no se agranda: se rasteriza aparte.** A 7x14 cada
+    pixel es un rasgo entero de la letra, y multiplicarlo por dos o por tres
+    solo agranda los escalones — se probó rellenar los rincones al estilo
+    Scale2x y seguía viéndose mal. Las escalas 2 y 3 tienen su **propia
+    fuente rasterizada** de Inconsolata, generada por
+    `herramientas/fuente_grande_a_c.py` (`fuente_grande.c`, 17 KB de flash).
+    El script se alinea contra la fuente chica midiendo dónde cae la 'A', y
+    el avance de cada carácter es el de la chica por la escala: así ningún
+    texto se corre de lugar. **`gfx_ancho_texto` tiene que leer la misma
+    tabla que el dibujo**, o los centrados y las columnas se desalinean.
+    El camino de la letra chica tiene que seguir salteando las columnas
+    vacías: sin eso, el texto chico (que es casi todo lo que se dibuja) se
+    encarece y el haz vuelve a alcanzar al dibujo.
 
 ### Mapa
 
@@ -404,14 +410,19 @@ sobre fondo oscuro parecen vacíos. Por eso la pantalla de logos les pone marco.
 
 Esta es la lista viva de Valentino. Lo de arriba es lo urgente.
 
-18b. **Agrandar la letra repitiendo cada pixel deja todo escalonado.** Se
-    rellenan los rincones con un cuarto de bloque (la idea de Scale2x): la
-    escalera se vuelve diagonal sin adelgazar el trazo. **Comer las puntas en
-    vez de rellenar los rincones no sirve**: con un trazo de un pixel la letra
-    queda mordida y con agujeros. Y el camino de la letra chica tiene que
-    seguir salteando las columnas vacias: sin eso, el texto chico (que es
-    casi todo lo que se dibuja) se encarece y el haz vuelve a alcanzar al
-    dibujo.
+18b. **La letra grande no se agranda: se rasteriza aparte.** A 7x14 cada
+    pixel es un rasgo entero de la letra, y multiplicarlo por dos o por tres
+    solo agranda los escalones — se probó rellenar los rincones al estilo
+    Scale2x y seguía viéndose mal. Las escalas 2 y 3 tienen su **propia
+    fuente rasterizada** de Inconsolata, generada por
+    `herramientas/fuente_grande_a_c.py` (`fuente_grande.c`, 17 KB de flash).
+    El script se alinea contra la fuente chica midiendo dónde cae la 'A', y
+    el avance de cada carácter es el de la chica por la escala: así ningún
+    texto se corre de lugar. **`gfx_ancho_texto` tiene que leer la misma
+    tabla que el dibujo**, o los centrados y las columnas se desalinean.
+    El camino de la letra chica tiene que seguir salteando las columnas
+    vacías: sin eso, el texto chico (que es casi todo lo que se dibuja) se
+    encarece y el haz vuelve a alcanzar al dibujo.
 
 ### Mapas (dijo "urgente, sí o sí")
 
@@ -421,7 +432,9 @@ Esta es la lista viva de Valentino. Lo de arriba es lo urgente.
 1b. **La tarjeta del mapa quedaba medio vacía** — *arreglado*: la tarjeta
    admite hasta siete filas en vez de cinco, y las dos nuevas son el tiempo
    volando con el avance y la duración, y los aeropuertos por los que va
-   pasando (los mismos que marca el mapa).
+   pasando (los mismos que marca el mapa). El sobrante se reparte entre
+   `filas` huecos y no entre `filas - 1`: así el estirado llega hasta abajo y
+   queda un margen al pie, en vez de la última fila pegada al borde.
 
 2. **Layout adaptativo** — *hecho y verificado en los dos casos*: para rutas
    anchas (Sydney-Buenos Aires) el mapa va arriba y la tarjeta abajo; para rutas
