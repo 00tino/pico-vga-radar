@@ -2,6 +2,8 @@
 #include "gfx.h"
 #include "area.h"
 #include "trig.h"
+#include "geo.h"
+#include "pistas.h"
 #include <stdio.h>
 #include <string.h>
 #include "pico/stdlib.h"
@@ -14,6 +16,13 @@ aeropuerto_t radar_apt = { "EZE", "Buenos Aires (Ezeiza)", -348220, -585360, 150
 avion_t radar_aviones[RADAR_MAX_AVIONES];
 int radar_cantidad = 0;
 vista_t radar_vista = VISTA_HIBRIDA;
+bool radar_pistas_on = true;
+
+// Cabecera en uso: la que mas aviones tiene alineados aproximando. Se calcula
+// una vez por cuadro en radar_avanzar y se dibuja despues.
+static const pista_t *senda_pista;
+static int senda_es_b;            // 0 = cabecera A, 1 = cabecera B
+static int senda_hay;
 
 void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a);
 
@@ -33,6 +42,27 @@ uint8_t radar_tono(int alpha255) {
 void radar_init(void) {
     trig_init();
     beam = 0;
+}
+
+// Diagnostico: cuantas pistas encontro y donde caen en pantalla.
+void radar_informar(void) {
+    int n = 0;
+    const pista_t *p = pistas_de(radar_apt.iata, &n);
+    printf("pistas de %s: %d | senda %s\n", radar_apt.iata, n,
+           senda_hay ? (senda_es_b ? senda_pista->ident_b : senda_pista->ident_a) : "(ninguna)");
+    const int ANS = (radar_vista == VISTA_HIBRIDA) ? area.an * 54 / 100 : area.an;
+    const int cx = area.x + ANS / 2, cy = area.y + area.al * 52 / 100;
+    const int semi = (ANS / 2 < area.al * 52 / 100 ? ANS / 2 : area.al * 52 / 100);
+    const int R = semi * 86 / 100;
+    const int32_t span = (int32_t)radar_apt.radio_km * 10000 / 111;
+    for (int i = 0; i < n; i++) {
+        int ax = cx + (int)((int64_t)(p[i].lon_a - radar_apt.lon) * R / span);
+        int ay = cy - (int)((int64_t)(p[i].lat_a - radar_apt.lat) * R / span);
+        int bx = cx + (int)((int64_t)(p[i].lon_b - radar_apt.lon) * R / span);
+        int by = cy - (int)((int64_t)(p[i].lat_b - radar_apt.lat) * R / span);
+        printf("  %s/%s en pantalla: %d,%d a %d,%d\n",
+               p[i].ident_a, p[i].ident_b, ax, ay, bx, by);
+    }
 }
 
 // Diferencia angular mas corta, en unidades de vuelta.
@@ -62,8 +92,43 @@ static void ordenar_por_cercania(void) {
     }
 }
 
+// Elige la cabecera en uso con el mismo criterio que la web: se cuentan los
+// aviones bajos y lentos cuyo rumbo coincide con el de la cabecera dentro de
+// 20 grados y que estan entre 1,5 y 55 km por delante de ella.
+static void elegir_senda(void) {
+    senda_hay = 0;
+    if (!radar_pistas_on) return;
+    int cuantas = 0;
+    const pista_t *p = pistas_de(radar_apt.iata, &cuantas);
+    if (!p) return;
+
+    int mejor = 0;
+    for (int i = 0; i < cuantas; i++) {
+        for (int lado = 0; lado < 2; lado++) {
+            int hdg      = lado ? p[i].hdg_b : p[i].hdg_a;
+            int32_t clat = lado ? p[i].lat_b : p[i].lat_a;
+            int32_t clon = lado ? p[i].lon_b : p[i].lon_a;
+            if (!hdg) continue;
+            int n = 0;
+            for (int k = 0; k < radar_cantidad; k++) {
+                const avion_t *a = &radar_aviones[k];
+                if (a->alt > 15000 || a->gs < 70) continue;
+                if (geo_dif_rumbo(a->track, hdg) > 20) continue;
+                int km = geo_km(a->lat, a->lon, clat, clon);
+                int haciala = geo_rumbo(a->lat, a->lon, clat, clon);
+                // Solo cuenta si viene de frente, no si ya paso la cabecera.
+                if (geo_dif_rumbo(a->track, haciala) > 45) continue;
+                if (km <= 1 || km >= 55) continue;
+                n++;
+            }
+            if (n > mejor) { mejor = n; senda_pista = &p[i]; senda_es_b = lado; senda_hay = 1; }
+        }
+    }
+}
+
 void radar_avanzar(void) {
     ordenar_por_cercania();
+    elegir_senda();
     // El barrido avanza 0,012 radianes por cuadro = 1,96 unidades de 1024.
     beam = (beam + 2) % TRIG_VUELTA;
 
@@ -128,6 +193,68 @@ static void radar_pintar(void) {
 
     // Grados de 1e-4 que entran en el radio del scope: 1 grado = 111 km.
     const int32_t span = (int32_t)radar_apt.radio_km * 10000 / 111;
+
+    #define PROY_X(la, lo) (cx + (int)((int64_t)((lo) - radar_apt.lon) * R / span))
+    #define PROY_Y(la, lo) (cy - (int)((int64_t)((la) - radar_apt.lat) * R / span))
+
+    // Pistas del aeropuerto. Las cortas se estiran a un largo minimo, si no
+    // a este alcance no se ven; es lo mismo que hace minLen en la web.
+    if (radar_pistas_on) {
+        int cuantas = 0;
+        const pista_t *p = pistas_de(radar_apt.iata, &cuantas);
+        const int minlen = R * 75 / 1000 < 9 ? 9 : (R * 75 / 1000 > 30 ? 30 : R * 75 / 1000);
+        for (int i = 0; i < cuantas; i++) {
+            int ax = PROY_X(p[i].lat_a, p[i].lon_a), ay = PROY_Y(p[i].lat_a, p[i].lon_a);
+            int bx = PROY_X(p[i].lat_b, p[i].lon_b), by = PROY_Y(p[i].lat_b, p[i].lon_b);
+            int dx = bx - ax, dy = by - ay;
+            int largo = 0;
+            while ((largo + 1) * (largo + 1) <= dx * dx + dy * dy) largo++;
+            if (largo > 0 && largo < minlen) {          // estirar desde el medio
+                int mx = (ax + bx) / 2, my = (ay + by) / 2;
+                ax = mx - dx * minlen / (2 * largo); ay = my - dy * minlen / (2 * largo);
+                bx = mx + dx * minlen / (2 * largo); by = my + dy * minlen / (2 * largo);
+            }
+            int en_uso = senda_hay && senda_pista == &p[i];
+            const uint8_t c = radar_tono(en_uso ? 250 : 180);
+            // Grosor: dos o tres pasadas, que la fuente de lineas es de 1 px.
+            gfx_linea(ax, ay, bx, by, c);
+            gfx_linea(ax, ay + 1, bx, by + 1, c);
+            if (en_uso) gfx_linea(ax, ay - 1, bx, by - 1, c);
+        }
+
+        // Senda de aproximacion: punteada desde donde viene el avion hasta la
+        // cabecera en uso, con el cartel al lado.
+        if (senda_hay) {
+            int hdg      = senda_es_b ? senda_pista->hdg_b : senda_pista->hdg_a;
+            int32_t clat = senda_es_b ? senda_pista->lat_b : senda_pista->lat_a;
+            int32_t clon = senda_es_b ? senda_pista->lon_b : senda_pista->lon_a;
+            const char *ident = senda_es_b ? senda_pista->ident_b : senda_pista->ident_a;
+            // Largo de la senda, igual que approachKm() en la web: 35 por
+            // ciento del alcance, entre 18 y 32 km.
+            int apxkm = radar_apt.radio_km * 35 / 100;
+            if (apxkm < 18) apxkm = 18;
+            if (apxkm > 32) apxkm = 32;
+            int32_t slat, slon;
+            geo_proyectar(clat, clon, (hdg + 180) % 360, apxkm, &slat, &slon);
+            int sx = PROY_X(slat, slon), sy = PROY_Y(slat, slon);
+            int tx2 = PROY_X(clat, clon), ty2 = PROY_Y(clat, clon);
+            // Si en pantalla queda mas corta que 64 px no se lee: se estira,
+            // igual que hace la web con plen < 64.
+            int ddx = sx - tx2, ddy = sy - ty2;
+            int plen = 0;
+            while ((plen + 1) * (plen + 1) <= ddx * ddx + ddy * ddy) plen++;
+            if (plen > 0 && plen < 64) {
+                sx = tx2 + ddx * 64 / plen;
+                sy = ty2 + ddy * 64 / plen;
+            }
+            const uint8_t c = radar_tono(245);
+            gfx_linea_punteada(sx, sy, tx2, ty2, 8, 6, c);
+            gfx_linea_punteada(sx, sy + 1, tx2, ty2 + 1, 8, 6, c);
+            char cartel[24];
+            snprintf(cartel, sizeof cartel, "APX %s EN USO", ident);
+            gfx_texto(sx + 6, sy - 16, cartel, c, 1);
+        }
+    }
 
     for (int i = 0; i < radar_cantidad; i++) {
         avion_t *a = &radar_aviones[i];

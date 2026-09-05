@@ -7,6 +7,7 @@
 #ifndef RADAR_H
 #define RADAR_H
 #include <stdint.h>
+#include <stdbool.h>
 
 #define RADAR_MAX_AVIONES 32
 
@@ -53,5 +54,6 @@ void radar_cuadro(void);     // redibuja, por bandas de arriba hacia abajo
 // Vista: solo el scope, o el scope al 54% con las tarjetas al costado.
 typedef enum { VISTA_RADAR, VISTA_HIBRIDA } vista_t;
 extern vista_t radar_vista;
+extern bool radar_pistas_on;
 
 #endif

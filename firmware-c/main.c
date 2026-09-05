@@ -150,6 +150,7 @@ int main(void) {
             uint32_t t1 = time_us_32();
             printf("%lu cuadros en %lu ms\n", (unsigned long)cuadros,
                    (unsigned long)((t1 - t0) / 1000));
+
             t0 = t1; cuadros = 0;
         }
     }

@@ -16,7 +16,7 @@ static const struct {
     { "JJ8003", "LA", "B777",     "GRU", "EZE", "Sao Paulo",    "Buenos Aires","07:25", "10:35", "EN VUELO",   1200,  8100, 275, 410, 29000, 41 },
     { "AF228",  "AF", "B777-300", "CDG", "EZE", "Paris",        "Buenos Aires","23:20", "08:45", "EN VUELO",  -8400,  1100,  78, 470, 37000, 80 },
     { "UA820",  "UA", "B789",     "IAH", "EZE", "Houston",      "Buenos Aires","21:50", "10:10", "EN VUELO",   5300,  7200, 310, 420, 32000, 67 },
-    { "AR1885", "AR", "B737-800", "COR", "EZE", "Cordoba",      "Buenos Aires","09:40", "10:55", "APROXIMANDO",-1800, -7600, 132, 300, 12000, 92 },
+    { "AR1885", "AR", "B737-800", "COR", "EZE", "Cordoba",      "Buenos Aires","09:40", "10:55", "APROXIMANDO",  404, -2321, 102, 160,  3000, 96 },
     { "AZ680",  "AZ", "A330-900", "FCO", "EZE", "Roma",         "Buenos Aires","22:15", "08:30", "EN VUELO",   8900, -2100, 168, 450, 36000, 71 },
     { "EK247",  "EK", "B777-300", "DXB", "EZE", "Dubai",        "Buenos Aires","03:30", "17:45", "EN VUELO",  -4700,  6800, 340, 480, 38000, 58 },
     { "QF17",   "QF", "B789",     "SYD", "EZE", "Sydney",       "Buenos Aires","11:30", "12:15", "EN VUELO",   2600, -8800,  95, 400, 30000, 63 },

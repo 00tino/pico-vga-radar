@@ -19,6 +19,10 @@ set -e
 ID="${1:?falta el id de la ventana de QuickTime}"
 OUT="${2:-monitor.png}"
 TMP="$(mktemp -t monitor).png"
+# Dos capturas: macOS solo redibuja la ventana cuando algo la toca, asi que
+# la primera devuelve el cuadro anterior. La buena es la segunda.
+screencapture -x -l "$ID" "$TMP"
+sleep 1.5
 screencapture -x -l "$ID" "$TMP"
 ffmpeg -y -loglevel error -i "$TMP" -vf "scale=1400:-1" "$OUT"
 rm -f "$TMP"
