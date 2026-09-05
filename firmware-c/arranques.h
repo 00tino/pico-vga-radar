@@ -8,7 +8,7 @@
 // Apagado: el QR va a salir cuando la Pico no encuentre su wifi, no por un
 // gesto. Queda escrito y probado por si alguna vez se quiere un reset de
 // emergencia; con poner 1 aca alcanza.
-#define ARRANQUES_ACTIVO      0
+#define ARRANQUES_ACTIVO      1
 #define ARRANQUES_PARA_CONFIG 3
 #define ARRANQUES_SEGUNDOS    12
 

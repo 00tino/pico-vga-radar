@@ -274,6 +274,19 @@ están `VBUS`, `VSYS`, `3V3` y `3V3_EN`, que apagan la placa si se tocan.
 - **El negro está muy levantado.** Con una imagen oscura la cámara sube la
   exposición y el fondo se ve gris azulado. No es un problema de la señal.
 
+### El EDID: la placa sabe qué monitor tiene
+
+Con los agujeros 12 y 15 cableados, la Pico lee el EDID y dice:
+`VSC VA1703wSERIES (codigo 121F), preferida 1440x900`.
+
+**Corrección de una conclusión anterior**: se había dado por muerto porque un
+barrido de direcciones I2C no encontraba nada. El barrido era un mal test: esa
+memoria no contesta a una lectura suelta, hay que escribirle el puntero primero
+(`write(0)` y después `read(128)`), que es lo que hace `leer_edid()`.
+
+Sirve para reconocer un monitor nuevo solo, y confirma que este es panorámico
+(1440x900 es 16:10), que es por qué estira el 4:3.
+
 ### El botón del monitor: probado y descartado
 
 Valentino quería apretar un botón del monitor para que apareciera el QR de
@@ -286,9 +299,7 @@ al apagarlo se cayeran y la placa lo notara. Se cableó y se midió:
 
 - Las dos líneas suben solas en 2-3 µs: el bus está bien y el monitor las
   levanta.
-- **El EDID no contesta en ninguna dirección ni a ninguna velocidad** (se
-  probó de 100 kHz a 5 kHz). Su memoria se alimenta del agujero 9, que está
-  sin conectar a propósito.
+- El EDID **sí** contesta (ver arriba); lo que fallaba era el barrido.
 - **Apagando y prendiendo el monitor varias veces, la placa no vio ni un
   cambio**: las pull-ups del ViewSonic siguen alimentadas en standby.
 
@@ -513,6 +524,14 @@ Esta es la lista viva de Valentino. Lo de arriba es lo urgente.
 1. **El mapa de Ezeiza a Miami quedó muy raro** — *arreglado y verificado*:
    eran las longitudes envueltas punto por punto (bug 26b). Faltaban México,
    Centroamérica y el Caribe, y había franjas a lo ancho. Ahora se ve entero.
+1c. **La ruta del mapa no pasaba por los puntos que ella misma marca** —
+   *arreglado*: iba derecho del origen al destino, así que de Miami a Ezeiza
+   pasaba lejos de API y de TRQ. Ahora va de tramo en tramo por los puntos de
+   paso, cada tramo por su propio círculo máximo. Medido: la ruta pasa a 4 px
+   o menos de cada marca, contra 12 antes. Y se le subió el contraste: con
+   3-3-2 bits el relleno de tierra y el tono de la ruta caían a dos escalones
+   y la línea se perdía encima del continente.
+
 1b. **La tarjeta del mapa quedaba medio vacía** — *arreglado*: la tarjeta
    admite hasta siete filas en vez de cinco, y las dos nuevas son el tiempo
    volando con el avance y la duración, y los aeropuertos por los que va

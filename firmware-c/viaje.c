@@ -66,8 +66,9 @@ int avion_x, avion_y;
 
 // Los aeropuertos por los que va pasando el vuelo. Los calcula el mapa y los
 // muestra tambien la tarjeta, asi que viven aca afuera.
-char viaje_paso_cod[5][4];
-int  viaje_paso_n = 0;
+char    viaje_paso_cod[5][4];
+int32_t viaje_paso_lat[5], viaje_paso_lon[5];
+int     viaje_paso_n = 0;
 
 void radar_pintar_viaje(void) {
     const int X = area.x, Y = area.y, AL = area.al;
@@ -290,15 +291,74 @@ void radar_pintar_viaje(void) {
     }
     gfx_rect(x0, y0, anc, alt, radar_tono(60));
 
-    // Ruta entera, punteado fino; y lo que falta, punteado marcado.
+    // Los puntos por donde pasa el vuelo: en cinco lugares de la ruta se
+    // busca el aeropuerto mas cercano y se lo marca, como hace la web. Se
+    // calcula solo cuando cambia el vuelo, que recorrer los 5334 aeropuertos
+    // cinco veces no es para hacerlo en cada cuadro.
     if (o && d) {
+        static char cache_vuelo[9];
+
+        if (strncmp(cache_vuelo, ac->vuelo, sizeof cache_vuelo - 1)) {
+            snprintf(cache_vuelo, sizeof cache_vuelo, "%s", ac->vuelo);
+            viaje_paso_n = 0;
+            static const int FRAC[5] = { 18, 36, 54, 72, 88 };
+            for (int k = 0; k < 5; k++) {
+                int32_t la, lo;
+                interpolar(o->lat, o->lon, d->lat, d->lon, FRAC[k] / 100.0f, &la, &lo);
+                int mejor = -1, mejor_km = 260;
+                for (int i = 0; i < AEROPUERTOS_CANT; i++) {
+                    if (!strncmp(aeropuertos[i].iata, o->iata, 3) ||
+                        !strncmp(aeropuertos[i].iata, d->iata, 3)) continue;
+                    int km = km_gc(aeropuertos[i].lat, aeropuertos[i].lon, la, lo);
+                    if (km < mejor_km) { mejor_km = km; mejor = i; }
+                }
+                if (mejor >= 0) {
+                    int repetido = 0;
+                    for (int q = 0; q < viaje_paso_n; q++)
+                        if (!strncmp(viaje_paso_cod[q], aeropuertos[mejor].iata, 3)) repetido = 1;
+                    if (!repetido) {
+                        viaje_paso_lat[viaje_paso_n] = aeropuertos[mejor].lat;
+                        viaje_paso_lon[viaje_paso_n] = aeropuertos[mejor].lon;
+                        snprintf(viaje_paso_cod[viaje_paso_n], sizeof viaje_paso_cod[viaje_paso_n], "%s", aeropuertos[mejor].iata);
+                        viaje_paso_n++;
+                    }
+                }
+            }
+        }
+    }
+
+    // Ruta entera, punteado fino; y lo que falta, punteado marcado.
+    //
+    // La ruta va de tramo en tramo por los puntos de paso, no derecho del
+    // origen al destino: si no, la linea no tocaba ninguno de los puntos que
+    // ella misma marca. De Miami a Ezeiza pasaba lejos de API y de TRQ, que
+    // son justamente los que dicen por donde va el vuelo.
+    if (o && d) {
+        int32_t tla[7], tlo[7];
+        int tn = 0;
+        tla[tn] = o->lat; tlo[tn] = o->lon; tn++;
+        for (int k = 0; k < viaje_paso_n && tn < 6; k++) {
+            tla[tn] = viaje_paso_lat[k]; tlo[tn] = viaje_paso_lon[k]; tn++;
+        }
+        tla[tn] = d->lat; tlo[tn] = d->lon; tn++;
+
+        // Cada tramo por su propio circulo maximo: los puntos estan lejos
+        // entre si y una recta en pantalla no es el camino que vuela.
+        const int por_tramo = (PUNTOS / (tn - 1)) < 4 ? 4 : (PUNTOS / (tn - 1));
         int px = 0, py = 0;
-        for (int i = 0; i <= PUNTOS; i++) {
-            int32_t la, lo;
-            interpolar(o->lat, o->lon, d->lat, d->lon, (float)i / PUNTOS, &la, &lo);
-            int cxp = MX(la, lo), cyp = MY(la, lo);
-            if (i) gfx_linea_punteada(px, py, cxp, cyp, 4, 8, radar_tono(90));
-            px = cxp; py = cyp;
+        for (int t = 0; t + 1 < tn; t++) {
+            for (int i = 0; i <= por_tramo; i++) {
+                int32_t la, lo;
+                interpolar(tla[t], tlo[t], tla[t + 1], tlo[t + 1],
+                           (float)i / por_tramo, &la, &lo);
+                int cxp = MX(la, lo), cyp = MY(la, lo);
+                // Mas marcada que en la web: alla el relleno de tierra es casi
+                // transparente, pero con 3-3-2 bits el relleno y un tono 90
+                // caen a dos escalones de distancia y la ruta se perdia
+                // encima del continente.
+                if (t || i) gfx_linea_punteada(px, py, cxp, cyp, 5, 6, radar_tono(155));
+                px = cxp; py = cyp;
+            }
         }
     }
     if (d) {
@@ -328,46 +388,12 @@ void radar_pintar_viaje(void) {
         }
     }
 
-    // Los puntos por donde pasa el vuelo: en cinco lugares de la ruta se
-    // busca el aeropuerto mas cercano y se lo marca, como hace la web. Se
-    // calcula solo cuando cambia el vuelo, que recorrer los 5334 aeropuertos
-    // cinco veces no es para hacerlo en cada cuadro.
-    if (o && d) {
-        static char cache_vuelo[9];
-        static int32_t hlat[5], hlon[5];
-
-        if (strncmp(cache_vuelo, ac->vuelo, sizeof cache_vuelo - 1)) {
-            snprintf(cache_vuelo, sizeof cache_vuelo, "%s", ac->vuelo);
-            viaje_paso_n = 0;
-            static const int FRAC[5] = { 18, 36, 54, 72, 88 };
-            for (int k = 0; k < 5; k++) {
-                int32_t la, lo;
-                interpolar(o->lat, o->lon, d->lat, d->lon, FRAC[k] / 100.0f, &la, &lo);
-                int mejor = -1, mejor_km = 260;
-                for (int i = 0; i < AEROPUERTOS_CANT; i++) {
-                    if (!strncmp(aeropuertos[i].iata, o->iata, 3) ||
-                        !strncmp(aeropuertos[i].iata, d->iata, 3)) continue;
-                    int km = km_gc(aeropuertos[i].lat, aeropuertos[i].lon, la, lo);
-                    if (km < mejor_km) { mejor_km = km; mejor = i; }
-                }
-                if (mejor >= 0) {
-                    int repetido = 0;
-                    for (int q = 0; q < viaje_paso_n; q++)
-                        if (!strncmp(viaje_paso_cod[q], aeropuertos[mejor].iata, 3)) repetido = 1;
-                    if (!repetido) {
-                        hlat[viaje_paso_n] = aeropuertos[mejor].lat;
-                        hlon[viaje_paso_n] = aeropuertos[mejor].lon;
-                        snprintf(viaje_paso_cod[viaje_paso_n], sizeof viaje_paso_cod[viaje_paso_n], "%s", aeropuertos[mejor].iata);
-                        viaje_paso_n++;
-                    }
-                }
-            }
-        }
-        for (int k = 0; k < viaje_paso_n; k++) {
-            int hx = MX(hlat[k], hlon[k]), hy = MY(hlat[k], hlon[k]);
-            gfx_circulo_lleno(hx, hy, 3, radar_tono(200));
-            gfx_texto(hx + 6, hy - 12, viaje_paso_cod[k], radar_tono(150), 1);
-        }
+    // Las marcas de los puntos de paso, ya con la ruta dibujada por encima.
+    for (int k = 0; k < viaje_paso_n; k++) {
+        int hx = MX(viaje_paso_lat[k], viaje_paso_lon[k]);
+        int hy = MY(viaje_paso_lat[k], viaje_paso_lon[k]);
+        gfx_circulo_lleno(hx, hy, 3, radar_tono(200));
+        gfx_texto(hx + 6, hy - 12, viaje_paso_cod[k], radar_tono(150), 1);
     }
 
     // Origen y destino. El origen rotula hacia la izquierda y el destino
