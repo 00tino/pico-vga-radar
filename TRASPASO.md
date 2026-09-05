@@ -49,14 +49,29 @@ configuración del celular, pide datos ADS-B y dibuja el radar con vuelos reales
 
 Su límite: **8 colores y dibujado lento**. No sirve para lo que Valentino quiere.
 
-### Firmware C — la base de video funcionando
+### Firmware C — video, primitivas y el radar andando
 
-`firmware-c/`. **Es lo que está cargado en la placa ahora.** Da **640×480 con
-256 colores**, verificado en el monitor: 8 tonos de rojo, 8 de verde, 4 de azul,
-imagen estable, sin rayado. Framebuffer de 307 KB en RAM.
+`firmware-c/`. **Es lo que está cargado en la placa.** Da **640×480 con 256
+colores**, framebuffer de 307 KB en RAM, y el radar corriendo a **60 fps**
+verificados.
 
-Sólo tiene el driver de video y un patrón de prueba. **Todo lo demás está por
-hacerse.**
+Lo que ya hace, todo visto en el monitor:
+
+- **Primitivas** (`gfx.c`): texto con fuente Cascadia 7×14 y escalado, líneas,
+  círculos, rectángulos, triángulos, sectores, blits y color con dithering.
+- **Área útil** (`area.c`): márgenes por borde, con pantalla de calibración.
+  En el ViewSonic quedó en 4 px por lado.
+- **Logos** (`logos.c`): los 824, 36×36, **1,02 MB**. Entran todos.
+- **Pistas** (`pistas.c`): las 5600 de los 4040 aeropuertos, **190 KB**.
+- **El scope** (`radar.c`): anillos, cruz, etiquetas de alcance, barrido con
+  cuña, aviones con rumbo y efecto fósforo, pistas y senda de aproximación.
+- **Tarjetas** (`tarjetas.c`): la vista híbrida, scope al 54% y tarjetas al
+  costado con logo, estado, ruta, ciudades, horarios y métricas.
+- **Tráfico de prueba** (`demo.c`): 14 vuelos que se mueven de verdad.
+
+Firmware completo: **1,32 MB de flash de 4 MB**. Sobran 2,7 MB.
+
+Falta: WiFi, portal de configuración, QR y datos ADS-B reales.
 
 ---
 
@@ -225,6 +240,16 @@ después de un rato largo de mirar barras de colores tratando de adivinarlo.
     byte. Con bytes, tres de cada cuatro píxeles salían basura.
 14. **Hay que reiniciar el DMA en cada cuadro** desde una interrupción de vsync.
     Sin eso la imagen se desplaza sola y parece un estroboscopio.
+15. **No hay RAM para doble buffer** (307 KB cada uno, la Pico tiene 520). Se
+    dibuja sobre el mismo buffer que el monitor lee, así que **hay que pintar
+    por bandas de arriba hacia abajo**, cada una antes de que el haz llegue.
+    Sin eso, lo que se dibuja último en la parte de arriba nunca se ve: el
+    encabezado desaparecía aunque estuviera en el framebuffer.
+16. **Rellenar un sector con rayos desde el centro deja 18% de huecos**: una
+    línea diagonal de Bresenham toca un solo píxel por columna. Va por filas.
+17. **Cuidado con premultiplicar por `TRIG_UNO` y dividir una sola vez.** Los
+    triángulos de los aviones salían con vértices a ±6000 px y el rasterizado
+    se comía 70 de los 83 ms del cuadro: 12 fps en vez de 60.
 
 ---
 
@@ -242,14 +267,18 @@ después de un rato largo de mirar barras de colores tratando de adivinarlo.
 6. **El render con el diseño de la web** — el grueso del trabajo, y lo que
    Valentino quiere ver.
 
-### Problema abierto: los logos
+### Los logos: resuelto, entran todos
 
-Los logos de aerolíneas de `docs/logos/` pesan **4,2 MB** y la Pico tiene 4 MB de
-memoria de programa. **No entran.** Hay que resolverlo y es una decisión que
-Valentino tiene que tomar:
+El planteo anterior estaba mal: los 4,2 MB son el peso del **formato** PNG a
+64×64 con color verdadero, no de la información. En el formato de la pantalla
+—36×36, un byte por píxel— los 824 ocupan **1,02 MB**, medidos. Van todos, y
+el cliente puede configurar cualquier aeropuerto del mundo.
 
-- Convertirlos a un formato indexado chico (unos 30 KB los 800), o
-- Guardar sólo las aerolíneas de la zona del equipo.
+Los convierte `herramientas/logos_a_c.py`, que corre en la Mac cuando cambian
+los PNG. **El dithering está duplicado en ese script y en `gfx.c`: si se toca
+uno hay que tocar el otro**, porque los dos tienen que cuantizar igual.
+
+Lo mismo con las pistas: `herramientas/pistas_a_c.py`.
 
 ---
 
@@ -270,8 +299,20 @@ Además, aprendido en esta sesión:
 - **Las fotos con el celular funcionan muy bien** para diagnosticar. Pedirlas.
 - **Su ojo vale más que la cámara** para juzgar brillos sutiles. La cámara sirve
   para lo estructural: rayas, corrimientos, geometría.
-- **Intentar ver por la cámara del Mac no funciona**: macOS bloquea el acceso
-  desde la terminal y FaceTime se queda en ahorro de energía. No insistir.
+- **Para ver el monitor sin pedir fotos está la GoPro**, autorizado por
+  Valentino. `herramientas/ver_monitor.sh <id_ventana>`. Hay que abrir
+  QuickTime con Archivo > Nueva grabación de vídeo, que toma la HERO12 sola.
+  Photo Booth **no sirve** (espeja y se pausa al perder el foco), y ffmpeg
+  desde la terminal tampoco: macOS no le da permiso de cámara.
+- **La cámara miente sobre el brillo.** El negro de este monitor está muy
+  levantado y la cámara lo exagera: texto que está dibujado puede no verse en
+  la foto. Para saber si algo se dibujó de verdad, **contar los píxeles en el
+  framebuffer desde el propio firmware**. Eso separa lo que dibuja la Pico de
+  lo que muestra el monitor y de lo que capta la cámara, y resolvió en un
+  minuto dos cosas que por foto eran indistinguibles.
+- **La hora de compilación se dibuja en pantalla** (abajo a la izquierda del
+  scope): sirve para saber si lo que se está mirando es el firmware recién
+  cargado. Varias veces la captura mostraba un cuadro viejo.
 - Cuando algo no se entiende, **hacer un diagrama visual publicado como
   artifact**, no una tabla. Los pidió explícitamente dos veces.
 - **Medir antes que adivinar.** Cada vez que se midió —niveles en los pines,
