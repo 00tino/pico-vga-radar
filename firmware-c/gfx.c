@@ -261,3 +261,36 @@ void gfx_sector(int cx, int cy, int r, int a0, int a1, uint8_t c) {
         if (lo <= hi) gfx_hlinea(cx + lo, cy + dy, hi - lo + 1, c);
     }
 }
+
+// Rellena un poligono cualquiera: por cada fila se buscan los cruces con los
+// lados, se ordenan y se pinta entre pares. Solo recorre las filas de la
+// banda activa, asi que dibujar el mapa no cuesta mas de lo que se ve.
+void gfx_poligono_lleno(const int *xs, const int *ys, int n, uint8_t c) {
+    if (n < 3) return;
+    int ymin = ys[0], ymax = ys[0];
+    for (int i = 1; i < n; i++) {
+        if (ys[i] < ymin) ymin = ys[i];
+        if (ys[i] > ymax) ymax = ys[i];
+    }
+    if (ymin < gfx_banda_y0) ymin = gfx_banda_y0;
+    if (ymax > gfx_banda_y1) ymax = gfx_banda_y1;
+
+    int cruces[64];
+    for (int y = ymin; y <= ymax; y++) {
+        int m = 0;
+        for (int i = 0, j = n - 1; i < n; j = i++) {
+            int y0 = ys[j], y1 = ys[i];
+            if ((y0 <= y && y1 > y) || (y1 <= y && y0 > y)) {
+                if (m < (int)(sizeof cruces / sizeof cruces[0]))
+                    cruces[m++] = xs[j] + (y - y0) * (xs[i] - xs[j]) / (y1 - y0);
+            }
+        }
+        for (int a = 1; a < m; a++) {          // insercion, son pocos
+            int v = cruces[a], b = a - 1;
+            while (b >= 0 && cruces[b] > v) { cruces[b + 1] = cruces[b]; b--; }
+            cruces[b + 1] = v;
+        }
+        for (int a = 0; a + 1 < m; a += 2)
+            gfx_hlinea(cruces[a], y, cruces[a + 1] - cruces[a] + 1, c);
+    }
+}

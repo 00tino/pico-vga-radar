@@ -13,6 +13,7 @@
 #include "trig.h"
 #include "geo.h"
 #include "aeropuertos.h"
+#include "costas.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -60,8 +61,11 @@ static void interpolar(int32_t la1, int32_t lo1, int32_t la2, int32_t lo2,
 }
 
 void radar_pintar_viaje(void) {
-    const int X = area.x, Y = area.y, AN = area.an, AL = area.al;
-    vga_limpiar_filas(gfx_banda_y0, gfx_banda_y1, radar_tono(0));
+    const int X = area.x, Y = area.y, AL = area.al;
+    // En la vista con tarjeta al costado el mapa ocupa el 54 por ciento, igual
+    // que el scope en la hibrida.
+    const int AN = (radar_vista == VISTA_SEGUIR_HIBRIDA) ? area.an * 54 / 100 : area.an;
+    vga_limpiar_rect(0, gfx_banda_y0, X + AN + 4, gfx_banda_y1, radar_tono(0));
 
     // El avion que se sigue.
     const avion_t *ac = 0;
@@ -105,6 +109,41 @@ void radar_pintar_viaje(void) {
 
     #define MX(la, lo) (x0 + anc / 2 + (int)((int64_t)(WL(lo) - midlo) * esc / 10000))
     #define MY(la, lo) (y0 + alt / 2 - (int)((int64_t)((la) - midla) * esc / 10000))
+
+    // Las costas del mundo: relleno tenue y contorno, igual que la web
+    // (alpha 0,16 para el relleno y 0,5 para el borde).
+    {
+        int px[GFX_POLIGONO_MAX], py[GFX_POLIGONO_MAX];
+        const uint8_t relleno = radar_tono(41), linea_costa = radar_tono(128);
+        for (int i = 0; i < COSTAS_ANILLOS; i++) {
+            const int desde = costas_anillos[i].desde, cant = costas_anillos[i].cantidad;
+            if (cant < 4 || cant > GFX_POLIGONO_MAX) continue;
+
+            // Descartar rapido lo que no cae en el encuadre.
+            int32_t a = 900000, b = -900000, cc = 0x7fffffff, dd = -0x7fffffff;
+            for (int j = 0; j < cant; j++) {
+                int32_t la = (int32_t)costas_lat[desde + j] * 100;
+                int32_t lo = WL((int32_t)costas_lon[desde + j] * 100);
+                if (la < a) a = la;
+                if (la > b) b = la;
+                if (lo < cc) cc = lo;
+                if (lo > dd) dd = lo;
+            }
+            if (b < minla || a > maxla || dd < minlo || cc > maxlo) continue;
+
+            for (int j = 0; j < cant; j++) {
+                int32_t la = (int32_t)costas_lat[desde + j] * 100;
+                int32_t lo = (int32_t)costas_lon[desde + j] * 100;
+                px[j] = MX(la, lo);
+                py[j] = MY(la, lo);
+            }
+            gfx_poligono_lleno(px, py, cant, relleno);
+            for (int j = 0; j < cant; j++) {
+                int k = (j + 1) % cant;
+                gfx_linea(px[j], py[j], px[k], py[k], linea_costa);
+            }
+        }
+    }
 
     // Rejilla de paralelos y meridianos, con el paso que corresponda.
     // Cada eje lleva su propio paso: con el de latitud, un vuelo largo
@@ -217,4 +256,12 @@ void radar_pintar_viaje(void) {
     }
     gfx_texto(X + AN - 10 - gfx_ancho_texto(buf, 1), Y + 8, buf, radar_tono(170), 1);
     gfx_hlinea(X + 10, Y + 26, AN - 20, radar_tono(45));
+
+    // La tarjeta del vuelo al costado, si la vista la lleva.
+    if (radar_vista == VISTA_SEGUIR_HIBRIDA) {
+        void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande);
+        extern int radar_tarjetas_sucias(void);
+        vga_limpiar_rect(X + AN + 4, gfx_banda_y0, area.an - AN - 4, gfx_banda_y1, radar_tono(0));
+        tarjeta_dibujar(X + AN + 8, Y + 8, area.an - AN - 16, AL - 16, ac, 0);
+    }
 }

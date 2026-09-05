@@ -150,3 +150,69 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande)
         gfx_texto(px + anu - gfx_ancho_texto(buf, 1), cy, buf, medio, 1);
     }
 }
+
+// --- Formato aeropuerto -------------------------------------------------
+// La tabla de llegadas, como listStyle "fids" en la web: una fila por vuelo
+// con logo, indicativo, ruta, horarios y estado. Es lo que se ve en las
+// pantallas de un aeropuerto de verdad.
+void fids_dibujar(int x, int y, int an, int al, const avion_t **vuelos, int n) {
+    const uint8_t borde  = radar_tono(60);
+    const uint8_t fuerte = radar_tono(255);
+    const uint8_t medio  = radar_tono(190);
+    const uint8_t suave  = radar_tono(150);
+
+    // En la columna angosta van menos columnas, igual que la web con
+    // compact: sin horario de salida y sin ruta larga.
+    const int compacto = (an < 380);
+
+    const int c_logo  = x + 6;
+    const int c_vuelo = c_logo + 30;
+    const int c_ruta  = c_vuelo + (compacto ? 62 : an * 14 / 100);
+    const int c_dep   = c_ruta + (compacto ? 78 : an * 24 / 100);
+    const int c_arr   = compacto ? c_dep : c_dep + an * 10 / 100;
+    const int c_est   = compacto ? c_dep + 46 : c_arr + an * 10 / 100;
+
+    gfx_texto(c_vuelo, y, "VUELO", suave, 1);
+    gfx_texto(c_ruta,  y, "RUTA",  suave, 1);
+    if (!compacto) gfx_texto(c_dep, y, "SALE", suave, 1);
+    gfx_texto(c_arr, y, "LLEGA", suave, 1);
+    gfx_texto(c_est, y, "ESTADO", suave, 1);
+    gfx_hlinea(x, y + 16, an, borde);
+
+    const int alto_fila = (al - 22) / (n > 0 ? n : 1);
+    const int fila = alto_fila > 30 ? 30 : alto_fila;
+
+    char buf[48];
+    for (int i = 0; i < n; i++) {
+        const avion_t *a = vuelos[i];
+        const int fy = y + 22 + i * alto_fila;
+        if (fy + fila < gfx_banda_y0 || fy > gfx_banda_y1) continue;
+        const int ty = fy + (fila - GFX_FUENTE_ALTO) / 2;
+
+        // El logo esta guardado a 36 y aca se muestra achicado salteando
+        // pixeles: a este tamano no se nota y no hace falta otra copia.
+        const uint8_t *logo = logo_buscar(a->aerolinea);
+        const int lado = fila - 4 < 24 ? fila - 4 : 24;
+        if (logo && lado > 6) {
+            for (int j = 0; j < lado; j++)
+                for (int k = 0; k < lado; k++)
+                    gfx_punto(c_logo + k, fy + 2 + j,
+                              logo[(j * LOGO_LADO / lado) * LOGO_LADO + (k * LOGO_LADO / lado)]);
+        }
+
+        gfx_texto(c_vuelo, ty, a->vuelo, fuerte, 1);
+        snprintf(buf, sizeof buf, "%s>%s", a->origen, a->destino);
+        gfx_texto(c_ruta, ty, buf, medio, 1);
+        if (!compacto) gfx_texto(c_dep, ty, a->dep, medio, 1);
+        gfx_texto(c_arr, ty, a->arr, medio, 1);
+
+        // El estado abreviado, como shortSt() en la web.
+        const char *est = a->estado;
+        if (!strncmp(est, "APROXIMANDO", 11)) est = "APROX";
+        else if (!strncmp(est, "EN TIERRA", 9)) est = "TIERRA";
+        else if (!strncmp(est, "EN VUELO", 8)) est = "VUELO";
+        gfx_texto(c_est, ty, est, fuerte, 1);
+
+        if (i + 1 < n) gfx_hlinea(x, fy + alto_fila - 1, an, radar_tono(28));
+    }
+}

@@ -144,17 +144,27 @@ int main(void) {
 
     // Recorrido por todas las vistas y alcances, para poder revisarlas. Cada
     // escena dura unos segundos y avisa por consola cual esta mostrando.
-    static const struct { const char *nombre; vista_t vista; int tarjetas, radio; const char *apt, *seguir; }
-    ESCENA[] = {
-        { "hibrida 3 tarjetas, 150 km", VISTA_HIBRIDA, 3, 150, "EZE", "" },
-        { "hibrida 4 tarjetas, 150 km", VISTA_HIBRIDA, 4, 150, "EZE", "" },
-        { "hibrida 2 tarjetas, 40 km",  VISTA_HIBRIDA, 2,  40, "EZE", "" },
-        { "solo radar, 80 km",          VISTA_RADAR,   3,  80, "EZE", "" },
-        { "pared de tarjetas",          VISTA_PARED,   3, 150, "EZE", "" },
-        { "solo radar, 20 km",          VISTA_RADAR,   3,  20, "EZE", "" },
-        { "seguir QF17 a Sydney",       VISTA_SEGUIR,  3, 150, "EZE", "QF17" },
-        { "Madrid, hibrida 3, 150 km",  VISTA_HIBRIDA, 3, 150, "MAD", "" },
-        { "Narita, hibrida 3, 80 km",   VISTA_HIBRIDA, 3,  80, "NRT", "" },
+    static const struct {
+        const char *nombre; vista_t vista; lista_t lista;
+        int tarjetas, radio; const char *apt, *seguir, *tema;
+    } ESCENA[] = {
+        { "hibrida 3 tarjetas, 150 km", VISTA_HIBRIDA, LISTA_TARJETAS, 3, 150, "EZE", "", "crt_amber" },
+        { "hibrida 4 tarjetas",         VISTA_HIBRIDA, LISTA_TARJETAS, 4, 150, "EZE", "", "crt_amber" },
+        { "formato aeropuerto (FIDS)",  VISTA_HIBRIDA, LISTA_FIDS,     3, 150, "EZE", "", "crt_amber" },
+        { "solo radar, 80 km",          VISTA_RADAR,   LISTA_TARJETAS, 3,  80, "EZE", "", "crt_amber" },
+        { "solo radar, 20 km",          VISTA_RADAR,   LISTA_TARJETAS, 3,  20, "EZE", "", "crt_amber" },
+        { "pared de tarjetas",          VISTA_PARED,   LISTA_TARJETAS, 3, 150, "EZE", "", "crt_amber" },
+        { "una sola tarjeta grande",    VISTA_PARED,   LISTA_TARJETAS, 1, 150, "EZE", "", "crt_amber" },
+        { "pared formato aeropuerto",   VISTA_PARED,   LISTA_FIDS,     3, 150, "EZE", "", "crt_amber" },
+        { "seguir QF17, solo mapa",     VISTA_SEGUIR,  LISTA_TARJETAS, 1, 150, "EZE", "QF17", "crt_amber" },
+        { "seguir QF17 con tarjeta",    VISTA_SEGUIR_HIBRIDA, LISTA_TARJETAS, 1, 150, "EZE", "QF17", "crt_amber" },
+        { "seguir AA954, mapa America", VISTA_SEGUIR,  LISTA_TARJETAS, 1, 150, "EZE", "AA954", "crt_amber" },
+        { "tema verde",                 VISTA_HIBRIDA, LISTA_TARJETAS, 3, 150, "EZE", "", "crt_green" },
+        { "tema atc azul",              VISTA_HIBRIDA, LISTA_TARJETAS, 3, 150, "EZE", "", "atc_dark" },
+        { "tema hielo",                 VISTA_RADAR,   LISTA_TARJETAS, 3,  80, "EZE", "", "ice" },
+        { "Madrid",                     VISTA_HIBRIDA, LISTA_TARJETAS, 3, 150, "MAD", "", "crt_amber" },
+        { "Narita",                     VISTA_HIBRIDA, LISTA_TARJETAS, 3,  80, "NRT", "", "crt_amber" },
+        { "pantalla de logos",          VISTA_LOGOS,   LISTA_TARJETAS, 3, 150, "EZE", "", "crt_amber" },
     };
     const int ESCENAS = sizeof ESCENA / sizeof ESCENA[0];
 
@@ -167,6 +177,8 @@ int main(void) {
             demo_aeropuerto(apt_actual);
         }
         radar_vista = ESCENA[esc].vista;
+        radar_lista = ESCENA[esc].lista;
+        radar_tema_poner(ESCENA[esc].tema);
         radar_marcar_sucio();
         radar_tarjetas = ESCENA[esc].tarjetas;
         radar_apt.radio_km = ESCENA[esc].radio;

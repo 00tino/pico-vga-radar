@@ -10,6 +10,31 @@
 
 // crt_amber, el tema por defecto de la web: #e8b86d sobre #0a0805.
 tema_t radar_tema = { 0xe8, 0xb8, 0x6d, 0x0a, 0x08, 0x05 };
+lista_t radar_lista = LISTA_TARJETAS;
+
+// Los catorce temas de THEMES en docs/radar.js, con los mismos colores.
+const tema_nombrado_t radar_temas[] = {
+    { "crt_amber", { 0xe8, 0xb8, 0x6d, 0x0a, 0x08, 0x05 } },
+    { "crt_green", { 0x7d, 0xff, 0x7a, 0x03, 0x11, 0x05 } },
+    { "phosphor",  { 0xc6, 0xf5, 0x9a, 0x03, 0x08, 0x05 } },
+    { "atc_dark",  { 0x7e, 0xc8, 0xe3, 0x07, 0x09, 0x0c } },
+    { "navy",      { 0x8a, 0xb4, 0xff, 0x06, 0x10, 0x18 } },
+    { "violet",    { 0xc4, 0xa8, 0xff, 0x0c, 0x08, 0x14 } },
+    { "magenta",   { 0xff, 0x7a, 0xd9, 0x12, 0x08, 0x14 } },
+    { "red",       { 0xff, 0x6b, 0x4a, 0x12, 0x06, 0x06 } },
+    { "orange",    { 0xff, 0x9a, 0x4a, 0x12, 0x08, 0x04 } },
+    { "gold",      { 0xff, 0xd5, 0x6a, 0x0c, 0x0a, 0x04 } },
+    { "ice",       { 0xd9, 0xf6, 0xff, 0x08, 0x10, 0x16 } },
+    { "cyan",      { 0x5e, 0xea, 0xd4, 0x04, 0x12, 0x10 } },
+    { "olive",     { 0xb7, 0xc4, 0x7a, 0x0c, 0x0e, 0x08 } },
+    { "rose",      { 0xff, 0x8f, 0xab, 0x14, 0x08, 0x0c } },
+};
+const int radar_temas_cant = (int)(sizeof radar_temas / sizeof radar_temas[0]);
+
+void radar_tema_poner(const char *nombre) {
+    for (int i = 0; i < radar_temas_cant; i++)
+        if (!strcmp(radar_temas[i].nombre, nombre)) { radar_tema = radar_temas[i].tema; return; }
+}
 
 aeropuerto_t radar_apt = { "EZE", "Buenos Aires (Ezeiza)", -348220, -585360, 150 };
 
@@ -183,6 +208,7 @@ static void anotar_rastro(void) {
 }
 
 void radar_avanzar(void) {
+    if (radar_vista == VISTA_LOGOS) { void logos_pantalla_avanzar(void); logos_pantalla_avanzar(); }
     anotar_rastro();
     ordenar_por_cercania();
     elegir_senda();
@@ -297,40 +323,49 @@ static void radar_pintar(void) {
             if (en_uso) gfx_linea(ax, ay - 1, bx, by - 1, c);
         }
 
-        // Senda de aproximacion: punteada desde donde viene el avion hasta la
-        // cabecera en uso, con el cartel al lado.
+        // Senda de aproximacion. Se dibuja extendiendo el eje de la pista tal
+        // como quedo en pantalla, no proyectando por lat/lon: proyectar
+        // corrige por el coseno de la latitud y la pista no, asi que la senda
+        // salia torcida respecto de la pista. La web tiene el mismo defecto.
         if (senda_hay) {
-            int hdg      = senda_es_b ? senda_pista->hdg_b : senda_pista->hdg_a;
-            int32_t clat = senda_es_b ? senda_pista->lat_b : senda_pista->lat_a;
-            int32_t clon = senda_es_b ? senda_pista->lon_b : senda_pista->lon_a;
-            const char *ident = senda_es_b ? senda_pista->ident_b : senda_pista->ident_a;
-            // Largo de la senda, igual que approachKm() en la web: 35 por
-            // ciento del alcance, entre 18 y 32 km.
-            int apxkm = radar_apt.radio_km * 35 / 100;
-            if (apxkm < 18) apxkm = 18;
-            if (apxkm > 32) apxkm = 32;
-            int32_t slat, slon;
-            geo_proyectar(clat, clon, (hdg + 180) % 360, apxkm, &slat, &slon);
-            int sx = PROY_X(slat, slon), sy = PROY_Y(slat, slon);
-            int tx2 = PROY_X(clat, clon), ty2 = PROY_Y(clat, clon);
-            // Si en pantalla queda mas corta que 64 px no se lee: se estira,
-            // igual que hace la web con plen < 64.
-            int ddx = sx - tx2, ddy = sy - ty2;
-            int plen = 0;
-            while ((plen + 1) * (plen + 1) <= ddx * ddx + ddy * ddy) plen++;
-            if (plen > 0 && plen < 64) {
-                sx = tx2 + ddx * 64 / plen;
-                sy = ty2 + ddy * 64 / plen;
+            const int lado = senda_es_b;
+            const char *ident = lado ? senda_pista->ident_b : senda_pista->ident_a;
+            // Punta donde se aterriza y la de enfrente.
+            int tx2 = lado ? PROY_X(senda_pista->lat_b, senda_pista->lon_b)
+                           : PROY_X(senda_pista->lat_a, senda_pista->lon_a);
+            int ty2 = lado ? PROY_Y(senda_pista->lat_b, senda_pista->lon_b)
+                           : PROY_Y(senda_pista->lat_a, senda_pista->lon_a);
+            int ox = lado ? PROY_X(senda_pista->lat_a, senda_pista->lon_a)
+                          : PROY_X(senda_pista->lat_b, senda_pista->lon_b);
+            int oy = lado ? PROY_Y(senda_pista->lat_a, senda_pista->lon_a)
+                          : PROY_Y(senda_pista->lat_b, senda_pista->lon_b);
+
+            // El avion viene por atras de la cabecera, o sea en el sentido
+            // contrario al que va la pista desde esa punta.
+            int vx = tx2 - ox, vy = ty2 - oy;
+            int largo_pista = 0;
+            while ((largo_pista + 1) * (largo_pista + 1) <= vx * vx + vy * vy) largo_pista++;
+            if (largo_pista > 0) {
+                // Largo de la senda igual que approachKm() en la web: 35 por
+                // ciento del alcance, entre 18 y 32 km; y nunca menos de 64
+                // pixeles, que si no no se lee.
+                int apxkm = radar_apt.radio_km * 35 / 100;
+                if (apxkm < 18) apxkm = 18;
+                if (apxkm > 32) apxkm = 32;
+                int largo_px = apxkm * R / radar_apt.radio_km;
+                if (largo_px < 64) largo_px = 64;
+                int sx = tx2 - vx * largo_px / largo_pista;
+                int sy = ty2 - vy * largo_px / largo_pista;
+
+                const uint8_t c = radar_tono(245);
+                gfx_linea_punteada(sx, sy, tx2, ty2, 8, 6, c);
+                gfx_linea_punteada(sx, sy + 1, tx2, ty2 + 1, 8, 6, c);
+                char cartel[32];
+                snprintf(cartel, sizeof cartel, "APROXIMACION %s", ident);
+                gfx_texto(sx + 6, sy - 16, cartel, c, 1);
+                snprintf(cartel, sizeof cartel, "APROXIMACION %s EN USO", ident);
+                gfx_texto(X + ANS - gfx_ancho_texto(cartel, 1) - 10, Y + 32, cartel, c, 1);
             }
-            const uint8_t c = radar_tono(245);
-            gfx_linea_punteada(sx, sy, tx2, ty2, 8, 6, c);
-            gfx_linea_punteada(sx, sy + 1, tx2, ty2 + 1, 8, 6, c);
-            char cartel[24];
-            snprintf(cartel, sizeof cartel, "APX %s EN USO", ident);
-            gfx_texto(sx + 6, sy - 16, cartel, c, 1);
-            // Y el aviso arriba a la derecha del scope, como en la web.
-            snprintf(cartel, sizeof cartel, "SENDA %s EN USO", ident);
-            gfx_texto(X + ANS - gfx_ancho_texto(cartel, 1) - 10, Y + 32, cartel, c, 1);
         }
     }
 
@@ -372,16 +407,46 @@ static void radar_pintar(void) {
         if (etiquetar && a->vuelo[0]) gfx_texto(x + 8, y - 12, a->vuelo, c, 1);
     }
 
+    // Sobre casa: el vuelo que esta pasando por encima del aeropuerto se
+    // marca con un circulo y su tarjeta salta a la vista, como demoOver.
+    {
+        int mejor = -1, mejor_km = 6;
+        for (int i = 0; i < radar_cantidad; i++) {
+            int km = geo_km(radar_aviones[i].lat, radar_aviones[i].lon,
+                            radar_apt.lat, radar_apt.lon);
+            if (km < mejor_km) { mejor_km = km; mejor = i; }
+        }
+        if (mejor >= 0) {
+            const avion_t *a = &radar_aviones[mejor];
+            int x = cx + (int)((int64_t)(a->lon - radar_apt.lon) * R / span);
+            int y = cy - (int)((int64_t)(a->lat - radar_apt.lat) * R / span);
+            const uint8_t blanco = vga_color(7, 7, 3);
+            gfx_circulo(x, y, 18, blanco);
+            gfx_circulo(x, y, 17, blanco);
+            gfx_texto(x + 22, y - 8, "SOBRE CASA", blanco, 1);
+        }
+    }
+
     if (radar_vista != VISTA_HIBRIDA || !tarjetas_sucias) return;
     vga_limpiar_rect(X + ANS + 4, gfx_banda_y0, AN - ANS - 4, gfx_banda_y1, fondo);
     radar_pintar_tarjetas(X + ANS + 8, Y + 32, AN - ANS - 16, AL - 36, 0);
 }
 
-// La columna, o la pared entera. Muestra la pagina que toca del carrusel.
+// La columna, o la pared entera. Muestra la pagina que toca del carrusel, o
+// la tabla de llegadas si esta elegido el formato aeropuerto.
 void radar_pintar_tarjetas(int x, int y, int an, int al, int grande) {
     const int por_pagina = radar_tarjetas < 1 ? 1 : radar_tarjetas;
     const int cuantas = radar_cantidad < por_pagina ? radar_cantidad : por_pagina;
     if (cuantas <= 0) return;
+
+    if (radar_lista == LISTA_FIDS) {
+        void fids_dibujar(int x, int y, int an, int al, const avion_t **v, int n);
+        const avion_t *v[RADAR_MAX_AVIONES];
+        int n = radar_cantidad < 12 ? radar_cantidad : 12;
+        for (int i = 0; i < n; i++) v[i] = &radar_aviones[lista_n ? lista[i] : i];
+        fids_dibujar(x, y, an, al, v, n);
+        return;
+    }
     const int sep = 6;
     const int tal = (al - (cuantas - 1) * sep) / cuantas;
     for (int i = 0; i < cuantas; i++) {
@@ -421,8 +486,10 @@ void radar_cuadro(void) {
         if (y1 > VGA_ALTO - 1) y1 = VGA_ALTO - 1;
         gfx_banda(y0, y1);
         switch (radar_vista) {
+            case VISTA_LOGOS:  { void logos_pantalla_pintar(void); logos_pantalla_pintar(); } break;
             case VISTA_PARED:  pintar_pared(); break;
-            case VISTA_SEGUIR: radar_pintar_viaje(); break;
+            case VISTA_SEGUIR:
+            case VISTA_SEGUIR_HIBRIDA: radar_pintar_viaje(); break;
             default:           radar_pintar(); break;
         }
     }
