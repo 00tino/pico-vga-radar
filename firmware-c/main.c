@@ -7,8 +7,12 @@
 #include "gfx.h"
 #include "area.h"
 #include "logos.h"
+#include "radar.h"
 #include "pico/stdlib.h"
 #include <stdio.h>
+
+void demo_init(void);
+void demo_avanzar(void);
 
 static uint8_t fondo, ambar, tenue, apagado, blanco;
 
@@ -123,13 +127,24 @@ int main(void) {
     area_set(4, 4, 4, 4);
     printf("area util: %dx%d en %d,%d\n", area.an, area.al, area.x, area.y);
 
-    // Alterna las dos pantallas para poder fotografiar las dos.
+    // Arranca mostrando el patron de primitivas unos segundos y despues se
+    // queda en el radar, que es lo que el equipo muestra de verdad.
+    dibujar_patron();
+    sleep_ms(6000);
+
+    radar_init();
+    demo_init();
+    printf("radar andando\n");
+    uint32_t t0 = time_us_32(), cuadros = 0;
     while (true) {
-        area_calibrar(fondo, tenue, ambar);
-        printf("calibracion\n");
-        sleep_ms(9000);
-        dibujar_patron();
-        printf("patron\n");
-        sleep_ms(9000);
+        vga_esperar_cuadro();       // dibujar justo despues del borrado vertical
+        demo_avanzar();
+        radar_cuadro();
+        if (++cuadros == 120) {
+            uint32_t t1 = time_us_32();
+            printf("%lu cuadros en %lu ms\n", (unsigned long)cuadros,
+                   (unsigned long)((t1 - t0) / 1000));
+            t0 = t1; cuadros = 0;
+        }
     }
 }

@@ -40,3 +40,14 @@ void gfx_rect_dither(int x, int y, int an, int al, uint8_t r, uint8_t g, uint8_t
 
 // Copia una imagen ya en formato de pantalla (un byte por pixel).
 void gfx_blit(int x, int y, int an, int al, const uint8_t *datos);
+
+// Mezcla un color con el fondo, como el globalAlpha del canvas de la web.
+// a va de 0 (todo fondo) a 255 (todo el color de adelante).
+uint8_t gfx_mezcla(uint8_t r, uint8_t g, uint8_t b,
+                   uint8_t fr, uint8_t fg_, uint8_t fb, int a);
+
+void gfx_triangulo_lleno(int x0, int y0, int x1, int y1, int x2, int y2, uint8_t c);
+void gfx_linea_punteada(int x0, int y0, int x1, int y1, int trazo, int hueco, uint8_t c);
+
+// Cuna del barrido: sector lleno entre dos angulos, en unidades de trig.h.
+void gfx_sector(int cx, int cy, int r, int a0, int a1, uint8_t c);

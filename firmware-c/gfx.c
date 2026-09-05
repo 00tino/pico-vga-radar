@@ -1,4 +1,5 @@
 #include "gfx.h"
+#include "trig.h"
 
 void gfx_hlinea(int x, int y, int largo, uint8_t c) {
     if ((unsigned)y >= VGA_ALTO) return;
@@ -157,5 +158,61 @@ void gfx_blit(int x, int y, int an, int al, const uint8_t *datos) {
             if ((unsigned)fx < VGA_ANCHO)
                 vga_fb[fy * VGA_ANCHO + fx] = datos[j * an + i];
         }
+    }
+}
+
+uint8_t gfx_mezcla(uint8_t r, uint8_t g, uint8_t b,
+                   uint8_t fr, uint8_t fg_, uint8_t fb, int a) {
+    if (a < 0) a = 0;
+    if (a > 255) a = 255;
+    return vga_rgb((uint8_t)((r * a + fr * (255 - a)) / 255),
+                   (uint8_t)((g * a + fg_ * (255 - a)) / 255),
+                   (uint8_t)((b * a + fb * (255 - a)) / 255));
+}
+
+// Rasterizado por barrido de filas: se ordenan los vertices por altura y se
+// rellena entre los dos bordes activos. Alcanza para los triangulitos de los
+// aviones, que es lo unico que dibuja triangulos.
+void gfx_triangulo_lleno(int x0, int y0, int x1, int y1, int x2, int y2, uint8_t c) {
+    int tx, ty;
+    if (y0 > y1) { tx=x0;x0=x1;x1=tx; ty=y0;y0=y1;y1=ty; }
+    if (y1 > y2) { tx=x1;x1=x2;x2=tx; ty=y1;y1=y2;y2=ty; }
+    if (y0 > y1) { tx=x0;x0=x1;x1=tx; ty=y0;y0=y1;y1=ty; }
+    if (y2 == y0) { gfx_hlinea(x0 < x1 ? (x0 < x2 ? x0 : x2) : (x1 < x2 ? x1 : x2), y0, 1, c); return; }
+    // Recorte vertical: sin esto un triangulo con vertices lejos de la
+    // pantalla recorre miles de filas para no dibujar nada.
+    int ya = y0 < 0 ? 0 : y0;
+    int yb = y2 >= VGA_ALTO ? VGA_ALTO - 1 : y2;
+    for (int y = ya; y <= yb; y++) {
+        int xa = x0 + (x2 - x0) * (y - y0) / (y2 - y0);   // borde largo
+        int xb;
+        if (y < y1) xb = (y1 == y0) ? x0 : x0 + (x1 - x0) * (y - y0) / (y1 - y0);
+        else        xb = (y2 == y1) ? x1 : x1 + (x2 - x1) * (y - y1) / (y2 - y1);
+        gfx_hlinea(xa < xb ? xa : xb, y, (xa > xb ? xa - xb : xb - xa) + 1, c);
+    }
+}
+
+void gfx_linea_punteada(int x0, int y0, int x1, int y1, int trazo, int hueco, uint8_t c) {
+    int dx = x1 - x0, dy = y1 - y0;
+    int pasos = (dx > 0 ? dx : -dx) > (dy > 0 ? dy : -dy)
+              ? (dx > 0 ? dx : -dx) : (dy > 0 ? dy : -dy);
+    if (pasos <= 0) return;
+    int ciclo = trazo + hueco;
+    for (int i = 0; i <= pasos; i++)
+        if (i % ciclo < trazo)
+            gfx_punto(x0 + dx * i / pasos, y0 + dy * i / pasos, c);
+}
+
+// Se dibuja con rayos desde el centro, con el paso lo bastante fino como para
+// que en el borde exterior no queden huecos entre uno y otro.
+void gfx_sector(int cx, int cy, int r, int a0, int a1, uint8_t c) {
+    if (r <= 0) return;
+    int ancho = a1 - a0;
+    if (ancho <= 0) return;
+    int rayos = (r * ancho) / 128 + 2;
+    for (int i = 0; i <= rayos; i++) {
+        int a = a0 + ancho * i / rayos;
+        gfx_linea(cx, cy, cx + trig_cos(a) * r / TRIG_UNO,
+                          cy + trig_sen(a) * r / TRIG_UNO, c);
     }
 }

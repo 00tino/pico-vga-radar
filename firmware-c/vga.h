@@ -3,6 +3,7 @@
 #define VGA_H
 #include <stdint.h>
 #include <stdbool.h>
+#include "pico/stdlib.h"
 
 #define VGA_ANCHO 640
 #define VGA_ALTO  480
@@ -31,6 +32,16 @@ static inline uint8_t vga_rgb(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 extern uint8_t vga_fb[VGA_ANCHO * VGA_ALTO];
+
+// Sube uno por cuadro, desde la interrupcion de vsync. Sirve para dibujar
+// justo despues del borrado vertical y que no se parta la imagen.
+extern volatile uint32_t vga_cuadros;
+
+// Espera al proximo cuadro.
+static inline void vga_esperar_cuadro(void) {
+    uint32_t n = vga_cuadros;
+    while (vga_cuadros == n) tight_loop_contents();
+}
 
 void vga_init(void);
 void vga_limpiar(uint8_t color);
