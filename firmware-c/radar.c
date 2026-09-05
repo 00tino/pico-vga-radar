@@ -16,6 +16,9 @@ aeropuerto_t radar_apt = { "EZE", "Buenos Aires (Ezeiza)", -348220, -585360, 150
 avion_t radar_aviones[RADAR_MAX_AVIONES];
 int radar_cantidad = 0;
 vista_t radar_vista = VISTA_HIBRIDA;
+int radar_tarjetas = 3;
+int radar_rotacion_s = 8;
+char radar_seguir[9] = "";
 bool radar_pistas_on = true;
 
 // Cabecera en uso: la que mas aviones tiene alineados aproximando. Se calcula
@@ -24,13 +27,26 @@ static const pista_t *senda_pista;
 static int senda_es_b;            // 0 = cabecera A, 1 = cabecera B
 static int senda_hay;
 
-void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a);
+void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande);
 
-// Cuantas tarjetas entran al costado, como maximo.
-#define TARJETAS 3
+// Pagina del carrusel y cuadros que lleva mostrada. Las tarjetas cambian
+// todas juntas al pasar de pagina, no de a una: con la lista reordenandose
+// cada cuadro se cambiaban solas y quedaba raro.
+static int pagina = 0;
+static uint32_t cuadros_pagina = 0;
+
+// Las tarjetas cambian cada varios segundos, no cada cuadro. Redibujarlas
+// sesenta veces por segundo hacia que el cuadro tardara casi lo mismo que el
+// haz en bajar la pantalla, y las de abajo salian rasgadas. Ahora solo se
+// vuelven a dibujar cuando hay algo nuevo que mostrar.
+static int tarjetas_sucias = 1;
+
+void radar_marcar_sucio(void) { tarjetas_sucias = 1; }
 
 static int beam = 0;              // angulo del barrido, en unidades de trig.h
 static uint8_t orden[RADAR_MAX_AVIONES];   // aviones ordenados por cercania
+static uint8_t lista[RADAR_MAX_AVIONES];   // la que ven las tarjetas, congelada
+static int lista_n = 0;
 
 // La web usa alpha sobre el color del tema. Aca se mezcla contra el fondo,
 // que da el mismo resultado porque el fondo es plano.
@@ -129,6 +145,19 @@ static void elegir_senda(void) {
 void radar_avanzar(void) {
     ordenar_por_cercania();
     elegir_senda();
+
+    // El carrusel cambia de pagina cada tantos segundos, no cada cuadro, y la
+    // lista se congela mientras la pagina esta a la vista: si se reordenara
+    // en vivo las tarjetas se irian cambiando de a una, que es lo que pasaba.
+    if (lista_n == 0 || ++cuadros_pagina >= (uint32_t)(radar_rotacion_s * 60)) {
+        cuadros_pagina = 0;
+        const int por_pagina = radar_tarjetas < 1 ? 1 : radar_tarjetas;
+        const int paginas = (radar_cantidad + por_pagina - 1) / por_pagina;
+        if (paginas > 0 && lista_n) pagina = (pagina + 1) % paginas;
+        lista_n = radar_cantidad;
+        for (int i = 0; i < radar_cantidad; i++) lista[i] = orden[i];
+        tarjetas_sucias = 1;
+    }
     // El barrido avanza 0,012 radianes por cuadro = 1,96 unidades de 1024.
     beam = (beam + 2) % TRIG_VUELTA;
 
@@ -148,16 +177,20 @@ void radar_avanzar(void) {
     }
 }
 
+void radar_pintar_tarjetas(int x, int y, int an, int al, int grande);
+void radar_pintar_viaje(void);
+
 static void radar_pintar(void) {
     const int X = area.x, Y = area.y, AN = area.an, AL = area.al;
     const uint8_t fondo = radar_tono(0);
 
-    // Se limpia solo la banda que se esta dibujando, no toda la pantalla.
-    vga_limpiar_filas(gfx_banda_y0, gfx_banda_y1, fondo);
-
     // Geometria igual a la de la web. En la vista hibrida el scope ocupa el
     // 54 por ciento del ancho y las tarjetas el resto, igual que left=0.54.
     const int ANS = (radar_vista == VISTA_HIBRIDA) ? AN * 54 / 100 : AN;
+
+    // Se limpia solo la banda que se esta dibujando, y solo el ancho del
+    // scope: la columna de las tarjetas queda como estaba.
+    vga_limpiar_rect(0, gfx_banda_y0, X + ANS + 4, gfx_banda_y1, fondo);
     const int cx = X + ANS / 2;
     const int cy = Y + AL * 52 / 100;
     const int semi = (ANS / 2 < AL * 52 / 100 ? ANS / 2 : AL * 52 / 100);
@@ -178,10 +211,6 @@ static void radar_pintar(void) {
     // Encabezado: codigo y nombre del aeropuerto.
     gfx_texto(X + 10, Y + 8, radar_apt.iata, radar_tono(255), 1);
     gfx_texto(X + 10, Y + 24, radar_apt.nombre, radar_tono(178), 1);
-
-    // Hora de compilacion, abajo a la izquierda: sirve para saber si lo que
-    // se esta mirando por la camara es el firmware que se acaba de cargar.
-    gfx_texto(X + 6, Y + AL - 18, __TIME__, radar_tono(140), 1);
 
     // Etiquetas de alcance sobre el eje horizontal.
     char km[12];
@@ -253,6 +282,9 @@ static void radar_pintar(void) {
             char cartel[24];
             snprintf(cartel, sizeof cartel, "APX %s EN USO", ident);
             gfx_texto(sx + 6, sy - 16, cartel, c, 1);
+            // Y el aviso arriba a la derecha del scope, como en la web.
+            snprintf(cartel, sizeof cartel, "SENDA %s EN USO", ident);
+            gfx_texto(X + ANS - gfx_ancho_texto(cartel, 1) - 10, Y + 8, cartel, c, 1);
         }
     }
 
@@ -260,7 +292,10 @@ static void radar_pintar(void) {
         avion_t *a = &radar_aviones[i];
         int x = cx + (int)((int64_t)(a->lon - radar_apt.lon) * R / span);
         int y = cy - (int)((int64_t)(a->lat - radar_apt.lat) * R / span);
-        if (x < X || x > X + ANS || y < Y || y > Y + AL) continue;
+        // Solo adentro del circulo: si no, quedan aviones sueltos flotando
+        // en las esquinas, fuera del alcance que dice el radar.
+        int rdx = x - cx, rdy = y - cy;
+        if (rdx * rdx + rdy * rdy > R * R) continue;
         // Si ni el avion ni su etiqueta caen en esta banda, no hay nada que
         // hacer: el cuadro se pinta una vez por banda y esto se salta cuatro
         // quintos del trabajo.
@@ -285,30 +320,46 @@ static void radar_pintar(void) {
         // tarjetas, igual que labeled.has(a.hex) en la web: con todos
         // etiquetados el scope se vuelve ilegible.
         int etiquetar = (radar_vista != VISTA_HIBRIDA);
-        for (int k = 0; !etiquetar && k < TARJETAS && k < radar_cantidad; k++)
-            if (orden[k] == i) etiquetar = 1;
+        const int por_pagina = radar_tarjetas < 1 ? 1 : radar_tarjetas;
+        for (int k = 0; !etiquetar && k < por_pagina && k < radar_cantidad; k++)
+            if (lista_n && lista[(pagina * por_pagina + k) % lista_n] == i) etiquetar = 1;
         if (etiquetar && a->vuelo[0]) gfx_texto(x + 8, y - 12, a->vuelo, c, 1);
     }
 
-    if (radar_vista != VISTA_HIBRIDA) return;
+    if (radar_vista != VISTA_HIBRIDA || !tarjetas_sucias) return;
+    vga_limpiar_rect(X + ANS + 4, gfx_banda_y0, AN - ANS - 4, gfx_banda_y1, fondo);
+    radar_pintar_tarjetas(X + ANS + 8, Y + 4, AN - ANS - 16, AL - 8, 0);
+}
 
-    // Columna de tarjetas. Se muestran los aviones mas cercanos al centro,
-    // que es lo que hace visibleList() en la web.
-    const int tx = X + ANS + 8;
-    const int tan = AN - ANS - 16;
-    const int cuantas = radar_cantidad < TARJETAS ? radar_cantidad : TARJETAS;
+// La columna, o la pared entera. Muestra la pagina que toca del carrusel.
+void radar_pintar_tarjetas(int x, int y, int an, int al, int grande) {
+    const int por_pagina = radar_tarjetas < 1 ? 1 : radar_tarjetas;
+    const int cuantas = radar_cantidad < por_pagina ? radar_cantidad : por_pagina;
     if (cuantas <= 0) return;
-    const int tal = (AL - 8 - (cuantas - 1) * 6) / cuantas;
+    const int sep = 6;
+    const int tal = (al - (cuantas - 1) * sep) / cuantas;
     for (int i = 0; i < cuantas; i++) {
-        int ty = Y + 4 + i * (tal + 6);
+        int k = (pagina * por_pagina + i) % (lista_n ? lista_n : 1);
+        int ty = y + i * (tal + sep);
         if (ty + tal < gfx_banda_y0 || ty > gfx_banda_y1) continue;
-        tarjeta_dibujar(tx, ty, tan, tal, &radar_aviones[orden[i]]);
+        tarjeta_dibujar(x, ty, an, tal, &radar_aviones[lista[k]], grande);
     }
 }
 
 // Un cuadro entero, por bandas de arriba hacia abajo. Ver gfx.h: es lo que
 // evita que se pierda lo que se dibuja en la parte de arriba.
-#define RADAR_BANDAS 4
+// Cuantas bandas. Cuanto mas finas, menos margen hay entre lo que se dibuja
+// al final de una banda y el haz que ya viene pasando por sus primeras filas:
+// con cuatro, el texto de la tarjeta de arriba salia cortado por la mitad.
+#define RADAR_BANDAS 10
+
+static void pintar_pared(void) {
+    if (!tarjetas_sucias) return;
+    vga_limpiar_filas(gfx_banda_y0, gfx_banda_y1, radar_tono(0));
+    gfx_texto(area.x + 10, area.y + 8, radar_apt.iata, radar_tono(255), 1);
+    gfx_texto(area.x + 10, area.y + 24, radar_apt.nombre, radar_tono(178), 1);
+    radar_pintar_tarjetas(area.x + 8, area.y + 44, area.an - 16, area.al - 52, 1);
+}
 
 void radar_cuadro(void) {
     const int alto = (VGA_ALTO + RADAR_BANDAS - 1) / RADAR_BANDAS;
@@ -317,7 +368,12 @@ void radar_cuadro(void) {
         int y1 = y0 + alto - 1;
         if (y1 > VGA_ALTO - 1) y1 = VGA_ALTO - 1;
         gfx_banda(y0, y1);
-        radar_pintar();
+        switch (radar_vista) {
+            case VISTA_PARED:  pintar_pared(); break;
+            case VISTA_SEGUIR: radar_pintar_viaje(); break;
+            default:           radar_pintar(); break;
+        }
     }
     gfx_banda(0, VGA_ALTO - 1);
+    tarjetas_sucias = 0;
 }

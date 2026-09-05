@@ -44,6 +44,17 @@ void vga_limpiar_filas(int y0, int y1, uint8_t color) {
     memset(&vga_fb[y0 * VGA_ANCHO], color, (size_t)(y1 - y0 + 1) * VGA_ANCHO);
 }
 
+// Limpia un rectangulo: las filas de y0 a y1, pero solo el ancho pedido.
+// Sirve para borrar la parte del scope sin tocar la de las tarjetas.
+void vga_limpiar_rect(int x, int y0, int an, int y1, uint8_t color) {
+    if (x < 0) { an += x; x = 0; }
+    if (x + an > VGA_ANCHO) an = VGA_ANCHO - x;
+    if (y0 < 0) y0 = 0;
+    if (y1 > VGA_ALTO - 1) y1 = VGA_ALTO - 1;
+    if (an <= 0 || y1 < y0) return;
+    for (int y = y0; y <= y1; y++) memset(&vga_fb[y * VGA_ANCHO + x], color, (size_t)an);
+}
+
 void vga_init(void) {
     vga_limpiar(0);
 

@@ -3,6 +3,8 @@
 // y su velocidad, igual que van a hacer con los datos reales del proxy.
 #include "radar.h"
 #include "trig.h"
+#include "aeropuertos.h"
+#include <stdio.h>
 #include <string.h>
 
 static const struct {
@@ -23,7 +25,24 @@ static const struct {
     { "AR2451", "AR", "E190",     "AEP", "MDZ", "Buenos Aires", "Mendoza",     "10:05", "11:50", "EN VUELO",   -900,  1400, 240, 180,  4500, 12 },
     { "LA4090", "LA", "A320",     "EZE", "LIM", "Buenos Aires", "Lima",        "10:20", "14:35", "EN TIERRA",  1100,  -600,  62, 160,     0,  2 },
     { "BA245",  "BA", "B788",     "LHR", "EZE", "Londres",      "Buenos Aires","22:05", "09:40", "EN VUELO",  -7300, -5400, 288, 455, 34000, 76 },
+    // Sin logo a proposito: en la tarjeta tiene que salir el codigo en un
+    // recuadro, que es lo que hace la web cuando no encuentra la imagen.
+    { "MX703",  "MX", "A320",     "MEX", "EZE", "Mexico",       "Buenos Aires","01:15", "12:40", "EN VUELO",   6100, -3900, 172, 445, 35000, 69 },
 };
+
+void demo_init(void);
+
+// Cambia el aeropuerto del radar y vuelve a repartir el trafico alrededor.
+// Sin esto los aviones se quedan en las coordenadas del aeropuerto anterior.
+void demo_aeropuerto(const char *iata) {
+    const aeropuerto_dato_t *a = aeropuerto_buscar(iata);
+    if (!a) return;
+    snprintf(radar_apt.iata, sizeof radar_apt.iata, "%s", a->iata);
+    snprintf(radar_apt.nombre, sizeof radar_apt.nombre, "%s", a->ciudad);
+    radar_apt.lat = a->lat;
+    radar_apt.lon = a->lon;
+    demo_init();
+}
 
 void demo_init(void) {
     radar_cantidad = sizeof(SEMILLA) / sizeof(SEMILLA[0]);
@@ -38,9 +57,17 @@ void demo_init(void) {
         strncpy(a->aerolinea, SEMILLA[i].al, 2);
         strncpy(a->tipo, SEMILLA[i].tipo, sizeof a->tipo - 1);
         strncpy(a->origen, SEMILLA[i].ori, 3);
-        strncpy(a->destino, SEMILLA[i].des, 3);
         strncpy(a->ciudad_o, SEMILLA[i].ciudad_o, sizeof a->ciudad_o - 1);
-        strncpy(a->ciudad_d, SEMILLA[i].ciudad_d, sizeof a->ciudad_d - 1);
+        // Los que en la semilla llegan a Ezeiza llegan en realidad al
+        // aeropuerto que este elegido: si no, en Narita las tarjetas dirian
+        // que todos van a Buenos Aires.
+        if (!strncmp(SEMILLA[i].des, "EZE", 3)) {
+            strncpy(a->destino, radar_apt.iata, 3);
+            strncpy(a->ciudad_d, radar_apt.nombre, sizeof a->ciudad_d - 1);
+        } else {
+            strncpy(a->destino, SEMILLA[i].des, 3);
+            strncpy(a->ciudad_d, SEMILLA[i].ciudad_d, sizeof a->ciudad_d - 1);
+        }
         strncpy(a->dep, SEMILLA[i].dep, 5);
         strncpy(a->arr, SEMILLA[i].arr, 5);
         strncpy(a->estado, SEMILLA[i].estado, sizeof a->estado - 1);
@@ -65,6 +92,19 @@ void demo_avanzar(void) {
         resto_lon[i] += paso * trig_sen(t) / TRIG_UNO;
         a->lat += resto_lat[i] / 1000; resto_lat[i] %= 1000;
         a->lon += resto_lon[i] / 1000; resto_lon[i] %= 1000;
+
+        // El vuelo que viene aproximando se manda de nuevo al principio de la
+        // senda cuando pasa la cabecera, asi la aproximacion siempre se ve.
+        if (!strncmp(a->vuelo, "AR1885", 6)) {
+            int32_t dla = a->lat - (radar_apt.lat + 404 + 2000);
+            int32_t dlo = a->lon - (radar_apt.lon - 2321 + 2000);
+            if (dlo > 0 || dla > 2500) {
+                a->lat = radar_apt.lat + 404;
+                a->lon = radar_apt.lon - 2321;
+                resto_lat[i] = resto_lon[i] = 0;
+            }
+            continue;
+        }
 
         // Cuando se van del alcance vuelven a entrar por el lado opuesto,
         // desplazados un poco para que no terminen todos amontonados.

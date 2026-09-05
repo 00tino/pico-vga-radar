@@ -1,9 +1,10 @@
-// Tarjetas de vuelo, la columna que va al costado del scope.
+// Tarjetas de vuelo: la columna que va al costado del scope, y la pared
+// completa cuando el radar no se muestra.
 //
-// Es la traduccion de cardHTML() y .fa-card de la web: fila con el logo, el
-// indicativo y el estado; despues el subtitulo, la ruta con barra de avance,
-// las ciudades, los horarios y las metricas. Cuando no entra, se van sacando
-// filas en el mismo orden que SHRINK_ORDER de la web.
+// Es la traduccion de cardHTML() y .fa-card de la web. El contenido se reparte
+// en el alto disponible en vez de quedar apelmazado arriba, y cuando la
+// tarjeta es baja se van sacando filas en el orden de SHRINK_ORDER de la web:
+// primero los extras, despues las ciudades, despues los horarios.
 #include "radar.h"
 #include "gfx.h"
 #include "logos.h"
@@ -19,7 +20,7 @@ static void acortar(char *dst, size_t n, const char *src, int ancho_px) {
     if (gfx_ancho_texto(dst, 1) <= ancho_px) return;
     for (int len = (int)strlen(dst); len > 1; len--) {
         dst[len - 1] = 0;
-        char prueba[40];
+        char prueba[48];
         snprintf(prueba, sizeof prueba, "%s...", dst);
         if (gfx_ancho_texto(prueba, 1) <= ancho_px) { snprintf(dst, n, "%s", prueba); return; }
     }
@@ -27,80 +28,111 @@ static void acortar(char *dst, size_t n, const char *src, int ancho_px) {
 
 // La pastilla de estado: marco fino con el texto adentro, como .pill.
 static void pastilla(int x, int y, const char *txt, uint8_t c) {
-    int an = gfx_ancho_texto(txt, 1) + 8;
-    gfx_rect(x, y, an, 16, c);
-    gfx_texto(x + 4, y + 1, txt, c, 1);
+    int an = gfx_ancho_texto(txt, 1) + 10;
+    gfx_rect(x, y, an, 18, c);
+    gfx_texto(x + 5, y + 2, txt, c, 1);
 }
 
-// Dibuja una tarjeta y devuelve el alto que ocupo.
-void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a) {
-    const uint8_t borde  = radar_tono(56);
+// El cuadro del logo. Si esa aerolinea no tiene, va su codigo en un recuadro,
+// que es lo que hace la web cuando no encuentra la imagen.
+static void cuadro_logo(int x, int y, int lado, const avion_t *a, uint8_t c) {
+    const uint8_t *logo = logo_buscar(a->aerolinea);
+    if (logo && lado == LOGO_LADO) { gfx_blit(x, y, LOGO_LADO, LOGO_LADO, logo); return; }
+    gfx_rect(x, y, lado, lado, c);
+    char cod[4] = {0};
+    strncpy(cod, a->aerolinea, 2);
+    if (!cod[0]) strncpy(cod, a->vuelo, 2);
+    gfx_texto(x + lado / 2 - gfx_ancho_texto(cod, 1) / 2,
+              y + lado / 2 - GFX_FUENTE_ALTO / 2, cod, c, 1);
+}
+
+void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande) {
+    const uint8_t borde  = radar_tono(60);
     const uint8_t fuerte = radar_tono(255);
-    const uint8_t medio  = radar_tono(180);
+    const uint8_t medio  = radar_tono(190);
     const uint8_t suave  = radar_tono(150);
 
     gfx_rect(x, y, an, al, borde);
 
-    const int px = x + 8;          // margen interno
-    const int anu = an - 16;       // ancho util
-    int cy = y + 7;
+    const int px = x + 10;
+    const int anu = an - 20;
+    const int esc = grande ? 2 : 1;        // en pantalla completa, mas grande
+    const int fila = GFX_FUENTE_ALTO * esc + 4;
 
-    // Fila de arriba: logo, indicativo y estado.
-    const uint8_t *logo = logo_buscar(a->aerolinea);
-    if (logo) gfx_blit(px, cy, LOGO_LADO, LOGO_LADO, logo);
-    else      gfx_rect(px, cy, LOGO_LADO, LOGO_LADO, borde);
+    char buf[48];
+    int cy = y + 8;
 
-    const int tx = px + LOGO_LADO + 8;
-    const int tan = anu - LOGO_LADO - 8;
-    gfx_texto(tx, cy, a->vuelo, fuerte, 1);
+    // --- Cabecera: logo, indicativo y estado ---
+    const int lado = LOGO_LADO;
+    cuadro_logo(px, cy, lado, a, medio);
+    const int tx = px + lado + 10;
+    int tan = anu - lado - 10;
 
-    // El estado va debajo del indicativo si no entra al lado.
-    int an_estado = gfx_ancho_texto(a->estado, 1) + 8;
-    if (gfx_ancho_texto(a->vuelo, 1) + 8 + an_estado <= tan)
-        pastilla(x + an - 8 - an_estado, cy - 1, a->estado, medio);
+    // El estado va a la derecha si entra en la misma linea; si no, debajo.
+    const int an_pill = gfx_ancho_texto(a->estado, 1) + 10;
+    const int an_id = gfx_ancho_texto(a->vuelo, esc);
+    int pill_al_lado = (an_id + 10 + an_pill <= tan);
+    gfx_texto(tx, cy + 2, a->vuelo, fuerte, esc);
+    if (pill_al_lado)
+        pastilla(x + an - 10 - an_pill, cy + 2, a->estado, medio);
     else
-        pastilla(tx, cy + 16, a->estado, medio);
+        pastilla(tx, cy + 2 + fila, a->estado, medio);
 
-    char buf[40];
     acortar(buf, sizeof buf, a->tipo, tan);
-    gfx_texto(tx, cy + 32, buf, suave, 1);
-    cy += LOGO_LADO + 6;
+    gfx_texto(tx, cy + (pill_al_lado ? fila + 4 : 2 * fila + 8), buf, suave, 1);
+    cy += lado + 10;
 
-    // Ruta: origen, barra de avance, destino.
-    gfx_texto(px, cy, a->origen, fuerte, 1);
-    gfx_texto(px + anu - gfx_ancho_texto(a->destino, 1), cy, a->destino, fuerte, 1);
-    const int bx = px + gfx_ancho_texto(a->origen, 1) + 8;
-    const int ban = anu - gfx_ancho_texto(a->origen, 1) - gfx_ancho_texto(a->destino, 1) - 16;
+    // --- Cuerpo ---
+    // Primero se ve cuantas filas entran, despues se reparte el sobrante
+    // entre todas por igual: asi la tarjeta queda llena y no con el
+    // contenido apelmazado arriba y un hueco abajo.
+    const int y_fin = y + al - 10;
+    const int alto_ruta = GFX_FUENTE_ALTO * esc;
+    const int alto_fila = GFX_FUENTE_ALTO;
+    int filas = 1;                                   // la ruta va siempre
+    int usado = alto_ruta;
+    while (filas < 4 && cy + usado + 4 + alto_fila <= y_fin) { usado += alto_fila + 4; filas++; }
+    const int sobra = y_fin - cy - usado;
+    const int sep = filas > 1 ? sobra / (filas - 1) : 0;
+
+    // Ruta con la barra de avance.
+    gfx_texto(px, cy, a->origen, fuerte, esc);
+    gfx_texto(px + anu - gfx_ancho_texto(a->destino, esc), cy, a->destino, fuerte, esc);
+    const int bx = px + gfx_ancho_texto(a->origen, esc) + 10;
+    const int ban = anu - gfx_ancho_texto(a->origen, esc) - gfx_ancho_texto(a->destino, esc) - 20;
     if (ban > 8) {
-        gfx_rect_lleno(bx, cy + 6, ban, 3, borde);
-        gfx_rect_lleno(bx, cy + 6, ban * a->pct / 100, 3, fuerte);
+        const int by = cy + alto_ruta / 2 - 1;
+        gfx_rect_lleno(bx, by, ban, 3, borde);
+        gfx_rect_lleno(bx, by, ban * a->pct / 100, 3, fuerte);
     }
-    cy += 18;
+    cy += alto_ruta + sep;
 
-    // Ciudades: origen a la izquierda, destino a la derecha.
-    acortar(buf, sizeof buf, a->ciudad_o, anu / 2 - 4);
-    gfx_texto(px, cy, buf, suave, 1);
-    acortar(buf, sizeof buf, a->ciudad_d, anu / 2 - 4);
-    gfx_texto(px + anu - gfx_ancho_texto(buf, 1), cy, buf, suave, 1);
-    cy += 18;
+    // Ciudades.
+    if (filas >= 2) {
+        acortar(buf, sizeof buf, a->ciudad_o, anu / 2 - 6);
+        gfx_texto(px, cy, buf, suave, 1);
+        acortar(buf, sizeof buf, a->ciudad_d, anu / 2 - 6);
+        gfx_texto(px + anu - gfx_ancho_texto(buf, 1), cy, buf, suave, 1);
+        cy += alto_fila + sep;
+    }
 
-    // Horarios, si queda lugar.
-    if (cy + 16 <= y + al - 4) {
+    // Horarios.
+    if (filas >= 3) {
         snprintf(buf, sizeof buf, "SALE %s", a->dep);
         gfx_texto(px, cy, buf, medio, 1);
         snprintf(buf, sizeof buf, "LLEGA %s", a->arr);
         gfx_texto(px + anu - gfx_ancho_texto(buf, 1), cy, buf, medio, 1);
-        cy += 16;
+        cy += alto_fila + sep;
     }
 
     // Metricas: altura, velocidad y rumbo.
-    if (cy + 16 <= y + al - 4) {
-        if (a->alt <= 0) snprintf(buf, sizeof buf, "GND");
-        else snprintf(buf, sizeof buf, "FL%03d", (int)(a->alt / 100));
+    if (filas >= 4) {
+        if (a->alt <= 0) snprintf(buf, sizeof buf, "ALT GND");
+        else snprintf(buf, sizeof buf, "ALT FL%03d", (int)(a->alt / 100));
         gfx_texto(px, cy, buf, medio, 1);
-        snprintf(buf, sizeof buf, "%d kt", a->gs);
+        snprintf(buf, sizeof buf, "VEL %d kt", a->gs);
         gfx_texto(px + anu / 2 - gfx_ancho_texto(buf, 1) / 2, cy, buf, medio, 1);
-        snprintf(buf, sizeof buf, "%03d", a->track);
+        snprintf(buf, sizeof buf, "RUMBO %03d", a->track);
         gfx_texto(px + anu - gfx_ancho_texto(buf, 1), cy, buf, medio, 1);
     }
 }

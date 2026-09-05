@@ -48,12 +48,21 @@ extern avion_t radar_aviones[RADAR_MAX_AVIONES];
 extern int radar_cantidad;
 
 void radar_init(void);
+void radar_marcar_sucio(void);   // pide que se redibujen las tarjetas
 void radar_avanzar(void);    // gira el barrido y apaga el fosforo
 void radar_cuadro(void);     // redibuja, por bandas de arriba hacia abajo
 
-// Vista: solo el scope, o el scope al 54% con las tarjetas al costado.
-typedef enum { VISTA_RADAR, VISTA_HIBRIDA } vista_t;
+// Las cuatro vistas de la web: solo el scope, el scope con las tarjetas al
+// costado, solo las tarjetas a pantalla completa, y el seguimiento de un vuelo.
+typedef enum { VISTA_RADAR, VISTA_HIBRIDA, VISTA_PARED, VISTA_SEGUIR } vista_t;
 extern vista_t radar_vista;
+
+// Cuantas tarjetas por pagina y cada cuantos segundos rota el carrusel.
+extern int radar_tarjetas;
+extern int radar_rotacion_s;
+
+// Indicativo del vuelo que se sigue en VISTA_SEGUIR.
+extern char radar_seguir[9];
 extern bool radar_pistas_on;
 
 #endif

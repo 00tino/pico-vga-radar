@@ -6,8 +6,11 @@ es del formato, no de la informacion: la pantalla de la Pico no muestra ni
 64x64 ni color verdadero. Aca se pasan al tamano y al formato reales de la
 pantalla —36x36, un byte RRRGGGBB por pixel— y entran todos en la flash.
 
-El logo se compone sobre el papel blanco de la tarjeta, igual que en la web
-(.logo{background:var(--paper)}), asi que no hace falta guardar transparencia.
+Los PNG vienen con las esquinas transparentes, porque en la web el logo va
+dentro de una caja redondeada. Componerlos sobre blanco dejaba puntas blancas
+en los logos de fondo de color, como el de Aerolineas. Por eso cada logo se
+compone sobre SU PROPIO color de fondo, que se saca de los pixeles opacos del
+borde: el de Aerolineas queda celeste entero y el de LATAM blanco entero.
 
 El dither es el mismo Bayer 4x4 que usa firmware-c/gfx.c. Si se cambia alla,
 hay que cambiarlo aca: los dos tienen que cuantizar igual.
@@ -40,10 +43,34 @@ def a_byte(x, y, r, g, b):
     return (canal(r, 7, u) << 5) | (canal(g, 7, u) << 2) | ((b * 3 + 127) // 255)
 
 
+def color_de_fondo(im):
+    """El color mas repetido entre los pixeles opacos del borde."""
+    px = im.load()
+    w, h = im.size
+    cuenta = {}
+    for x in range(w):
+        for y in (0, 1, h - 2, h - 1):
+            r, g, b, a = px[x, y]
+            if a > 200:
+                cuenta[(r, g, b)] = cuenta.get((r, g, b), 0) + 1
+    for y in range(h):
+        for x in (0, 1, w - 2, w - 1):
+            r, g, b, a = px[x, y]
+            if a > 200:
+                cuenta[(r, g, b)] = cuenta.get((r, g, b), 0) + 1
+    if not cuenta:
+        return PAPEL
+    color, n = max(cuenta.items(), key=lambda kv: kv[1])
+    # Si el borde es un revoltijo, no hay fondo: va el papel blanco.
+    return color if n >= (w + h) // 2 else PAPEL
+
+
 def convertir(ruta):
-    im = Image.open(ruta).convert("RGBA").resize((LADO, LADO), Image.LANCZOS)
-    fondo = Image.new("RGBA", im.size, PAPEL + (255,))
-    im = Image.alpha_composite(fondo, im).convert("RGB")
+    orig = Image.open(ruta).convert("RGBA")
+    fondo = color_de_fondo(orig)
+    im = orig.resize((LADO, LADO), Image.LANCZOS)
+    base = Image.new("RGBA", im.size, fondo + (255,))
+    im = Image.alpha_composite(base, im).convert("RGB")
     px = im.load()
     return bytes(a_byte(x, y, *px[x, y]) for y in range(LADO) for x in range(LADO))
 

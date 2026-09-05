@@ -11,11 +11,13 @@
 #include "trig.h"
 #include "pico/stdlib.h"
 #include <stdio.h>
+#include <string.h>
 
 // Mide cuanto tiempo pasa alto cada pin: con esto se vio en su momento que
 // los cables estaban en pines muertos. Sirve para saber si la señal sigue
 // saliendo bien mientras el radar redibuja.
 void demo_init(void);
+void demo_aeropuerto(const char *iata);
 void demo_avanzar(void);
 
 static uint8_t fondo, ambar, tenue, apagado, blanco;
@@ -136,22 +138,51 @@ int main(void) {
     dibujar_patron();
     sleep_ms(6000);
 
-    radar_init();    radar_init();
+    radar_init();
     demo_init();
     printf("radar andando\n");
 
-    uint32_t t0 = time_us_32(), cuadros = 0;
-    while (true) {
-        vga_esperar_cuadro();
-        demo_avanzar();
-        radar_avanzar();
-        radar_cuadro();
-        if (++cuadros == 120) {
-            uint32_t t1 = time_us_32();
-            printf("%lu cuadros en %lu ms\n", (unsigned long)cuadros,
-                   (unsigned long)((t1 - t0) / 1000));
+    // Recorrido por todas las vistas y alcances, para poder revisarlas. Cada
+    // escena dura unos segundos y avisa por consola cual esta mostrando.
+    static const struct { const char *nombre; vista_t vista; int tarjetas, radio; const char *apt, *seguir; }
+    ESCENA[] = {
+        { "hibrida 3 tarjetas, 150 km", VISTA_HIBRIDA, 3, 150, "EZE", "" },
+        { "hibrida 4 tarjetas, 150 km", VISTA_HIBRIDA, 4, 150, "EZE", "" },
+        { "hibrida 2 tarjetas, 40 km",  VISTA_HIBRIDA, 2,  40, "EZE", "" },
+        { "solo radar, 80 km",          VISTA_RADAR,   3,  80, "EZE", "" },
+        { "pared de tarjetas",          VISTA_PARED,   3, 150, "EZE", "" },
+        { "solo radar, 20 km",          VISTA_RADAR,   3,  20, "EZE", "" },
+        { "seguir QF17 a Sydney",       VISTA_SEGUIR,  3, 150, "EZE", "QF17" },
+        { "Madrid, hibrida 3, 150 km",  VISTA_HIBRIDA, 3, 150, "MAD", "" },
+        { "Narita, hibrida 3, 80 km",   VISTA_HIBRIDA, 3,  80, "NRT", "" },
+    };
+    const int ESCENAS = sizeof ESCENA / sizeof ESCENA[0];
 
-            t0 = t1; cuadros = 0;
+    int esc = 0;
+    uint32_t desde = time_us_32();
+    char apt_actual[4] = "";
+    for (;;) {
+        if (strncmp(apt_actual, ESCENA[esc].apt, 3)) {
+            snprintf(apt_actual, sizeof apt_actual, "%s", ESCENA[esc].apt);
+            demo_aeropuerto(apt_actual);
         }
+        radar_vista = ESCENA[esc].vista;
+        radar_marcar_sucio();
+        radar_tarjetas = ESCENA[esc].tarjetas;
+        radar_apt.radio_km = ESCENA[esc].radio;
+        snprintf(radar_seguir, sizeof radar_seguir, "%s", ESCENA[esc].seguir);
+        printf("ESCENA %d: %s\n", esc, ESCENA[esc].nombre);
+
+        uint32_t cuadros = 0;
+        while (time_us_32() - desde < 12000000u) {
+            vga_esperar_cuadro();
+            demo_avanzar();
+            radar_avanzar();
+            radar_cuadro();
+            cuadros++;
+        }
+        printf("  %lu cuadros en 12 s\n", (unsigned long)cuadros);
+        desde = time_us_32();
+        esc = (esc + 1) % ESCENAS;
     }
 }
