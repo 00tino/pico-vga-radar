@@ -1,0 +1,100 @@
+; Video VGA 640x480 a 60 Hz, 8 bits por pixel (3 rojo, 3 verde, 2 azul).
+;
+; Tres maquinas de estado:
+;   hsync  genera el sincronismo horizontal y marca el inicio de cada linea
+;   vsync  cuenta lineas y marca cuando estamos en la zona visible
+;   rgb    saca los pixeles, alimentada por DMA desde el framebuffer
+;
+; Reloj de pixel: 25,2 MHz. Una linea son 800 pixeles = 31,746 us.
+; La maquina de sincronismo corre a un cuarto de eso (6,3 MHz), asi que una
+; linea le entra en 200 ciclos exactos, sin redondeos:
+;
+;   sincronismo    96 px = 24 ciclos
+;   portico post   48 px = 12 ciclos
+;   visible       640 px = 160 ciclos   ┐ 164 juntos
+;   portico pre    16 px =  4 ciclos    ┘
+;                          ───────────
+;                          200 ciclos
+;
+; En 640x480 los dos sincronismos son de pulso NEGATIVO: la senal esta alta
+; salvo durante el pulso. (En 800x600 es al reves; por eso no se puede copiar
+; la configuracion de una resolucion a otra.)
+
+.program hsync
+.side_set 1                       ; el pin de hsync
+
+.wrap_target
+    ; PULSO DE SINCRONISMO — bajo, 24 ciclos
+    set x, 21           side 0    ; 1
+sync_lo:
+    jmp x-- sync_lo     side 0    ; 22
+    nop                 side 0    ; 1
+
+    ; PORTICO POSTERIOR — alto, 12 ciclos
+    set x, 9            side 1    ; 1
+back_porch:
+    jmp x-- back_porch  side 1    ; 10
+    irq 4               side 1    ; 1  ← arranca la linea visible
+
+    ; VISIBLE + PORTICO ANTERIOR — alto, 164 ciclos
+    ; El salto lleva su propia demora, asi cada vuelta son 5 ciclos en una
+    ; sola instruccion. El PIO tiene 32 lugares y hay que entrar en ellos.
+    set x, 31           side 1    ; 1
+activo:
+    jmp x-- activo      side 1 [4]; 5 x 32 = 160
+    nop                 side 1 [2]; 3
+.wrap
+
+
+.program vsync
+.side_set 1                       ; el pin de vsync
+; Cuenta lineas. Cada "wait irq 4" espera a que hsync termine una linea.
+; 480 visibles + 11 portico anterior + 2 sincronismo + 32 portico posterior = 525
+; (la norma dice 10 y 33; correr una linea de un portico al otro no cambia
+;  nada en pantalla y ahorra una instruccion, que aca vale oro)
+
+.wrap_target
+    ; PULSO DE SINCRONISMO — bajo, 2 lineas
+    irq 0               side 0    ; ← avisa al procesador: empieza un cuadro
+    set x, 1            side 0
+v_sync:
+    wait 1 irq 4        side 0
+    jmp x-- v_sync      side 0
+
+    ; PORTICO POSTERIOR — alto, 32 lineas
+    set x, 31           side 1
+v_back:
+    wait 1 irq 4        side 1
+    jmp x-- v_back      side 1
+
+    ; VISIBLE — 480 lineas; avisa a la maquina de pixeles en cada una
+    set x, 29           side 1
+v_act_a:
+    set y, 15           side 1
+v_act_b:
+    wait 1 irq 4        side 1
+    irq 5               side 1    ; ← "esta linea se ve, mandale pixeles"
+    jmp y-- v_act_b     side 1
+    jmp x-- v_act_a     side 1
+
+    ; PORTICO ANTERIOR — alto, 11 lineas
+    set x, 10           side 1
+v_front:
+    wait 1 irq 4        side 1
+    jmp x-- v_front     side 1
+.wrap
+
+
+.program rgb
+; Saca 8 bits por pixel a ocho pines consecutivos desde GP0.
+; El DMA le va cargando el framebuffer; nosotros solo escupimos.
+    pull block                    ; recibe cuantos pixeles tiene una linea
+    mov y, osr
+.wrap_target
+    mov x, y
+    mov pins, null                ; color en negro durante el blanking
+    wait 1 irq 5                  ; espera a que la linea sea visible
+linea:
+    out pins, 8
+    jmp x-- linea
+.wrap

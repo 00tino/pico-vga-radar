@@ -1,3 +1,5 @@
 .claude/
 __pycache__/
 *.pyc
+firmware-c/build/
+firmware-uf2/
