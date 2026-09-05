@@ -72,6 +72,10 @@ verificados** en todas las vistas.
 - **Los 14 temas de color** de la web.
 - **Tráfico de prueba** (`demo.c`): 15 vuelos que se mueven de verdad.
 
+El equipo **arranca directo en el radar**: la pantalla de primitivas ya no sale
+al encender, queda como herramienta detrás del comando `d`. Valentino quiere
+poner ahí un logo propio; todavía no está hecho.
+
 `main.c` recorre **18 escenas de 15 segundos** para poder revisarlas todas.
 Cuando esté el portal, la vista saldrá de la configuración del cliente.
 
@@ -83,6 +87,26 @@ empezado.** El tráfico es simulado.
 ---
 
 ## 3. Cómo trabajar
+
+### Armar un equipo con otro monitor
+
+**Todo lo que se toca está en `firmware-c/instalacion.h`**: el nombre del
+monitor, los cuatro márgenes y los valores de fábrica de la casa. Si hay que
+cambiar algo del monitor y no está ahí, está mal puesto.
+
+1. Cargar el firmware y mandar `c` por la consola: sale la pantalla de
+   calibración, con reglas numeradas contra los cuatro bordes (otra `c` la
+   saca).
+2. **Mirar el monitor de verdad**, con la GoPro. `mirar.py` no sirve acá: el
+   framebuffer siempre está entero, el que recorta es el monitor.
+3. Leer, en cada borde, desde qué número se empieza a ver la regla. Ese número
+   es el margen de ese borde.
+4. Cargarlos en `instalacion.h`, recompilar y cargar.
+
+El firmware sale **640×480 fijo**. Un monitor de otra resolución nativa la
+escala y se ve igual, sólo más blando. **Cambiar de resolución de verdad es
+otro trabajo**: hay que rehacer los timings del PIO y el reloj, y los 100,8 MHz
+están elegidos para que los tres divisores den enteros (bug 6).
 
 ### Compilar y cargar
 
@@ -133,7 +157,8 @@ colores y ángulos con un script.
 
 El firmware lo atiende en `volcado.c`; el bucle de `main.c` lee comandos por
 consola: `v` vuelca, `n` salta a la escena siguiente, `p` reinicia el reloj de
-la escena. `mirar.py -e N` salta hasta la escena N y la congela antes de
+la escena, `c` muestra la pantalla de calibración y `d` el patrón de
+primitivas (las dos se salen con la misma tecla). `mirar.py -e N` salta hasta la escena N y la congela antes de
 volcar. **Hay que vaciar el buffer del puerto antes de buscar la línea
 `ESCENA`**: si no, la línea de la escena anterior da un falso positivo y se
 vuelca una vista que no es la pedida.

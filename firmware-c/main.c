@@ -1,3 +1,7 @@
+// El equipo arranca directo en el radar: la pantalla de primitivas ya no sale
+// al encender, porque no es algo que el cliente tenga que ver. Sigue estando
+// como herramienta: se pide con 'd' por la consola.
+//
 // Patron que demuestra las primitivas de dibujo: texto, lineas, circulos,
 // rectangulos y logos. Usa el tema crt_amber de la web (#e8b86d sobre #0a0805).
 //
@@ -9,6 +13,7 @@
 #include "logos.h"
 #include "radar.h"
 #include "trig.h"
+#include "instalacion.h"
 #include "pico/stdlib.h"
 #include <stdio.h>
 #include <string.h>
@@ -129,15 +134,12 @@ int main(void) {
     apagado = vga_rgb(0x3d, 0x30, 0x1c);
     blanco  = vga_color(7, 7, 3);
 
-    // Leido de la pantalla de calibracion en el ViewSonic VA1703wb: recorta
-    // apenas el borde, 1 a 3 px. Con 4 por lado sobra y no se pierde nada.
-    area_set(4, 4, 4, 4);
+    // Los margenes del monitor de este equipo salen de instalacion.h, que es
+    // el unico lugar donde se toca para armar uno con otra pantalla.
+    printf("monitor: %s\n", INSTALACION_MONITOR);
+    area_set(INSTALACION_MARGEN_ARRIBA, INSTALACION_MARGEN_ABAJO,
+             INSTALACION_MARGEN_IZQUIERDA, INSTALACION_MARGEN_DERECHA);
     printf("area util: %dx%d en %d,%d\n", area.an, area.al, area.x, area.y);
-
-    // Arranca mostrando el patron de primitivas unos segundos y despues se
-    // queda en el radar, que es lo que el equipo muestra de verdad.
-    dibujar_patron();
-    sleep_ms(6000);
 
     radar_init();
     demo_init();
@@ -197,6 +199,24 @@ int main(void) {
             // queda en esta. Sin esto habia que esperar la vuelta completa.
             int c = getchar_timeout_us(0);
             if (c == 'v') { volcado_fb(); desde = time_us_32(); }
+            else if (c == 'd') {
+                // El patron de primitivas, a pedido: sirve para ver de una si
+                // el texto, las lineas, los circulos y los logos siguen bien.
+                dibujar_patron();
+                while (getchar_timeout_us(0) != 'd') tight_loop_contents();
+                radar_marcar_sucio();
+                desde = time_us_32();
+            }
+            else if (c == 'c') {
+                // Pantalla de calibracion, para medir cuanto recorta un
+                // monitor nuevo sin tener que recompilar nada.
+                area_calibrar(vga_rgb(0x0a, 0x08, 0x05), vga_rgb(0xe8, 0xb8, 0x6d),
+                              vga_color(7, 7, 3));
+                printf("calibracion en pantalla: leer desde que numero se ve cada regla\n");
+                while (getchar_timeout_us(0) != 'c') tight_loop_contents();
+                radar_marcar_sucio();
+                desde = time_us_32();
+            }
             else if (c == 'n') break;
             else if (c == 'p') { desde = time_us_32(); }
             vga_esperar_cuadro();
