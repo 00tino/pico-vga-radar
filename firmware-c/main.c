@@ -19,6 +19,7 @@
 void demo_init(void);
 void demo_aeropuerto(const char *iata);
 void demo_avanzar(void);
+void volcado_fb(void);
 
 static uint8_t fondo, ambar, tenue, apagado, blanco;
 
@@ -160,6 +161,7 @@ int main(void) {
         { "seguir QF17, solo mapa",     VISTA_SEGUIR,  LISTA_TARJETAS, 1, 150, "EZE", "QF17", "crt_amber" },
         { "seguir QF17 con tarjeta",    VISTA_SEGUIR_HIBRIDA, LISTA_TARJETAS, 1, 150, "EZE", "QF17", "crt_amber" },
         { "seguir AA954, mapa America", VISTA_SEGUIR,  LISTA_TARJETAS, 1, 150, "EZE", "AA954", "crt_amber" },
+        { "seguir AA954 con tarjeta",   VISTA_SEGUIR_HIBRIDA, LISTA_TARJETAS, 1, 150, "EZE", "AA954", "crt_amber" },
         { "tema verde",                 VISTA_HIBRIDA, LISTA_TARJETAS, 3, 150, "EZE", "", "crt_green" },
         { "tema atc azul",              VISTA_HIBRIDA, LISTA_TARJETAS, 3, 150, "EZE", "", "atc_dark" },
         { "tema hielo",                 VISTA_RADAR,   LISTA_TARJETAS, 3,  80, "EZE", "", "ice" },
@@ -169,7 +171,7 @@ int main(void) {
     };
     const int ESCENAS = sizeof ESCENA / sizeof ESCENA[0];
 
-    int esc = 10;   // PRUEBA: mapa Miami-Ezeiza
+    int esc = 0;
     uint32_t desde = time_us_32();
     char apt_actual[4] = "";
     for (;;) {
@@ -190,6 +192,13 @@ int main(void) {
 
         uint32_t cuadros = 0, us_total = 0, us_peor = 0;
         while (time_us_32() - desde < 15000000u) {
+            // Comandos por consola: 'v' vuelca el framebuffer para poder
+            // mirarlo desde la Mac, 'n' salta a la escena siguiente, 'p' se
+            // queda en esta. Sin esto habia que esperar la vuelta completa.
+            int c = getchar_timeout_us(0);
+            if (c == 'v') { volcado_fb(); desde = time_us_32(); }
+            else if (c == 'n') break;
+            else if (c == 'p') { desde = time_us_32(); }
             vga_esperar_cuadro();
             uint32_t t0 = time_us_32();
             demo_avanzar();
@@ -211,6 +220,11 @@ int main(void) {
             printf("    por banda (us):");
             for (int b = 0; b < 10; b++) printf(" %lu", (unsigned long)radar_us_banda[b]);
             printf("   | el haz tarda 1520 us por banda\n");
+            extern int radar_senda_rumbo;
+            if (radar_senda_rumbo >= 0)
+                printf("    cabecera en uso: rumbo verdadero %d (el numero de la pista es magnetico)\n", radar_senda_rumbo);
+        }
+        {
         }
         desde = time_us_32();
         esc = (esc + 1) % ESCENAS;

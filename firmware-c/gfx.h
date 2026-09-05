@@ -19,10 +19,16 @@ extern const uint8_t gfx_fuente[96 * 15];
 // ultimo en la parte de arriba no llega a tiempo y no se ve.
 extern int gfx_banda_y0, gfx_banda_y1;
 
+// Recorte lateral. Hace falta para el mapa, que comparte la banda con la
+// tarjeta de al lado: las fronteras y la ruta se le metian encima.
+extern int gfx_banda_x0, gfx_banda_x1;
+
 static inline void gfx_banda(int y0, int y1) { gfx_banda_y0 = y0; gfx_banda_y1 = y1; }
+static inline void gfx_banda_ancho(int x0, int x1) { gfx_banda_x0 = x0; gfx_banda_x1 = x1; }
 
 static inline void gfx_punto(int x, int y, uint8_t c) {
-    if ((unsigned)x < VGA_ANCHO && y >= gfx_banda_y0 && y <= gfx_banda_y1)
+    if (x >= gfx_banda_x0 && x <= gfx_banda_x1 && (unsigned)x < VGA_ANCHO &&
+        y >= gfx_banda_y0 && y <= gfx_banda_y1)
         vga_fb[y * VGA_ANCHO + x] = c;
 }
 

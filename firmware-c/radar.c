@@ -1,4 +1,5 @@
 #include "radar.h"
+#include <math.h>
 #include "gfx.h"
 #include "area.h"
 #include "trig.h"
@@ -59,6 +60,7 @@ bool radar_pistas_on = true;
 static const pista_t *senda_pista;
 static int senda_es_b;            // 0 = cabecera A, 1 = cabecera B
 static int senda_hay;
+int radar_senda_rumbo = -1;
 static char senda_cartel[32];     // el aviso de arriba, listo para dibujar
 static int casa_encima = -1;      // avion que esta pasando sobre la casa
 
@@ -378,18 +380,43 @@ static void radar_pintar(void) {
                            : PROY_X(senda_pista->lat_a, senda_pista->lon_a);
             int ty2 = lado ? PROY_Y(senda_pista->lat_b, senda_pista->lon_b)
                            : PROY_Y(senda_pista->lat_a, senda_pista->lon_a);
-            int ox = lado ? PROY_X(senda_pista->lat_a, senda_pista->lon_a)
-                          : PROY_X(senda_pista->lat_b, senda_pista->lon_b);
-            int oy = lado ? PROY_Y(senda_pista->lat_a, senda_pista->lon_a)
-                          : PROY_Y(senda_pista->lat_b, senda_pista->lon_b);
+            // La direccion se saca en subpixeles y no de las puntas ya
+            // redondeadas: a 80 km de alcance la pista mide 13 px en
+            // pantalla, y un pixel de error en la punta torcia la senda
+            // hasta cuatro grados. Eso es lo que se veia como que la
+            // aproximacion no coincidia con el rumbo magnetico.
+            #define SUB 256
+            #define PROY_XS(la, lo) ((int)((int64_t)((lo) - radar_apt.lon) * coslat * SUB * R / TRIG_UNO / span))
+            #define PROY_YS(la, lo) (-(int)((int64_t)((la) - radar_apt.lat) * SUB * R / span))
+            int sxb = lado ? PROY_XS(senda_pista->lat_b, senda_pista->lon_b)
+                           : PROY_XS(senda_pista->lat_a, senda_pista->lon_a);
+            int syb = lado ? PROY_YS(senda_pista->lat_b, senda_pista->lon_b)
+                           : PROY_YS(senda_pista->lat_a, senda_pista->lon_a);
+            int sxa = lado ? PROY_XS(senda_pista->lat_a, senda_pista->lon_a)
+                           : PROY_XS(senda_pista->lat_b, senda_pista->lon_b);
+            int sya = lado ? PROY_YS(senda_pista->lat_a, senda_pista->lon_a)
+                           : PROY_YS(senda_pista->lat_b, senda_pista->lon_b);
 
             // El avion viene por detras de la cabecera donde aterriza: la
             // senda sale hacia el lado opuesto al que apunta la pista desde
             // esa punta. Con el signo al reves salia del lado de adentro de
             // la pista, apuntando a donde no va nadie.
-            int vx = tx2 - ox, vy = ty2 - oy;
+            int vx = sxb - sxa, vy = syb - sya;
+            // Rumbo con el que sale la senda, para poder compararlo con el
+            // numero de la cabecera sin depender de una foto del monitor.
+            radar_senda_rumbo = (int)lrintf(atan2f((float)-vx, (float)vy)
+                                            * 180.0f / (float)M_PI + 360.0f) % 360;
             int largo_pista = 0;
-            while ((largo_pista + 1) * (largo_pista + 1) <= vx * vx + vy * vy) largo_pista++;
+            {   // Raiz entera por bisección: en subpixeles el largo llega a
+                // varios miles y sumar de a uno costaba milisegundos.
+                int hi = 1 << 15, lo2 = 0;
+                int64_t q = (int64_t)vx * vx + (int64_t)vy * vy;
+                while (lo2 < hi) {
+                    int m = (lo2 + hi + 1) / 2;
+                    if ((int64_t)m * m <= q) lo2 = m; else hi = m - 1;
+                }
+                largo_pista = lo2;
+            }
             if (largo_pista > 0) {
                 // Largo de la senda igual que approachKm() en la web: 35 por
                 // ciento del alcance, entre 18 y 32 km; y nunca menos de 64

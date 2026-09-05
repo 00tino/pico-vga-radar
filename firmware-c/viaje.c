@@ -122,10 +122,14 @@ void radar_pintar_viaje(void) {
     // Todo lo del mapa se recorta a su recuadro; la barra y la tarjeta van
     // fuera de el, asi que hay que guardar la banda para reponerla despues.
     const int banda_afuera_y0 = gfx_banda_y0, banda_afuera_y1 = gfx_banda_y1;
+    const int banda_afuera_x0 = gfx_banda_x0, banda_afuera_x1 = gfx_banda_x1;
     {
         const int ry0 = y0 > gfx_banda_y0 ? y0 : gfx_banda_y0;
         const int ry1 = (y0 + alt - 1) < gfx_banda_y1 ? (y0 + alt - 1) : gfx_banda_y1;
         gfx_banda(ry0, ry1);
+        // Y tambien a lo ancho: con la tarjeta al costado, las fronteras y la
+        // ruta se dibujaban encima de ella.
+        gfx_banda_ancho(x0, x0 + anc - 1);
     }
     // Todas las longitudes se miden respecto del origen, para que el
     // antimeridiano no parta la ruta al medio.
@@ -169,7 +173,9 @@ void radar_pintar_viaje(void) {
     span_la = maxla - minla;
     span_lo = maxlo - minlo;
 
-    #define MX(la, lo) (x0 + anc / 2 + (int)((int64_t)(WL(lo) - midlo) * esc / 1000000))
+    // MXW toma una longitud ya envuelta; MX la envuelve al ancla primero.
+    #define MXW(low)   (x0 + anc / 2 + (int)((int64_t)((low) - midlo) * esc / 1000000))
+    #define MX(la, lo) MXW(WL(lo))
     #define MY(la, lo) (y0 + alt / 2 - (int)((int64_t)((la) - midla) * esc / 1000000))
 
     // Las costas del mundo: relleno tenue y contorno, igual que la web
@@ -177,32 +183,41 @@ void radar_pintar_viaje(void) {
     {
         // Estaticos y no en la pila: son 7 KB, y la pila de la Pico es chica.
         static int px[GFX_POLIGONO_MAX], py[GFX_POLIGONO_MAX];
+        static int32_t lonw[GFX_POLIGONO_MAX];
         const uint8_t relleno = radar_tono(41), linea_costa = radar_tono(128);
         for (int i = 0; i < COSTAS_ANILLOS; i++) {
             const int desde = costas_anillos[i].desde, cant = costas_anillos[i].cantidad;
             if (cant < 4 || cant > GFX_POLIGONO_MAX) continue;
 
+            // Las longitudes del contorno se envuelven en cadena, cada una
+            // respecto de la anterior, y solo la primera respecto del centro
+            // del mapa. Envolviendolas sueltas contra el ancla, un contorno
+            // que cruza el antimeridiano relativo quedaba partido en dos
+            // mitades separadas por media vuelta: sus lados atravesaban el
+            // mapa entero y el relleno salia en franjas a lo ancho.
+            lonw[0] = wrap_lon((int32_t)costas_lon[desde] * 100, midlo);
+            for (int j = 1; j < cant; j++)
+                lonw[j] = wrap_lon((int32_t)costas_lon[desde + j] * 100, lonw[j - 1]);
+
             // Descartar rapido lo que no cae en el encuadre.
             int32_t a = 900000, b = -900000, cc = 0x7fffffff, dd = -0x7fffffff;
             for (int j = 0; j < cant; j++) {
                 int32_t la = (int32_t)costas_lat[desde + j] * 100;
-                int32_t lo = WL((int32_t)costas_lon[desde + j] * 100);
                 if (la < a) a = la;
                 if (la > b) b = la;
-                if (lo < cc) cc = lo;
-                if (lo > dd) dd = lo;
+                if (lonw[j] < cc) cc = lonw[j];
+                if (lonw[j] > dd) dd = lonw[j];
             }
             if (b < minla || a > maxla || dd < minlo || cc > maxlo) continue;
 
             for (int j = 0; j < cant; j++) {
                 int32_t la = (int32_t)costas_lat[desde + j] * 100;
-                int32_t lo = (int32_t)costas_lon[desde + j] * 100;
                 // Cerca de los polos esta proyeccion estira sin fin: la
                 // Antartida salia como una franja aplastada de punta a punta.
                 if (la < -780000) la = -780000;
                 if (la >  780000) la =  780000;
-                px[j] = MX(la, lo);
-                py[j] = MY(la, lo);
+                px[j] = MXW(lonw[j]);
+                py[j] = MY(la, 0);
             }
             // Recortado contra el recuadro del mapa. Antes se acotaban los
             // puntos sueltos al borde, y eso juntaba vertices que estan lejos
@@ -227,10 +242,14 @@ void radar_pintar_viaje(void) {
         for (int i = 0; i < FRONTERAS_TRAMOS; i++) {
             const int desde = fronteras_tramos[i].desde, cant = fronteras_tramos[i].cantidad;
             int ax = 0, ay = 0;
+            // Mismo encadenado que las costas: si no, una frontera que cruza
+            // el antimeridiano relativo cruzaba el mapa de lado a lado.
+            int32_t low = 0;
             for (int j = 0; j < cant; j++) {
                 int32_t la = (int32_t)fronteras_lat[desde + j] * 100;
                 int32_t lo = (int32_t)fronteras_lon[desde + j] * 100;
-                int bx = MX(la, lo), by = MY(la, lo);
+                low = j ? wrap_lon(lo, low) : wrap_lon(lo, midlo);
+                int bx = MXW(low), by = MY(la, 0);
                 if (bx < -4000) bx = -4000;
                 if (bx >  4000) bx =  4000;
                 if (by < -4000) by = -4000;
@@ -371,6 +390,7 @@ void radar_pintar_viaje(void) {
     avion_y = MY(ac->lat, ac->lon);
 
     gfx_banda(banda_afuera_y0, banda_afuera_y1);
+    gfx_banda_ancho(banda_afuera_x0, banda_afuera_x1);
 
     // Barra de arriba: el vuelo a la izquierda y cuanto falta a la derecha.
     snprintf(buf, sizeof buf, "%s", ac->vuelo);

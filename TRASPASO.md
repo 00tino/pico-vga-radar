@@ -4,7 +4,7 @@ Documento para retomar el proyecto en una sesión nueva, **sin contexto previo**
 Escrito el **5 de septiembre de 2026**, al final de una sesión larga.
 
 Repo: `~/Desktop/Proyectos/PicoVga` → https://github.com/00tino/pico-vga-radar
-Rama `main`. **Hay cambios sin commitear** (ver sección 9).
+Rama `main`. Todo commiteado, nada pusheado (ver sección 9).
 
 ---
 
@@ -72,7 +72,7 @@ verificados** en todas las vistas.
 - **Los 14 temas de color** de la web.
 - **Tráfico de prueba** (`demo.c`): 15 vuelos que se mueven de verdad.
 
-`main.c` recorre **17 escenas de 15 segundos** para poder revisarlas todas.
+`main.c` recorre **18 escenas de 15 segundos** para poder revisarlas todas.
 Cuando esté el portal, la vista saldrá de la configuración del cliente.
 
 ### Lo que falta del proyecto
@@ -91,11 +91,14 @@ empezado.** El tráfico es simulado.
 ```
 
 Compila y carga sin tocar el botón BOOTSEL (que está tapado por la protoboard).
-Usa el truco de abrir el puerto serie a 1200 baudios.
+Va por **picotool** (`brew install picotool`), que habla PICOBOOT por USB:
+reinicia la placa solo y escribe la flash directo.
 
-**No copiar el .uf2 a mano.** El script espera a que el disco `NO NAME` termine
-de montarse y verifica que la placa haya arrancado: copiar apenas aparece el
-disco falla en silencio y deja la placa en BOOTSEL, con el monitor sin señal.
+**El disco `NO NAME` ya no se usa y no hay que usarlo.** macOS a veces no lo
+monta aunque la placa esté perfecta: aparece como `RP2350 Boot` en
+`system_profiler SPUSBDataType` y `/Volumes` está vacío. Por ese camino no
+había forma de cargar; por PICOBOOT eso no importa. `picotool info -f` sirve
+para ver si la placa responde.
 
 Compilar solo: `cd firmware-c && ./compilar.sh`. Contempla dos rarezas de esta
 Mac, explicadas en sus comentarios:
@@ -117,9 +120,28 @@ perl -e 'alarm 15; exec @ARGV' cat /dev/cu.usbmodem11201
 **El `stty` no es opcional.** El puerto se queda en 1200 baudios después del
 truco de reinicio, y abrirlo así manda la placa a BOOTSEL y corta el video.
 
-### Ver el monitor sin pedirle fotos a Valentino
+### Ver lo que dibuja la Pico, sin cámara
 
-Está autorizado usar la **GoPro HERO12** como ojos:
+```
+python3 herramientas/mirar.py vista.png -e 3    # la escena 3
+```
+
+Pide el framebuffer por el puerto serie y lo guarda como PNG exacto, píxel por
+píxel. **Es el primer recurso**, no la cámara: no tiene el estiramiento del
+monitor, ni la exposición de la GoPro, ni el negro levantado, y deja medir
+colores y ángulos con un script.
+
+El firmware lo atiende en `volcado.c`; el bucle de `main.c` lee comandos por
+consola: `v` vuelca, `n` salta a la escena siguiente, `p` reinicia el reloj de
+la escena. `mirar.py -e N` salta hasta la escena N y la congela antes de
+volcar. **Hay que vaciar el buffer del puerto antes de buscar la línea
+`ESCENA`**: si no, la línea de la escena anterior da un falso positivo y se
+vuelca una vista que no es la pedida.
+
+### Ver el monitor con la GoPro
+
+Sirve para ver lo que el monitor hace con la señal. Está autorizado usar la
+**GoPro HERO12** como ojos:
 
 1. Abrir QuickTime Player → Archivo → **Nueva grabación de vídeo**. Toma la
    HERO12 sola. **No** hay que apretar grabar.
@@ -132,6 +154,12 @@ así que la primera devuelve el cuadro anterior. La buena es la segunda.
 El id de ventana se saca con las herramientas de control de aplicaciones
 (`app_list_windows` sobre `com.apple.QuickTimePlayerX`). En esta sesión fue
 `11641`, pero **cambia cada vez que se reabre la grabación**.
+
+**Si el Space actual es una app en pantalla completa, esto no anda**: la
+ventana de la grabación queda en otro Space, macOS no la redibuja y las
+capturas salen todas negras. No se puede arreglar por software (no se puede
+mover una ventana a un Space de pantalla completa): hay que pedirle a
+Valentino que pase a un escritorio normal. Mientras tanto, `mirar.py`.
 
 Por qué así y no de otra forma:
 - **Photo Booth no sirve**: espeja la imagen y se pausa cuando no está al
@@ -262,6 +290,18 @@ Pasó dos veces en esta sesión. Síntomas y qué hacer:
 25. **Las latitudes se acotan a ±78°**: más cerca del polo esta proyección
     estira sin fin y la Antártida sale aplastada.
 
+26b. **Las longitudes de un contorno hay que envolverlas en cadena**, cada
+    punto respecto del anterior y sólo el primero respecto del centro del
+    mapa. Envolviéndolas sueltas contra un ancla, un contorno que cruza el
+    antimeridiano relativo queda partido en dos mitades separadas por media
+    vuelta: sus lados atraviesan el mapa entero, el relleno sale **en franjas
+    a lo ancho** y aparecen continentes donde no van. Vale igual para las
+    fronteras. Era lo que hacía "raro" al mapa de Ezeiza a Miami.
+
+26c. **El recorte de `gfx_banda` era sólo vertical.** Con la tarjeta al
+    costado del mapa, las fronteras y la ruta se dibujaban encima de ella.
+    Ahora hay `gfx_banda_ancho(x0, x1)` y el mapa lo usa.
+
 ### Geometría del radar
 
 26. **La proyección del scope corrige por el coseno de la latitud.** Sin eso los
@@ -271,6 +311,18 @@ Pasó dos veces en esta sesión. Síntomas y qué hacer:
     como quedó en pantalla**, no proyectando por lat/lon.
 28. **El avión viene por detrás de la cabecera donde aterriza**, no por
     delante. Con el signo al revés la senda salía para el lado de adentro.
+
+28b. **La dirección de la senda se sacaba de las puntas ya redondeadas a
+    píxel.** A 80 km de alcance la pista mide 13 px, así que un píxel de
+    error torcía la senda hasta 4°, y el rumbo cambiaba según el alcance.
+    Ahora se calcula en subpíxeles (×256) y da **102° en todos los
+    alcances**: el rumbo verdadero de la 11 de Ezeiza.
+
+29b. **El número de la cabecera es magnético; el mapa es verdadero.** En
+    Ezeiza la declinación es de unos 8° oeste, así que la "11" (110°
+    magnéticos) apunta a 102° verdaderos y la senda sale hacia 282°. Esa
+    diferencia es correcta y no hay que "arreglarla". El firmware la imprime
+    por consola en cada escena.
 
 ### Serie y carga
 
@@ -326,13 +378,18 @@ Esta es la lista viva de Valentino. Lo de arriba es lo urgente.
 
 ### Mapas (dijo "urgente, sí o sí")
 
-1. **El mapa de Ezeiza a Miami quedó muy raro.** Hay que mirarlo y arreglarlo.
-2. **Layout adaptativo** — *empezado, sin verificar en el monitor*: para rutas
+1. **El mapa de Ezeiza a Miami quedó muy raro** — *arreglado y verificado*:
+   eran las longitudes envueltas punto por punto (bug 26b). Faltaban México,
+   Centroamérica y el Caribe, y había franjas a lo ancho. Ahora se ve entero.
+2. **Layout adaptativo** — *hecho y verificado en los dos casos*: para rutas
    anchas (Sydney-Buenos Aires) el mapa va arriba y la tarjeta abajo; para rutas
    norte-sur (Ezeiza-Madrid, Ezeiza-Miami) el mapa a la izquierda y la tarjeta
    al costado. El código está en `radar_pintar_viaje()`, decide por la forma de
-   la ruta. **Falta ver cómo queda.**
-3. **Los puntos que sigue el vuelo** — *hecho, sin verificar*: en cinco lugares
+   la ruta. Hubo que agregar el recorte lateral (bug 26c): las fronteras se
+   metían adentro de la tarjeta. La escena 11 es la que muestra el caso
+   norte-sur.
+3. **Los puntos que sigue el vuelo** — *hecho y verificado* (API, TRQ, CBB,
+   SDE en el mapa a Miami): en cinco lugares
    de la ruta se marca el aeropuerto más cercano, como hace la web. Se calcula
    sólo cuando cambia el vuelo (recorrer 5334 aeropuertos no es para cada
    cuadro).
@@ -357,38 +414,40 @@ Esta es la lista viva de Valentino. Lo de arriba es lo urgente.
 
 ### Colores de puntualidad
 
-10. **Hecho, sin verificar**: la barra mantiene el color del tema durante casi
+10. **Hecho y verificado**: la barra mantiene el color del tema durante casi
     todo el vuelo. Sólo cerca de llegar cambia — verde a tiempo, rojo atrasado,
     **azul adelantado**. En vuelos de 2 h o más, en la última hora; en los
     cortos, en los últimos 30 minutos.
 
 ### Formato aeropuerto
 
-11. **Hecho, sin verificar**: acrónimos (`A HORA`, `ADEL 10`, `DEM 25`) y una
+11. **Hecho y verificado** (escena 7, la de ancho completo; en la columna
+    angosta esas columnas no entran, igual que `compact` en la web):
+    acrónimos (`A HORA`, `ADEL 10`, `DEM 25`) y una
     columna nueva con la **hora de llegada actualizada** (la planificada corrida
     por la demora), además de la planificada.
 
 ### Pendiente de revisar a ojo
 
-12. Los logos uno por uno en la pantalla de logos (escena 16).
+12. Los logos uno por uno en la pantalla de logos (ahora escena 17).
+    *Revisado*: los que hay se ven bien. Pero **84 de los 824 PNG de
+    `docs/logos/` son el mismo archivo**, un placeholder a cuadros, y por eso
+    en la página 1 casi todas las casillas son un damero. Es dato de origen,
+    no firmware: la web muestra exactamente lo mismo. Decidir qué hacer es de
+    Valentino — se podrían volver a bajar, o dejar uno solo en la flash y
+    ahorrar los 109 KB que hoy se gastan repitiéndolo 84 veces.
 
 ---
 
-## 9. Cambios sin commitear
+## 9. Estado del árbol
 
-Estos archivos tienen trabajo hecho **que no se pudo probar en la placa**,
-porque la Pico desapareció del USB justo antes:
+Todo commiteado, **nada pusheado**. El trabajo que había quedado sin probar
+(layout adaptativo, puntos intermedios, colores de puntualidad, acrónimos del
+FIDS, el vuelo recto sobre la casa) ya está cargado y verificado en la placa,
+escena por escena, con `mirar.py`.
 
-```
-firmware-c/demo.c  main.c  radar.c  radar.h  tarjetas.c  viaje.c
-```
-
-Contienen: el layout adaptativo del mapa, los puntos intermedios de la ruta, los
-colores de puntualidad cerca de la llegada, los acrónimos y la hora actualizada
-del FIDS, el vuelo de prueba que pasa recto sobre la casa, y el marcado por
-color en vez de círculo.
-
-**Compilan sin errores.** Lo primero que hay que hacer es cargarlos y mirarlos.
+`main.c` recorre ahora **18 escenas**: se agregó la 11, "seguir AA954 con
+tarjeta", que es la única que muestra el layout norte-sur.
 
 ---
 
@@ -405,12 +464,9 @@ color en vez de círculo.
 > con costas y fronteras, seguimiento de vuelos, temas y la marca de "sobre mi
 > casa". Los datos (logos, pistas, aeropuertos, costas) están todos en la flash.
 >
-> Hay cambios sin commitear que compilan pero **no se probaron en la placa**
-> porque la Pico se desconectó del USB: están listados en la sección 9.
-> Empezá por cargarlos con `./herramientas/cargar.sh` y revisarlos en el
-> monitor con la GoPro, y después seguí con la lista de la sección 8, que
-> arranca por los mapas.
->
-> Tenés permiso para usar la GoPro como ojos y no pedirme fotos. Para cargar
-> firmware usá el script, no me pidas apretar BOOTSEL. Si la placa no aparece
-> ni como puerto ni como disco, avisame: eso sí necesita que la desenchufe.
+> Está todo commiteado y nada pusheado. Para ver lo que dibuja la Pico usá
+> `python3 herramientas/mirar.py vista.png -e N`, que trae el framebuffer por
+> el puerto serie: es más fiel que la cámara. La GoPro queda para ver qué hace
+> el monitor con la señal. Para cargar firmware usá `./herramientas/cargar.sh`,
+> no me pidas apretar BOOTSEL. Si `picotool info -f` no encuentra la placa,
+> avisame: eso sí necesita que la desenchufe.

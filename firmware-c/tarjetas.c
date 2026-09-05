@@ -259,7 +259,7 @@ void fids_dibujar(int x, int y, int an, int al, const avion_t **vuelos, int n,
     const int c_est   = compacto ? c_dep + 46 : c_arr + 52;
     const int c_vel   = compacto ? 0 : c_est + 60;
     const int c_pun   = compacto ? 0 : c_vel + 100;
-    const int c_pun2  = compacto ? 0 : c_pun + 56;
+    const int c_pun2  = compacto ? 0 : c_pun + 64;   // 56 dejaba "ESTIMADAPUNTUAL" pegado
 
     if (paso == 0) {
         gfx_texto(c_vuelo, y, "VUELO", suave, 1);

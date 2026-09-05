@@ -2,12 +2,15 @@
 #include "trig.h"
 
 int gfx_banda_y0 = 0, gfx_banda_y1 = VGA_ALTO - 1;
+int gfx_banda_x0 = 0, gfx_banda_x1 = VGA_ANCHO - 1;
 
 static int isqrt(int v);
 
 void gfx_hlinea(int x, int y, int largo, uint8_t c) {
     if (y < gfx_banda_y0 || y > gfx_banda_y1) return;
     if (largo < 0) { x += largo + 1; largo = -largo; }
+    if (x < gfx_banda_x0) { largo += x - gfx_banda_x0; x = gfx_banda_x0; }
+    if (x + largo > gfx_banda_x1 + 1) largo = gfx_banda_x1 + 1 - x;
     if (x < 0) { largo += x; x = 0; }
     if (x + largo > VGA_ANCHO) largo = VGA_ANCHO - x;
     if (largo <= 0) return;
@@ -16,6 +19,7 @@ void gfx_hlinea(int x, int y, int largo, uint8_t c) {
 }
 
 void gfx_vlinea(int x, int y, int largo, uint8_t c) {
+    if (x < gfx_banda_x0 || x > gfx_banda_x1) return;
     if ((unsigned)x >= VGA_ANCHO) return;
     if (largo < 0) { y += largo + 1; largo = -largo; }
     if (y < gfx_banda_y0) { largo += y - gfx_banda_y0; y = gfx_banda_y0; }
