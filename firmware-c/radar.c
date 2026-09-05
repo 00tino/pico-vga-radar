@@ -17,13 +17,13 @@ lista_t radar_lista = LISTA_TARJETAS;
 // Los catorce temas de THEMES en docs/radar.js, con los mismos colores.
 const tema_nombrado_t radar_temas[] = {
     { "crt_amber", { 0xe8, 0xb8, 0x6d, 0x0a, 0x08, 0x05 } },
-    { "crt_green", { 0x7d, 0xff, 0x7a, 0x03, 0x11, 0x05 } },
+    { "crt_green", { 0xb4, 0xff, 0x50, 0x03, 0x11, 0x05 } },
     { "phosphor",  { 0xc6, 0xf5, 0x9a, 0x03, 0x08, 0x05 } },
     { "atc_dark",  { 0x7e, 0xc8, 0xe3, 0x07, 0x09, 0x0c } },
-    { "navy",      { 0x8a, 0xb4, 0xff, 0x06, 0x10, 0x18 } },
+    { "navy",      { 0xb4, 0xd2, 0xff, 0x06, 0x10, 0x18 } },
     { "violet",    { 0xc4, 0xa8, 0xff, 0x0c, 0x08, 0x14 } },
     { "magenta",   { 0xff, 0x7a, 0xd9, 0x12, 0x08, 0x14 } },
-    { "red",       { 0xff, 0x6b, 0x4a, 0x12, 0x06, 0x06 } },
+    { "red",       { 0xff, 0x9a, 0x8c, 0x12, 0x06, 0x06 } },
     { "orange",    { 0xff, 0x9a, 0x4a, 0x12, 0x08, 0x04 } },
     { "gold",      { 0xff, 0xd5, 0x6a, 0x0c, 0x0a, 0x04 } },
     { "ice",       { 0xd9, 0xf6, 0xff, 0x08, 0x10, 0x16 } },
@@ -705,7 +705,7 @@ void radar_cuadro(void) {
         gfx_banda(y0, y1);
         uint32_t tb = time_us_32();
         switch (radar_vista) {
-            case VISTA_LOGOS:  { void logos_pantalla_pintar(void); logos_pantalla_pintar(); } break;
+            case VISTA_LOGOS:  break;   // se dibuja despues del bucle, ver abajo
             case VISTA_PARED:  break;   // se dibuja despues del bucle, ver abajo
             case VISTA_SEGUIR:
             case VISTA_SEGUIR_HIBRIDA: break;   // se dibuja aparte, ver abajo
@@ -734,6 +734,7 @@ void radar_cuadro(void) {
     // mientras el haz llega arriba lo hacia alcanzar al dibujo por 800 us.
     // Repartida en ocho pasadas, cada una cuesta poco y entra holgada aca.
     if (radar_vista == VISTA_PARED) pintar_pared();
+    if (radar_vista == VISTA_LOGOS) { void logos_pantalla_pintar(void); logos_pantalla_pintar(); }
 
     if (radar_vista == VISTA_HIBRIDA && tarjetas_sucias) {
         const int X = area.x, Y = area.y, AN = area.an, AL = area.al;

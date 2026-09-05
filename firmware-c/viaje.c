@@ -64,6 +64,11 @@ static void interpolar(int32_t la1, int32_t lo1, int32_t la2, int32_t lo2,
 // Donde quedo el avion en el ultimo dibujo del mapa.
 int avion_x, avion_y;
 
+// Los aeropuertos por los que va pasando el vuelo. Los calcula el mapa y los
+// muestra tambien la tarjeta, asi que viven aca afuera.
+char viaje_paso_cod[5][4];
+int  viaje_paso_n = 0;
+
 void radar_pintar_viaje(void) {
     const int X = area.x, Y = area.y, AL = area.al;
     // En la vista con tarjeta al costado el mapa ocupa el 54 por ciento, igual
@@ -330,11 +335,10 @@ void radar_pintar_viaje(void) {
     if (o && d) {
         static char cache_vuelo[9];
         static int32_t hlat[5], hlon[5];
-        static char hcod[5][4];
-        static int hn = 0;
+
         if (strncmp(cache_vuelo, ac->vuelo, sizeof cache_vuelo - 1)) {
             snprintf(cache_vuelo, sizeof cache_vuelo, "%s", ac->vuelo);
-            hn = 0;
+            viaje_paso_n = 0;
             static const int FRAC[5] = { 18, 36, 54, 72, 88 };
             for (int k = 0; k < 5; k++) {
                 int32_t la, lo;
@@ -348,21 +352,21 @@ void radar_pintar_viaje(void) {
                 }
                 if (mejor >= 0) {
                     int repetido = 0;
-                    for (int q = 0; q < hn; q++)
-                        if (!strncmp(hcod[q], aeropuertos[mejor].iata, 3)) repetido = 1;
+                    for (int q = 0; q < viaje_paso_n; q++)
+                        if (!strncmp(viaje_paso_cod[q], aeropuertos[mejor].iata, 3)) repetido = 1;
                     if (!repetido) {
-                        hlat[hn] = aeropuertos[mejor].lat;
-                        hlon[hn] = aeropuertos[mejor].lon;
-                        snprintf(hcod[hn], sizeof hcod[hn], "%s", aeropuertos[mejor].iata);
-                        hn++;
+                        hlat[viaje_paso_n] = aeropuertos[mejor].lat;
+                        hlon[viaje_paso_n] = aeropuertos[mejor].lon;
+                        snprintf(viaje_paso_cod[viaje_paso_n], sizeof viaje_paso_cod[viaje_paso_n], "%s", aeropuertos[mejor].iata);
+                        viaje_paso_n++;
                     }
                 }
             }
         }
-        for (int k = 0; k < hn; k++) {
+        for (int k = 0; k < viaje_paso_n; k++) {
             int hx = MX(hlat[k], hlon[k]), hy = MY(hlat[k], hlon[k]);
             gfx_circulo_lleno(hx, hy, 3, radar_tono(200));
-            gfx_texto(hx + 6, hy - 12, hcod[k], radar_tono(150), 1);
+            gfx_texto(hx + 6, hy - 12, viaje_paso_cod[k], radar_tono(150), 1);
         }
     }
 

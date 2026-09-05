@@ -164,7 +164,10 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande)
     const int alto_fila = GFX_FUENTE_ALTO * esc2;
     int filas = 1;                                   // la ruta va siempre
     int usado = alto_ruta;
-    while (filas < 5 && cy + usado + 2 + alto_fila <= y_fin) { usado += alto_fila + 2; filas++; }
+    // Hasta siete: en la vista de seguimiento con la tarjeta al costado el
+    // hueco de abajo era media pantalla. Las filas de mas solo salen cuando
+    // hay alto de sobra; en una tarjeta chica no cambia nada.
+    while (filas < 7 && cy + usado + 2 + alto_fila <= y_fin) { usado += alto_fila + 2; filas++; }
     // El sobrante se reparte entre las filas, pero con un tope: en una
     // tarjeta muy alta, repartir todo dejaba las filas desparramadas con
     // huecos enormes en el medio.
@@ -229,6 +232,34 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande)
         gfx_texto(px + anu / 2 - gfx_ancho_texto(buf, esc2) / 2, cy, buf, medio, esc2);
         snprintf(buf, sizeof buf, "RUMBO %03d", a->track);
         gfx_texto(px + anu - gfx_ancho_texto(buf, esc2), cy, buf, medio, esc2);
+        cy += alto_fila + sep;
+    }
+
+    // Cuanto lleva volando y cuanto dura el vuelo entero.
+    if (filas >= 6) {
+        const int lleva = a->vuelo_min - a->falta_min;
+        if (lleva > 0) snprintf(buf, sizeof buf, "VOLANDO %d H %02d", lleva / 60, lleva % 60);
+        else           snprintf(buf, sizeof buf, "VOLANDO -");
+        gfx_texto(px, cy, buf, medio, esc2);
+        snprintf(buf, sizeof buf, "AVANCE %d%%", a->pct);
+        gfx_texto(px + anu / 2 - gfx_ancho_texto(buf, esc2) / 2, cy, buf, medio, esc2);
+        snprintf(buf, sizeof buf, "DURA %d H %02d", a->vuelo_min / 60, a->vuelo_min % 60);
+        gfx_texto(px + anu - gfx_ancho_texto(buf, esc2), cy, buf, medio, esc2);
+        cy += alto_fila + sep;
+    }
+
+    // Por donde va pasando. Los calcula el mapa de la vista de seguimiento,
+    // asi que solo hay algo para mostrar cuando esa vista esta a la vista.
+    if (filas >= 7) {
+        extern char viaje_paso_cod[5][4];
+        extern int  viaje_paso_n;
+        if (viaje_paso_n > 0) {
+            int n = snprintf(buf, sizeof buf, "VIA");
+            for (int k = 0; k < viaje_paso_n && n < (int)sizeof buf - 5; k++)
+                n += snprintf(buf + n, sizeof buf - n, " %s", viaje_paso_cod[k]);
+            acortar(buf, sizeof buf, buf, anu / esc2);
+            gfx_texto(px, cy, buf, suave, esc2);
+        }
     }
 }
 

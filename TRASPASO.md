@@ -418,6 +418,11 @@ Esta es la lista viva de Valentino. Lo de arriba es lo urgente.
 1. **El mapa de Ezeiza a Miami quedó muy raro** — *arreglado y verificado*:
    eran las longitudes envueltas punto por punto (bug 26b). Faltaban México,
    Centroamérica y el Caribe, y había franjas a lo ancho. Ahora se ve entero.
+1b. **La tarjeta del mapa quedaba medio vacía** — *arreglado*: la tarjeta
+   admite hasta siete filas en vez de cinco, y las dos nuevas son el tiempo
+   volando con el avance y la duración, y los aeropuertos por los que va
+   pasando (los mismos que marca el mapa).
+
 2. **Layout adaptativo** — *hecho y verificado en los dos casos*: para rutas
    anchas (Sydney-Buenos Aires) el mapa va arriba y la tarjeta abajo; para rutas
    norte-sur (Ezeiza-Madrid, Ezeiza-Miami) el mapa a la izquierda y la tarjeta
@@ -462,6 +467,16 @@ Esta es la lista viva de Valentino. Lo de arriba es lo urgente.
    Va junto con el portal de configuración.
 
 ### Colores de puntualidad
+
+9b. **Los temas verde, rojo y azul chocaban con los colores de estado** —
+    *arreglado en los dos lados*. Con 3-3-2 bits `crt_green` caía casi en el
+    mismo tono que el verde de "a tiempo", `red` en el del "demorado" y `navy`
+    en el del "adelantado", así que el estado no cantaba. Se corrieron los
+    tres temas (no los colores de estado) en `docs/radar.js` **y** en
+    `radar.c` con los mismos valores, para que la web y la Pico sigan
+    mostrando lo mismo. **Al tocar un tema hay que tocar los dos archivos.**
+    `atc_dark` también queda cerca del azul de "adelantado": si molesta, es el
+    próximo a correr.
 
 10. **Hecho y verificado**: la barra mantiene el color del tema durante casi
     todo el vuelo. Sólo cerca de llegar cambia — verde a tiempo, rojo atrasado,

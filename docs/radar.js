@@ -8,13 +8,13 @@ const SKY_API = (function () {
 })();
 const THEMES = {
   crt_amber: { fg: "#e8b86d", bg: "#0a0805" },
-  crt_green: { fg: "#7dff7a", bg: "#031105" },
+  crt_green: { fg: "#b4ff50", bg: "#031105" },
   phosphor: { fg: "#c6f59a", bg: "#030805" },
   atc_dark: { fg: "#7ec8e3", bg: "#07090c" },
-  navy: { fg: "#8ab4ff", bg: "#061018" },
+  navy: { fg: "#b4d2ff", bg: "#061018" },
   violet: { fg: "#c4a8ff", bg: "#0c0814" },
   magenta: { fg: "#ff7ad9", bg: "#120814" },
-  red: { fg: "#ff6b4a", bg: "#120606" },
+  red: { fg: "#ff9a8c", bg: "#120606" },
   orange: { fg: "#ff9a4a", bg: "#120804" },
   gold: { fg: "#ffd56a", bg: "#0c0a04" },
   ice: { fg: "#d9f6ff", bg: "#081016" },
