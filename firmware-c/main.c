@@ -14,6 +14,7 @@
 #include "radar.h"
 #include "trig.h"
 #include "instalacion.h"
+#include "monitor.h"
 #include "pico/stdlib.h"
 #include <stdio.h>
 #include <string.h>
@@ -136,7 +137,9 @@ int main(void) {
 
     // Los margenes del monitor de este equipo salen de instalacion.h, que es
     // el unico lugar donde se toca para armar uno con otra pantalla.
-    printf("monitor: %s\n", INSTALACION_MONITOR);
+    printf("monitor segun instalacion.h: %s\n", INSTALACION_MONITOR);
+    monitor_init();
+    monitor_informe();
     area_set(INSTALACION_MARGEN_ARRIBA, INSTALACION_MARGEN_ABAJO,
              INSTALACION_MARGEN_IZQUIERDA, INSTALACION_MARGEN_DERECHA);
     printf("area util: %dx%d en %d,%d\n", area.an, area.al, area.x, area.y);
@@ -199,6 +202,9 @@ int main(void) {
             // queda en esta. Sin esto habia que esperar la vuelta completa.
             int c = getchar_timeout_us(0);
             if (c == 'v') { volcado_fb(); desde = time_us_32(); }
+            else if (c == 'm') { monitor_informe(); desde = time_us_32(); }
+            else if (c == 'M') { monitor_diagnostico(); desde = time_us_32(); }
+            else if (c == 'W') { monitor_vigilar(180); desde = time_us_32(); }
             else if (c == 'd') {
                 // El patron de primitivas, a pedido: sirve para ver de una si
                 // el texto, las lineas, los circulos y los logos siguen bien.

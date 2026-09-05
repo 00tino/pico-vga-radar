@@ -227,7 +227,14 @@ leer siempre la etiqueta impresa (`GP0`, `GP1`…), nunca contar pines.**
 | `GP7` | rojo bit2 | 500 Ω | 1 |
 | `GP8` | hsync | directo | 13 |
 | `GP9` | vsync | directo | 14 |
+| `GP10` | DDC datos (SDA) | 1,95 kΩ | 12 |
+| `GP11` | DDC reloj (SCL) | 1,95 kΩ | 15 |
 | `GND` | masa | directo | **5, 6, 7, 8 y 10** |
+
+Los dos del DDC son de un experimento que **no funcionó** (ver más abajo). No
+molestan y sirven si algún día se prueba otro monitor. **El agujero 9 (+5V)
+queda sin conectar**; las resistencias en serie no son opcionales, porque ese
+bus trabaja a 5 V y los pines de la Pico no toleran 5.
 
 **Las cinco masas del VGA son obligatorias**: con una sola el monitor perdía el
 enganche cada pocos segundos. Del otro lado de la Pico no sale ningún cable: ahí
@@ -241,6 +248,33 @@ están `VBUS`, `VSYS`, `3V3` y `3V3_EN`, que apagan la placa si se tocan.
   compensarlo por software.
 - **El negro está muy levantado.** Con una imagen oscura la cámara sube la
   exposición y el fondo se ve gris azulado. No es un problema de la señal.
+
+### El botón del monitor: probado y descartado
+
+Valentino quería apretar un botón del monitor para que apareciera el QR de
+configuración. **Los botones del menú (brillo, fuente, OSD) son imposibles**:
+el VGA lleva video en un solo sentido y esa información no sale del monitor.
+
+Quedaba una vía para el **botón de encendido**: los agujeros 12 y 15 son un bus
+I2C (DDC) con las resistencias de pull-up adentro del monitor. La idea era que
+al apagarlo se cayeran y la placa lo notara. Se cableó y se midió:
+
+- Las dos líneas suben solas en 2-3 µs: el bus está bien y el monitor las
+  levanta.
+- **El EDID no contesta en ninguna dirección ni a ninguna velocidad** (se
+  probó de 100 kHz a 5 kHz). Su memoria se alimenta del agujero 9, que está
+  sin conectar a propósito.
+- **Apagando y prendiendo el monitor varias veces, la placa no vio ni un
+  cambio**: las pull-ups del ViewSonic siguen alimentadas en standby.
+
+O sea: **con este monitor no hay ningún botón que la placa pueda ver.** El
+código quedó en `monitor.c` con los comandos `m` (leer EDID), `M`
+(diagnóstico del bus, con tiempos de subida) y `W` (vigilar el encendido), por
+si otro modelo se porta distinto.
+
+Lo que sí funciona y falta hacer: **contar arranques cortos en la flash**. El
+cliente prende y apaga el equipo tres veces seguidas y sale el QR. No necesita
+hardware y no se hace sin querer.
 
 ### Cuando la Pico desaparece del USB
 
