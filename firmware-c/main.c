@@ -1,28 +1,9 @@
-// Patron de prueba: verifica el video de 640x480 con 256 colores.
+// Patron que demuestra las primitivas de dibujo: texto, lineas, circulos
+// y rectangulos. Usa el tema crt_amber de la web (#e8b86d sobre #0a0805).
 #include "vga.h"
+#include "gfx.h"
 #include "pico/stdlib.h"
-#include "hardware/clocks.h"
-#include "hardware/structs/sio.h"
-#include "hardware/pio.h"
-#include "hardware/dma.h"
 #include <stdio.h>
-
-static void rect(int x0, int y0, int x1, int y1, uint8_t c) {
-    if (x0 < 0) x0 = 0;
-    if (y0 < 0) y0 = 0;
-    if (x1 >= VGA_ANCHO) x1 = VGA_ANCHO - 1;
-    if (y1 >= VGA_ALTO) y1 = VGA_ALTO - 1;
-    for (int y = y0; y <= y1; y++)
-        for (int x = x0; x <= x1; x++)
-            vga_fb[y * VGA_ANCHO + x] = c;
-}
-
-static void marco(uint8_t c) {
-    rect(0, 0, VGA_ANCHO - 1, 1, c);
-    rect(0, VGA_ALTO - 2, VGA_ANCHO - 1, VGA_ALTO - 1, c);
-    rect(0, 0, 1, VGA_ALTO - 1, c);
-    rect(VGA_ANCHO - 2, 0, VGA_ANCHO - 1, VGA_ALTO - 1, c);
-}
 
 int main(void) {
     stdio_init_all();
@@ -30,51 +11,89 @@ int main(void) {
     printf("arrancando firmware en C\n");
     vga_init();
     printf("video inicializado: %dx%d, 256 colores\n", VGA_ANCHO, VGA_ALTO);
-    vga_limpiar(0);
 
-    // Marco al borde: si no se ve entero, el monitor esta recortando.
-    marco(vga_color(7, 7, 3));
+    const uint8_t fondo  = vga_rgb(0x0a, 0x08, 0x05);
+    const uint8_t ambar  = vga_rgb(0xe8, 0xb8, 0x6d);
+    const uint8_t tenue  = vga_rgb(0x7a, 0x60, 0x38);
+    const uint8_t apagado= vga_rgb(0x3d, 0x30, 0x1c);
+    const uint8_t blanco = vga_color(7, 7, 3);
 
-    // ROJO: 8 bandas anchas, una por nivel. Se pueden contar a ojo.
-    for (int i = 0; i < 8; i++)
-        rect(20 + i * 75, 20, 20 + i * 75 + 70, 150, vga_color(i, 0, 0));
+    vga_limpiar(fondo);
 
-    // VERDE: 8 bandas
-    for (int i = 0; i < 8; i++)
-        rect(20 + i * 75, 160, 20 + i * 75 + 70, 290, vga_color(0, i, 0));
+    // Marco: si no se ve entero, el monitor esta recortando.
+    gfx_rect(0, 0, VGA_ANCHO, VGA_ALTO, apagado);
 
-    // AZUL: 4 bandas (el azul lleva 2 bits)
-    for (int i = 0; i < 4; i++)
-        rect(20 + i * 150, 300, 20 + i * 150 + 145, 400, vga_color(0, 0, i));
+    // --- TEXTO: tres escalas y la fuente completa ---
+    gfx_texto_centrado(320, 6, "PICO VGA RADAR", ambar, 2);
+    gfx_texto_centrado(320, 36, "primitivas de dibujo en C  -  640x480  -  256 colores", tenue, 1);
+    gfx_hlinea(20, 54, 600, apagado);
 
-    // GRIS: mezcla de los tres, para ver el blanco y sus escalones
-    for (int i = 0; i < 8; i++)
-        rect(20 + i * 75, 410, 20 + i * 75 + 70, 470,
-             vga_color(i, i, (uint8_t)(i * 3 / 7)));
+    gfx_texto(20, 62, "ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz", ambar, 1);
+    gfx_texto(20, 78, "0123456789  !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~", tenue, 1);
 
-    while (true) {
-        const int N = 40000;
-        int alto[10] = {0};
-        for (int i = 0; i < N; i++) {
-            uint32_t v = sio_hw->gpio_in;
-            for (int p = 0; p < 10; p++)
-                if (v & (1u << p)) alto[p]++;
+    // --- LINEAS: abanico de 24 rayos, mide los ocho octantes de Bresenham ---
+    const int lx = 108, ly = 250, lr = 90;
+    gfx_rect(18, 100, 180, 300, apagado);
+    gfx_texto(26, 104, "LINEAS", tenue, 1);
+    // seno en punto fijo (1/256) cada 15 grados, un cuadrante
+    static const int sen90[7] = {0, 66, 128, 181, 222, 247, 256};
+    for (int i = 0; i < 24; i++) {
+        int q = i % 6, cuad = i / 6;
+        int s = sen90[q], co = sen90[6 - q];
+        int dx, dy;
+        switch (cuad) {
+            case 0: dx =  co; dy = -s;  break;
+            case 1: dx =  s;  dy =  co; break;
+            case 2: dx = -co; dy =  s;  break;
+            default:dx = -s;  dy = -co; break;
         }
-        printf("--- reloj %lu Hz ---\n", (unsigned long)clock_get_hz(clk_sys));
-        printf("  hsync GP8: %5.2f%%   vsync GP9: %5.2f%%\n",
-               100.0 * alto[8] / N, 100.0 * alto[9] / N);
-        printf("  color GP0..GP7:");
-        for (int p = 0; p < 8; p++) printf(" %.0f%%", 100.0 * alto[p] / N);
-        printf("\n  PIO1 CTRL %08lx | DMA datos restantes %lu\n",
-               (unsigned long)pio1->ctrl,
-               (unsigned long)dma_hw->ch[0].transfer_count);
-        printf("  banderas IRQ del PIO1: %02lx\n", (unsigned long)pio1->irq);
-        printf("  donde esta parada cada maquina (PC):  hsync %lu  vsync %lu  rgb %lu\n",
-               (unsigned long)pio1->sm[0].addr,
-               (unsigned long)pio1->sm[1].addr,
-               (unsigned long)pio1->sm[2].addr);
-        printf("  nivel de la cola de pixeles: %lu\n",
-               (unsigned long)((pio1->flevel >> 16) & 0xf));
-        sleep_ms(3000);
+        gfx_linea(lx, ly, lx + dx * lr / 256, ly + dy * lr / 256,
+                  (i % 6 == 0) ? ambar : tenue);
+    }
+    gfx_texto(26, 372, "24 rayos, 8 octantes", apagado, 1);
+
+    // --- CIRCULOS: anillos de alcance y un blip lleno, como el radar ---
+    const int cx = 320, cy = 250;
+    gfx_rect(210, 100, 220, 300, apagado);
+    gfx_texto(218, 104, "CIRCULOS", tenue, 1);
+    for (int r = 25; r <= 100; r += 25)
+        gfx_circulo(cx, cy, r, r == 100 ? ambar : tenue);
+    gfx_linea(cx - 100, cy, cx + 100, cy, apagado);
+    gfx_linea(cx, cy - 100, cx, cy + 100, apagado);
+    gfx_circulo_lleno(cx, cy, 4, ambar);
+    gfx_circulo_lleno(cx + 62, cy - 48, 5, blanco);
+    gfx_circulo_lleno(cx - 74, cy + 30, 5, blanco);
+    gfx_texto(218, 372, "contorno y relleno", apagado, 1);
+
+    // --- RECTANGULOS: tarjeta con barra de progreso, como la de la web ---
+    gfx_rect(442, 100, 180, 300, apagado);
+    gfx_texto(450, 104, "RECTANGULOS", tenue, 1);
+    gfx_rect(450, 124, 164, 86, tenue);            // tarjeta
+    gfx_rect_lleno(458, 132, 32, 32, blanco);      // hueco del logo
+    gfx_texto(496, 132, "AR1301", ambar, 1);
+    gfx_texto(496, 148, "EZE > MAD", tenue, 1);
+    gfx_rect(458, 176, 148, 8, apagado);           // barra de progreso
+    gfx_rect_lleno(459, 177, 92, 6, ambar);
+    gfx_texto(458, 190, "FL350  842 km/h", tenue, 1);
+
+    // escalera de rectangulos anidados
+    for (int i = 0; i < 6; i++)
+        gfx_rect(450 + i * 6, 224 + i * 6, 164 - i * 12, 100 - i * 12,
+                 (i & 1) ? tenue : apagado);
+    gfx_texto(450, 372, "contorno y relleno", apagado, 1);
+
+    // --- RAMPA DE COLOR: 64 escalones del ambar al negro ---
+    gfx_texto(20, 410, "RAMPA", tenue, 1);
+    for (int i = 0; i < 64; i++) {
+        int n = 255 * i / 63;
+        gfx_rect_lleno(80 + i * 8, 408, 8, 20,
+                       vga_rgb(0xe8 * n / 255, 0xb8 * n / 255, 0x6d * n / 255));
+    }
+    gfx_texto_centrado(320, 438, "si la rampa se ve pareja, los 256 colores estan bien", apagado, 1);
+
+    printf("patron dibujado\n");
+    while (true) {
+        printf("vivo\n");
+        sleep_ms(5000);
     }
 }
