@@ -8,9 +8,13 @@
 #include "area.h"
 #include "logos.h"
 #include "radar.h"
+#include "trig.h"
 #include "pico/stdlib.h"
 #include <stdio.h>
 
+// Mide cuanto tiempo pasa alto cada pin: con esto se vio en su momento que
+// los cables estaban en pines muertos. Sirve para saber si la señal sigue
+// saliendo bien mientras el radar redibuja.
 void demo_init(void);
 void demo_avanzar(void);
 
@@ -135,6 +139,7 @@ int main(void) {
     radar_init();
     demo_init();
     printf("radar andando\n");
+
     uint32_t t0 = time_us_32(), cuadros = 0;
     while (true) {
         vga_esperar_cuadro();       // dibujar justo despues del borrado vertical

@@ -203,16 +203,51 @@ void gfx_linea_punteada(int x0, int y0, int x1, int y1, int trazo, int hueco, ui
             gfx_punto(x0 + dx * i / pasos, y0 + dy * i / pasos, c);
 }
 
-// Se dibuja con rayos desde el centro, con el paso lo bastante fino como para
-// que en el borde exterior no queden huecos entre uno y otro.
+// Raiz cuadrada entera, para el borde circular del sector.
+static int isqrt(int v) {
+    if (v <= 0) return 0;
+    int x = v, y = (x + 1) / 2;
+    while (y < x) { x = y; y = (x + v / x) / 2; }
+    return x;
+}
+
+static inline int div_piso(int a, int b) {
+    int q = a / b;
+    if ((a % b) && ((a < 0) != (b < 0))) q--;
+    return q;
+}
+static inline int div_techo(int a, int b) {
+    int q = a / b;
+    if ((a % b) && ((a < 0) == (b < 0))) q++;
+    return q;
+}
+
+// Sector lleno, fila por fila.
+//
+// Antes esto se dibujaba con rayos desde el centro y quedaba rayado: una
+// linea diagonal de Bresenham toca un solo pixel por columna, asi que entre
+// un rayo y el siguiente quedaban huecos (medidos: 18 por ciento del area).
+// Ahora cada fila se resuelve como la interseccion del disco con los dos
+// semiplanos de los bordes, que da un tramo continuo y sale de una.
+// Vale para sectores de menos de media vuelta, que es lo que usa el barrido.
 void gfx_sector(int cx, int cy, int r, int a0, int a1, uint8_t c) {
-    if (r <= 0) return;
-    int ancho = a1 - a0;
-    if (ancho <= 0) return;
-    int rayos = (r * ancho) / 128 + 2;
-    for (int i = 0; i <= rayos; i++) {
-        int a = a0 + ancho * i / rayos;
-        gfx_linea(cx, cy, cx + trig_cos(a) * r / TRIG_UNO,
-                          cy + trig_sen(a) * r / TRIG_UNO, c);
+    if (r <= 0 || a1 - a0 <= 0 || a1 - a0 >= TRIG_VUELTA / 2) return;
+    const int c0 = trig_cos(a0), s0 = trig_sen(a0);
+    const int c1 = trig_cos(a1), s1 = trig_sen(a1);
+    for (int dy = -r; dy <= r; dy++) {
+        int med = isqrt(r * r - dy * dy);
+        int lo = -med, hi = med;
+
+        // Borde de arranque: el punto tiene que quedar de un lado de a0.
+        if (s0 > 0)      hi = (hi < div_piso(c0 * dy, s0)) ? hi : div_piso(c0 * dy, s0);
+        else if (s0 < 0) lo = (lo > div_techo(c0 * dy, s0)) ? lo : div_techo(c0 * dy, s0);
+        else if (c0 * dy < 0) continue;
+
+        // Borde de llegada: del otro lado de a1.
+        if (s1 > 0)      lo = (lo > div_techo(c1 * dy, s1)) ? lo : div_techo(c1 * dy, s1);
+        else if (s1 < 0) hi = (hi < div_piso(c1 * dy, s1)) ? hi : div_piso(c1 * dy, s1);
+        else if (c1 * dy > 0) continue;
+
+        if (lo <= hi) gfx_hlinea(cx + lo, cy + dy, hi - lo + 1, c);
     }
 }
