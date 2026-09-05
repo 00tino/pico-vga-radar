@@ -34,20 +34,40 @@ static int dif_ang(int a, int b) {
     return d > TRIG_VUELTA / 2 ? TRIG_VUELTA - d : d;
 }
 
-void radar_cuadro(void) {
+// Avanza el estado un cuadro: el barrido gira y el fosforo de los aviones
+// decae. Va aparte del pintado porque el pintado se repite una vez por banda.
+void radar_avanzar(void) {
+    // El barrido avanza 0,012 radianes por cuadro = 1,96 unidades de 1024.
+    beam = (beam + 2) % TRIG_VUELTA;
+
+    const int cx = area.x + area.an / 2;
+    const int cy = area.y + area.al * 52 / 100;
+    const int semi = (area.an / 2 < area.al * 52 / 100 ? area.an / 2 : area.al * 52 / 100);
+    const int R = semi * 86 / 100;
+    const int32_t span = (int32_t)radar_apt.radio_km * 10000 / 111;
+
+    for (int i = 0; i < radar_cantidad; i++) {
+        avion_t *a = &radar_aviones[i];
+        int x = cx + (int)((int64_t)(a->lon - radar_apt.lon) * R / span);
+        int y = cy - (int)((int64_t)(a->lat - radar_apt.lat) * R / span);
+        int ang = trig_atan2(y - cy, x - cx);
+        if (dif_ang(ang, beam) < 8) a->brillo = 255;
+        else if (a->brillo > 82) a->brillo -= 1;          // 0,0024 por cuadro
+    }
+}
+
+static void radar_pintar(void) {
     const int X = area.x, Y = area.y, AN = area.an, AL = area.al;
     const uint8_t fondo = tono(0);
 
-    vga_limpiar(fondo);
+    // Se limpia solo la banda que se esta dibujando, no toda la pantalla.
+    vga_limpiar_filas(gfx_banda_y0, gfx_banda_y1, fondo);
 
     // Geometria igual a la de la web: centro un poco abajo del medio.
     const int cx = X + AN / 2;
     const int cy = Y + AL * 52 / 100;
     const int semi = (AN / 2 < AL * 52 / 100 ? AN / 2 : AL * 52 / 100);
     const int R = semi * 86 / 100;
-
-    // El barrido avanza 0,012 radianes por cuadro = 1,96 unidades de 1024.
-    beam = (beam + 2) % TRIG_VUELTA;
 
     // Cuna del barrido: 0,28 radianes = 46 unidades. Va primero para que los
     // anillos y los aviones queden por encima, como en la web.
@@ -82,11 +102,6 @@ void radar_cuadro(void) {
         int y = cy - (int)((int64_t)(a->lat - radar_apt.lat) * R / span);
         if (x < X || x > X + AN || y < Y || y > Y + AL) continue;
 
-        // Fosforo: se enciende al pasar el barrido y decae hasta 0,32.
-        int ang = trig_atan2(y - cy, x - cx);
-        if (dif_ang(ang, beam) < 8) a->brillo = 255;
-        else if (a->brillo > 82) a->brillo -= 1;          // 0,0024 por cuadro
-
         const uint8_t c = tono(a->brillo);
 
         // Triangulito apuntando al rumbo. En la web: (0,-6) (3.6,5) (-3.6,5).
@@ -104,4 +119,20 @@ void radar_cuadro(void) {
         #undef ROT_Y
         if (a->vuelo[0]) gfx_texto(x + 8, y - 12, a->vuelo, c, 1);
     }
+}
+
+// Un cuadro entero, por bandas de arriba hacia abajo. Ver gfx.h: es lo que
+// evita que se pierda lo que se dibuja en la parte de arriba.
+#define RADAR_BANDAS 4
+
+void radar_cuadro(void) {
+    const int alto = (VGA_ALTO + RADAR_BANDAS - 1) / RADAR_BANDAS;
+    for (int b = 0; b < RADAR_BANDAS; b++) {
+        int y0 = b * alto;
+        int y1 = y0 + alto - 1;
+        if (y1 > VGA_ALTO - 1) y1 = VGA_ALTO - 1;
+        gfx_banda(y0, y1);
+        radar_pintar();
+    }
+    gfx_banda(0, VGA_ALTO - 1);
 }

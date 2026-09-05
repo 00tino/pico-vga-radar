@@ -9,8 +9,20 @@
 
 extern const uint8_t gfx_fuente[96 * 15];
 
+// Banda de filas habilitada para dibujar.
+//
+// El framebuffer es el mismo que el monitor esta leyendo: no hay lugar en la
+// RAM para un segundo buffer (307 KB cada uno, y la Pico tiene 520). Por eso
+// el cuadro se dibuja por bandas de arriba hacia abajo, cada una completa
+// antes de que el haz llegue: como el cuadro entero lleva la mitad del tiempo
+// que tarda el haz en bajar, nunca lo alcanza. Sin esto, lo que se dibuja
+// ultimo en la parte de arriba no llega a tiempo y no se ve.
+extern int gfx_banda_y0, gfx_banda_y1;
+
+static inline void gfx_banda(int y0, int y1) { gfx_banda_y0 = y0; gfx_banda_y1 = y1; }
+
 static inline void gfx_punto(int x, int y, uint8_t c) {
-    if ((unsigned)x < VGA_ANCHO && (unsigned)y < VGA_ALTO)
+    if ((unsigned)x < VGA_ANCHO && y >= gfx_banda_y0 && y <= gfx_banda_y1)
         vga_fb[y * VGA_ANCHO + x] = c;
 }
 

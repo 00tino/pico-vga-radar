@@ -39,6 +39,7 @@ extern avion_t radar_aviones[RADAR_MAX_AVIONES];
 extern int radar_cantidad;
 
 void radar_init(void);
-void radar_cuadro(void);     // avanza el barrido y redibuja
+void radar_avanzar(void);    // gira el barrido y apaga el fosforo
+void radar_cuadro(void);     // redibuja, por bandas de arriba hacia abajo
 
 #endif

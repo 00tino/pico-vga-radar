@@ -45,5 +45,6 @@ static inline void vga_esperar_cuadro(void) {
 
 void vga_init(void);
 void vga_limpiar(uint8_t color);
+void vga_limpiar_filas(int y0, int y1, uint8_t color);
 
 #endif

@@ -1,8 +1,10 @@
 #include "gfx.h"
 #include "trig.h"
 
+int gfx_banda_y0 = 0, gfx_banda_y1 = VGA_ALTO - 1;
+
 void gfx_hlinea(int x, int y, int largo, uint8_t c) {
-    if ((unsigned)y >= VGA_ALTO) return;
+    if (y < gfx_banda_y0 || y > gfx_banda_y1) return;
     if (largo < 0) { x += largo + 1; largo = -largo; }
     if (x < 0) { largo += x; x = 0; }
     if (x + largo > VGA_ANCHO) largo = VGA_ANCHO - x;
@@ -14,8 +16,8 @@ void gfx_hlinea(int x, int y, int largo, uint8_t c) {
 void gfx_vlinea(int x, int y, int largo, uint8_t c) {
     if ((unsigned)x >= VGA_ANCHO) return;
     if (largo < 0) { y += largo + 1; largo = -largo; }
-    if (y < 0) { largo += y; y = 0; }
-    if (y + largo > VGA_ALTO) largo = VGA_ALTO - y;
+    if (y < gfx_banda_y0) { largo += y - gfx_banda_y0; y = gfx_banda_y0; }
+    if (y + largo > gfx_banda_y1 + 1) largo = gfx_banda_y1 + 1 - y;
     if (largo <= 0) return;
     uint8_t *p = &vga_fb[y * VGA_ANCHO + x];
     for (int i = 0; i < largo; i++, p += VGA_ANCHO) *p = c;
@@ -49,8 +51,8 @@ void gfx_rect(int x, int y, int an, int al, uint8_t c) {
 
 void gfx_rect_lleno(int x, int y, int an, int al, uint8_t c) {
     if (al < 0) { y += al + 1; al = -al; }
-    if (y < 0) { al += y; y = 0; }
-    if (y + al > VGA_ALTO) al = VGA_ALTO - y;
+    if (y < gfx_banda_y0) { al += y - gfx_banda_y0; y = gfx_banda_y0; }
+    if (y + al > gfx_banda_y1 + 1) al = gfx_banda_y1 + 1 - y;
     for (int i = 0; i < al; i++) gfx_hlinea(x, y + i, an, c);
 }
 
@@ -152,7 +154,7 @@ void gfx_rect_dither(int x, int y, int an, int al, uint8_t r, uint8_t g, uint8_t
 void gfx_blit(int x, int y, int an, int al, const uint8_t *datos) {
     for (int j = 0; j < al; j++) {
         int fy = y + j;
-        if ((unsigned)fy >= VGA_ALTO) continue;
+        if (fy < gfx_banda_y0 || fy > gfx_banda_y1) continue;
         for (int i = 0; i < an; i++) {
             int fx = x + i;
             if ((unsigned)fx < VGA_ANCHO)
@@ -181,8 +183,8 @@ void gfx_triangulo_lleno(int x0, int y0, int x1, int y1, int x2, int y2, uint8_t
     if (y2 == y0) { gfx_hlinea(x0 < x1 ? (x0 < x2 ? x0 : x2) : (x1 < x2 ? x1 : x2), y0, 1, c); return; }
     // Recorte vertical: sin esto un triangulo con vertices lejos de la
     // pantalla recorre miles de filas para no dibujar nada.
-    int ya = y0 < 0 ? 0 : y0;
-    int yb = y2 >= VGA_ALTO ? VGA_ALTO - 1 : y2;
+    int ya = y0 < gfx_banda_y0 ? gfx_banda_y0 : y0;
+    int yb = y2 > gfx_banda_y1 ? gfx_banda_y1 : y2;
     for (int y = ya; y <= yb; y++) {
         int xa = x0 + (x2 - x0) * (y - y0) / (y2 - y0);   // borde largo
         int xb;
@@ -234,7 +236,12 @@ void gfx_sector(int cx, int cy, int r, int a0, int a1, uint8_t c) {
     if (r <= 0 || a1 - a0 <= 0 || a1 - a0 >= TRIG_VUELTA / 2) return;
     const int c0 = trig_cos(a0), s0 = trig_sen(a0);
     const int c1 = trig_cos(a1), s1 = trig_sen(a1);
-    for (int dy = -r; dy <= r; dy++) {
+    // Solo las filas de la banda: calcular la raiz para las demas es tiempo
+    // tirado, y esto se dibuja una vez por banda.
+    int dy0 = gfx_banda_y0 - cy, dy1 = gfx_banda_y1 - cy;
+    if (dy0 < -r) dy0 = -r;
+    if (dy1 >  r) dy1 =  r;
+    for (int dy = dy0; dy <= dy1; dy++) {
         int med = isqrt(r * r - dy * dy);
         int lo = -med, hi = med;
 

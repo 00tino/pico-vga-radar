@@ -35,6 +35,15 @@ void vga_limpiar(uint8_t color) {
     memset(vga_fb, color, sizeof(vga_fb));
 }
 
+// Limpia un rango de filas. Con memset, que va de a palabras: hacerlo linea
+// por linea con las primitivas de dibujo cuesta varias veces mas.
+void vga_limpiar_filas(int y0, int y1, uint8_t color) {
+    if (y0 < 0) y0 = 0;
+    if (y1 > VGA_ALTO - 1) y1 = VGA_ALTO - 1;
+    if (y1 < y0) return;
+    memset(&vga_fb[y0 * VGA_ANCHO], color, (size_t)(y1 - y0 + 1) * VGA_ANCHO);
+}
+
 void vga_init(void) {
     vga_limpiar(0);
 

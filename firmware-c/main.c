@@ -136,14 +136,15 @@ int main(void) {
     dibujar_patron();
     sleep_ms(6000);
 
-    radar_init();
+    radar_init();    radar_init();
     demo_init();
     printf("radar andando\n");
 
     uint32_t t0 = time_us_32(), cuadros = 0;
     while (true) {
-        vga_esperar_cuadro();       // dibujar justo despues del borrado vertical
+        vga_esperar_cuadro();
         demo_avanzar();
+        radar_avanzar();
         radar_cuadro();
         if (++cuadros == 120) {
             uint32_t t1 = time_us_32();
