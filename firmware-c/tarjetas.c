@@ -78,13 +78,22 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande)
     else
         pastilla(tx, cy + 2 + fila, a->estado, medio);
 
-    // El tipo va debajo del indicativo, y la cabecera crece lo que haga
-    // falta: con el indicativo al doble de tamano no entraba en el alto del
-    // logo y el tipo se montaba sobre la ruta.
-    const int y_tipo = cy + 2 + (pill_al_lado ? fila : 2 * fila + 4);
+    // El tipo va al lado del indicativo si hay ancho, y debajo si no. Al
+    // lado la cabecera es una linea mas baja y entra una fila mas de datos,
+    // que es lo que se pierde en la pared con el indicativo al doble.
     acortar(buf, sizeof buf, a->tipo, tan);
-    gfx_texto(tx, y_tipo, buf, suave, 1);
-    const int alto_cab = y_tipo + GFX_FUENTE_ALTO - cy;
+    const int an_tipo = gfx_ancho_texto(buf, 1);
+    const int tipo_al_lado = pill_al_lado && (an_id + 10 + an_tipo + 10 + an_pill <= tan);
+    int alto_cab;
+    if (tipo_al_lado) {
+        gfx_texto(tx + an_id + 10, cy + 2 + (GFX_FUENTE_ALTO * esc - GFX_FUENTE_ALTO) / 2,
+                  buf, suave, 1);
+        alto_cab = 2 + GFX_FUENTE_ALTO * esc;
+    } else {
+        const int y_tipo = cy + 2 + (pill_al_lado ? fila : 2 * fila + 4);
+        gfx_texto(tx, y_tipo, buf, suave, 1);
+        alto_cab = y_tipo + GFX_FUENTE_ALTO - cy;
+    }
     cy += (alto_cab > lado ? alto_cab : lado) + 8;
 
     // --- Cuerpo ---

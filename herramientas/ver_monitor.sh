@@ -7,6 +7,10 @@
 #      Toma la HERO12 sola. NO hay que apretar grabar.
 #   3. Averiguar el id de la ventana y pasarlo como argumento.
 #
+# OJO: el screencapture del sistema se cuelga cada tanto y deja de sacar
+# fotos. Cuando pasa, hay que matarlo (pkill screencapture) o sacar la foto
+# desde las herramientas de control de aplicaciones, que van por otro lado.
+#
 # Por que QuickTime y no otra cosa:
 #   - Photo Booth espeja la imagen y se pausa cuando no esta al frente:
 #     devuelve un cuadro viejo y parece que el monitor estuviera apagado.

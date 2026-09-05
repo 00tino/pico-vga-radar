@@ -47,8 +47,8 @@ uint8_t radar_tono(int alpha255);
 
 // La barra de arriba, como .mon-head de la web: el aeropuerto a la izquierda
 // y el resumen a la derecha, con una linea fina abajo.
-static void encabezado(const char *derecha) {
-    const int X = area.x, Y = area.y, AN = area.an;
+static void encabezado(const char *derecha, int ancho) {
+    const int X = area.x, Y = area.y, AN = ancho;
     char buf[72];
     snprintf(buf, sizeof buf, "%s  %s", radar_apt.iata, radar_apt.nombre);
     gfx_texto(X + 10, Y + 8, radar_apt.iata, radar_tono(255), 1);
@@ -58,6 +58,9 @@ static void encabezado(const char *derecha) {
         gfx_texto(X + AN - 10 - gfx_ancho_texto(derecha, 1), Y + 8, derecha, radar_tono(170), 1);
     gfx_hlinea(X + 10, Y + 26, AN - 20, radar_tono(45));
 }
+
+// Version corta, para cuando el encabezado ocupa todo el ancho.
+static void encabezado_ancho(const char *derecha) { encabezado(derecha, area.an); }
 
 static int beam = 0;              // angulo del barrido, en unidades de trig.h
 static uint8_t orden[RADAR_MAX_AVIONES];   // aviones ordenados por cercania
@@ -250,7 +253,9 @@ static void radar_pintar(void) {
     {
         char meta[72];
         snprintf(meta, sizeof meta, "%d en radar - %d km", radar_cantidad, radar_apt.radio_km);
-        encabezado(meta);
+        // En la vista hibrida la barra ocupa solo el ancho del scope: si no,
+        // el resumen de la derecha cae encima de la primera tarjeta.
+        encabezado(meta, ANS);
     }
 
     // Etiquetas de alcance sobre el eje horizontal.
@@ -369,7 +374,7 @@ static void radar_pintar(void) {
 
     if (radar_vista != VISTA_HIBRIDA || !tarjetas_sucias) return;
     vga_limpiar_rect(X + ANS + 4, gfx_banda_y0, AN - ANS - 4, gfx_banda_y1, fondo);
-    radar_pintar_tarjetas(X + ANS + 8, Y + 4, AN - ANS - 16, AL - 8, 0);
+    radar_pintar_tarjetas(X + ANS + 8, Y + 32, AN - ANS - 16, AL - 36, 0);
 }
 
 // La columna, o la pared entera. Muestra la pagina que toca del carrusel.
@@ -403,7 +408,7 @@ static void pintar_pared(void) {
         const int paginas = (radar_cantidad + por_pagina - 1) / por_pagina;
         snprintf(meta, sizeof meta, "%d vuelos - pagina %d de %d",
                  radar_cantidad, pagina + 1, paginas > 0 ? paginas : 1);
-        encabezado(meta);
+        encabezado_ancho(meta);
     }
     radar_pintar_tarjetas(area.x + 8, area.y + 36, area.an - 16, area.al - 44, 1);
 }
