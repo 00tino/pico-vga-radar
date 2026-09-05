@@ -56,14 +56,18 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande)
 
     const int px = x + 10;
     const int anu = an - 20;
-    const int esc = grande ? 2 : 1;        // en pantalla completa, mas grande
+    // Cuanto mas alta la tarjeta, mas grande el texto: una sola tarjeta a
+    // pantalla completa se ve como el .hero de la web, no como una chica
+    // estirada con huecos.
+    const int esc = (grande && al > 300) ? 3 : (grande || al > 200) ? 2 : 1;
+    const int esc2 = esc >= 3 ? 2 : 1;     // para las filas de datos
     const int fila = GFX_FUENTE_ALTO * esc + 4;
 
     char buf[48];
     int cy = y + 6;
 
     // --- Cabecera: logo, indicativo y estado ---
-    const int lado = LOGO_LADO;
+    const int lado = LOGO_LADO;   // el logo esta guardado a 36
     cuadro_logo(px, cy, lado, a, medio);
     const int tx = px + lado + 10;
     int tan = anu - lado - 10;
@@ -102,12 +106,17 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande)
     // contenido apelmazado arriba y un hueco abajo.
     const int y_fin = y + al - 6;
     const int alto_ruta = GFX_FUENTE_ALTO * esc;
-    const int alto_fila = GFX_FUENTE_ALTO;
+    const int alto_fila = GFX_FUENTE_ALTO * esc2;
     int filas = 1;                                   // la ruta va siempre
     int usado = alto_ruta;
     while (filas < 4 && cy + usado + 2 + alto_fila <= y_fin) { usado += alto_fila + 2; filas++; }
+    // El sobrante se reparte entre las filas, pero con un tope: en una
+    // tarjeta muy alta, repartir todo dejaba las filas desparramadas con
+    // huecos enormes en el medio.
     const int sobra = y_fin - cy - usado;
-    const int sep = filas > 1 ? sobra / (filas - 1) : 0;
+    int sep = filas > 1 ? sobra / (filas - 1) : 0;
+    const int sep_max = GFX_FUENTE_ALTO * esc2 + 10;
+    if (sep > sep_max) sep = sep_max;
 
     // Ruta con la barra de avance.
     gfx_texto(px, cy, a->origen, fuerte, esc);
@@ -123,19 +132,19 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande)
 
     // Ciudades.
     if (filas >= 2) {
-        acortar(buf, sizeof buf, a->ciudad_o, anu / 2 - 6);
-        gfx_texto(px, cy, buf, suave, 1);
-        acortar(buf, sizeof buf, a->ciudad_d, anu / 2 - 6);
-        gfx_texto(px + anu - gfx_ancho_texto(buf, 1), cy, buf, suave, 1);
+        acortar(buf, sizeof buf, a->ciudad_o, (anu / 2 - 6) / esc2);
+        gfx_texto(px, cy, buf, suave, esc2);
+        acortar(buf, sizeof buf, a->ciudad_d, (anu / 2 - 6) / esc2);
+        gfx_texto(px + anu - gfx_ancho_texto(buf, esc2), cy, buf, suave, esc2);
         cy += alto_fila + sep;
     }
 
     // Horarios.
     if (filas >= 3) {
         snprintf(buf, sizeof buf, "SALE %s", a->dep);
-        gfx_texto(px, cy, buf, medio, 1);
+        gfx_texto(px, cy, buf, medio, esc2);
         snprintf(buf, sizeof buf, "LLEGA %s", a->arr);
-        gfx_texto(px + anu - gfx_ancho_texto(buf, 1), cy, buf, medio, 1);
+        gfx_texto(px + anu - gfx_ancho_texto(buf, esc2), cy, buf, medio, esc2);
         cy += alto_fila + sep;
     }
 
@@ -143,11 +152,11 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande)
     if (filas >= 4) {
         if (a->alt <= 0) snprintf(buf, sizeof buf, "ALT GND");
         else snprintf(buf, sizeof buf, "ALT FL%03d", (int)(a->alt / 100));
-        gfx_texto(px, cy, buf, medio, 1);
+        gfx_texto(px, cy, buf, medio, esc2);
         snprintf(buf, sizeof buf, "VEL %d kt", a->gs);
-        gfx_texto(px + anu / 2 - gfx_ancho_texto(buf, 1) / 2, cy, buf, medio, 1);
+        gfx_texto(px + anu / 2 - gfx_ancho_texto(buf, esc2) / 2, cy, buf, medio, esc2);
         snprintf(buf, sizeof buf, "RUMBO %03d", a->track);
-        gfx_texto(px + anu - gfx_ancho_texto(buf, 1), cy, buf, medio, 1);
+        gfx_texto(px + anu - gfx_ancho_texto(buf, esc2), cy, buf, medio, esc2);
     }
 }
 

@@ -65,5 +65,5 @@ void gfx_linea_punteada(int x0, int y0, int x1, int y1, int trazo, int hueco, ui
 void gfx_sector(int cx, int cy, int r, int a0, int a1, uint8_t c);
 
 // Relleno de poligono por barrido de filas. Se usa para las costas del mapa.
-#define GFX_POLIGONO_MAX 512
+#define GFX_POLIGONO_MAX 900   // el contorno mas grande de land.json tiene 776 puntos
 void gfx_poligono_lleno(const int *xs, const int *ys, int n, uint8_t c);

@@ -275,7 +275,7 @@ void gfx_poligono_lleno(const int *xs, const int *ys, int n, uint8_t c) {
     if (ymin < gfx_banda_y0) ymin = gfx_banda_y0;
     if (ymax > gfx_banda_y1) ymax = gfx_banda_y1;
 
-    int cruces[64];
+    int cruces[96];
     for (int y = ymin; y <= ymax; y++) {
         int m = 0;
         for (int i = 0, j = n - 1; i < n; j = i++) {

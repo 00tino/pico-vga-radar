@@ -186,14 +186,14 @@ int main(void) {
         printf("ESCENA %d: %s\n", esc, ESCENA[esc].nombre);
 
         uint32_t cuadros = 0;
-        while (time_us_32() - desde < 12000000u) {
+        while (time_us_32() - desde < 15000000u) {
             vga_esperar_cuadro();
             demo_avanzar();
             radar_avanzar();
             radar_cuadro();
             cuadros++;
         }
-        printf("  %lu cuadros en 12 s\n", (unsigned long)cuadros);
+        printf("  %lu cuadros, %lu por segundo\n", (unsigned long)cuadros, (unsigned long)(cuadros / 15));
         desde = time_us_32();
         esc = (esc + 1) % ESCENAS;
     }

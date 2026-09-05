@@ -102,18 +102,36 @@ void radar_pintar_viaje(void) {
 
     // Escala: la misma en los dos ejes, para que no se deforme.
     int32_t span_la = maxla - minla, span_lo = maxlo - minlo;
-    int esc_la = (int)((int64_t)alt * 10000 / span_la);
-    int esc_lo = (int)((int64_t)anc * 10000 / span_lo);
-    int esc = esc_la < esc_lo ? esc_la : esc_lo;          // px por grado
+    if (span_la < 1) span_la = 1;
+    if (span_lo < 1) span_lo = 1;
+    // Pixeles por grado, en centesimas: con enteros pelados una escala de
+    // 2,9 se volvia 2 y el mapa quedaba mucho mas chico de lo que entra.
+    int64_t esc_la = (int64_t)alt * 1000000 / span_la;
+    int64_t esc_lo = (int64_t)anc * 1000000 / span_lo;
+    int64_t esc = esc_la < esc_lo ? esc_la : esc_lo;
+    if (esc < 1) esc = 1;
     const int32_t midla = (minla + maxla) / 2, midlo = (minlo + maxlo) / 2;
 
-    #define MX(la, lo) (x0 + anc / 2 + (int)((int64_t)(WL(lo) - midlo) * esc / 10000))
-    #define MY(la, lo) (y0 + alt / 2 - (int)((int64_t)((la) - midla) * esc / 10000))
+    // Lo que de verdad entra en pantalla con esa escala. Hay que recalcularlo:
+    // la escala es la misma en los dos ejes, asi que el eje que no manda
+    // termina mostrando mucho mas de lo que pedia el encuadre. Sin esto se
+    // descartaban continentes que si se veian: en un Sydney-Buenos Aires
+    // aparecia Australia y faltaba Sudamerica.
+    minla = midla - (int32_t)((int64_t)alt * 1000000 / esc) / 2;
+    maxla = midla + (int32_t)((int64_t)alt * 1000000 / esc) / 2;
+    minlo = midlo - (int32_t)((int64_t)anc * 1000000 / esc) / 2;
+    maxlo = midlo + (int32_t)((int64_t)anc * 1000000 / esc) / 2;
+    span_la = maxla - minla;
+    span_lo = maxlo - minlo;
+
+    #define MX(la, lo) (x0 + anc / 2 + (int)((int64_t)(WL(lo) - midlo) * esc / 1000000))
+    #define MY(la, lo) (y0 + alt / 2 - (int)((int64_t)((la) - midla) * esc / 1000000))
 
     // Las costas del mundo: relleno tenue y contorno, igual que la web
     // (alpha 0,16 para el relleno y 0,5 para el borde).
     {
-        int px[GFX_POLIGONO_MAX], py[GFX_POLIGONO_MAX];
+        // Estaticos y no en la pila: son 7 KB, y la pila de la Pico es chica.
+        static int px[GFX_POLIGONO_MAX], py[GFX_POLIGONO_MAX];
         const uint8_t relleno = radar_tono(41), linea_costa = radar_tono(128);
         for (int i = 0; i < COSTAS_ANILLOS; i++) {
             const int desde = costas_anillos[i].desde, cant = costas_anillos[i].cantidad;
@@ -143,6 +161,7 @@ void radar_pintar_viaje(void) {
                 gfx_linea(px[j], py[j], px[k], py[k], linea_costa);
             }
         }
+
     }
 
     // Rejilla de paralelos y meridianos, con el paso que corresponda.
@@ -152,7 +171,11 @@ void radar_pintar_viaje(void) {
     const int paso_lo = span_lo > 900000 ? 30 : span_lo > 400000 ? 20 : span_lo > 180000 ? 10 : span_lo > 60000 ? 5 : 2;
     const uint8_t linea = radar_tono(30), rotulo = radar_tono(100);
     char buf[64];
-    for (int32_t g = (minla / (paso_la * 10000)) * paso_la * 10000; g <= maxla; g += paso_la * 10000) {
+    // Los paralelos existen entre -90 y 90: sin acotar salian rotulos de
+    // -140 grados cuando el encuadre se estira por la escala.
+    int32_t la_desde = minla < -900000 ? -900000 : minla;
+    int32_t la_hasta = maxla >  900000 ?  900000 : maxla;
+    for (int32_t g = (la_desde / (paso_la * 10000)) * paso_la * 10000; g <= la_hasta; g += paso_la * 10000) {
         int py = MY(g, midlo);
         if (py < y0 || py > y0 + alt) continue;
         gfx_hlinea(x0, py, anc, linea);
