@@ -355,3 +355,48 @@ void gfx_reponer(int x, int y, int an, int al, const uint8_t *src) {
         }
     }
 }
+
+// Recorte de poligono contra un rectangulo, por los cuatro lados.
+//
+// Para cada lado se recorre el poligono y se van quedando los vertices de
+// adentro, agregando el punto de cruce cuando un lado atraviesa el borde. El
+// resultado es un poligono nuevo, cerrado y correcto, que ya se puede
+// rellenar sin que el relleno se escape.
+static int recortar_lado(const int *xs, const int *ys, int n,
+                         int lado, int valor, int *sx, int *sy, int max) {
+    int m = 0;
+    for (int i = 0, j = n - 1; i < n; j = i++) {
+        int xi = xs[i], yi = ys[i], xj = xs[j], yj = ys[j];
+        int di, dj;
+        switch (lado) {
+            case 0: di = xi - valor; dj = xj - valor; break;   // x >= valor
+            case 1: di = valor - xi; dj = valor - xj; break;   // x <= valor
+            case 2: di = yi - valor; dj = yj - valor; break;   // y >= valor
+            default:di = valor - yi; dj = valor - yj; break;   // y <= valor
+        }
+        int dentro_i = di >= 0, dentro_j = dj >= 0;
+        if (dentro_i != dentro_j && (di - dj) != 0) {
+            // Punto donde el lado cruza el borde.
+            int t_num = dj, t_den = dj - di;
+            int cx = xj + (int)((int64_t)(xi - xj) * t_num / t_den);
+            int cy = yj + (int)((int64_t)(yi - yj) * t_num / t_den);
+            if (m < max) { sx[m] = cx; sy[m] = cy; m++; }
+        }
+        if (dentro_i && m < max) { sx[m] = xi; sy[m] = yi; m++; }
+    }
+    return m;
+}
+
+int gfx_poligono_recortar(const int *xs, const int *ys, int n,
+                          int rx0, int ry0, int rx1, int ry1,
+                          int *sx, int *sy, int max) {
+    static int ax[GFX_POLIGONO_MAX * 2], ay[GFX_POLIGONO_MAX * 2];
+    const int amax = GFX_POLIGONO_MAX * 2;
+    int m = recortar_lado(xs, ys, n, 0, rx0, ax, ay, amax);
+    if (!m) return 0;
+    m = recortar_lado(ax, ay, m, 1, rx1, sx, sy, max);
+    if (!m) return 0;
+    m = recortar_lado(sx, sy, m, 2, ry0, ax, ay, amax);
+    if (!m) return 0;
+    return recortar_lado(ax, ay, m, 3, ry1, sx, sy, max);
+}

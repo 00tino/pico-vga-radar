@@ -166,21 +166,41 @@ void radar_pintar_viaje(void) {
                 px[j] = MX(la, lo);
                 py[j] = MY(la, lo);
             }
-            // Los puntos muy afuera se pegan al borde del recuadro: si no, una
-            // costa que pasa lejos mete lineas cruzando toda la pantalla.
-            for (int j = 0; j < cant; j++) {
-                if (px[j] < x0 - 40)       px[j] = x0 - 40;
-                if (px[j] > x0 + anc + 40) px[j] = x0 + anc + 40;
-                if (py[j] < y0 - 40)       py[j] = y0 - 40;
-                if (py[j] > y0 + alt + 40) py[j] = y0 + alt + 40;
-            }
-            gfx_poligono_lleno(px, py, cant, relleno);
-            for (int j = 0; j < cant; j++) {
-                int k = (j + 1) % cant;
-                gfx_linea(px[j], py[j], px[k], py[k], linea_costa);
+            // Recortado contra el recuadro del mapa. Antes se acotaban los
+            // puntos sueltos al borde, y eso juntaba vertices que estan lejos
+            // entre si: el relleno se escapaba en franjas a lo ancho de la
+            // pantalla y la Antartida salia aplastada.
+            static int rx[GFX_POLIGONO_MAX * 2], ry[GFX_POLIGONO_MAX * 2];
+            int rn = gfx_poligono_recortar(px, py, cant, x0, y0, x0 + anc - 1, y0 + alt - 1,
+                                           rx, ry, GFX_POLIGONO_MAX * 2);
+            if (rn < 3) continue;
+            gfx_poligono_lleno(rx, ry, rn, relleno);
+            for (int j = 0; j < rn; j++) {
+                int k = (j + 1) % rn;
+                gfx_linea(rx[j], ry[j], rx[k], ry[k], linea_costa);
             }
         }
 
+    }
+
+    // Limites entre paises, con trazo mas fino que las costas.
+    {
+        const uint8_t c_frontera = radar_tono(90);
+        for (int i = 0; i < FRONTERAS_TRAMOS; i++) {
+            const int desde = fronteras_tramos[i].desde, cant = fronteras_tramos[i].cantidad;
+            int ax = 0, ay = 0;
+            for (int j = 0; j < cant; j++) {
+                int32_t la = (int32_t)fronteras_lat[desde + j] * 100;
+                int32_t lo = (int32_t)fronteras_lon[desde + j] * 100;
+                int bx = MX(la, lo), by = MY(la, lo);
+                if (bx < -4000) bx = -4000;
+                if (bx >  4000) bx =  4000;
+                if (by < -4000) by = -4000;
+                if (by >  4000) by =  4000;
+                if (j) gfx_linea(ax, ay, bx, by, c_frontera);
+                ax = bx; ay = by;
+            }
+        }
     }
 
     // Rejilla de paralelos y meridianos, con el paso que corresponda.
@@ -257,17 +277,12 @@ void radar_pintar_viaje(void) {
         gfx_circulo(pxx, pyy, 7, radar_tono(255));
         gfx_circulo(pxx, pyy, 6, radar_tono(255));
 
-        snprintf(buf, sizeof buf, "%s %s", rotulos[k], par[k]->ciudad);
+        // Sobre el mapa va solo el codigo: los nombres largos tapaban medio
+        // continente. Las ciudades se leen en la barra de arriba.
         const int an_cod = gfx_ancho_texto(par[k]->iata, 1);
-        const int an_txt = gfx_ancho_texto(buf, 1);
-        int izq = (k == 0);                       // el origen rotula a la izquierda
-        if (izq && pxx - 12 - an_txt < x0) izq = 0;
-        if (!izq && pxx + 12 + an_txt > x0 + anc) izq = 1;
-        const int cod_x = izq ? pxx - 12 - an_cod : pxx + 12;
-        const int txt_x = izq ? pxx - 12 - an_txt : pxx + 12;
-        const int base  = (k == 0) ? pyy - 22 : pyy + 6;
-        gfx_texto(cod_x, base, par[k]->iata, radar_tono(255), 1);
-        gfx_texto(txt_x, base + 14, buf, radar_tono(150), 1);
+        int izq = (pxx + 14 + an_cod > x0 + anc);
+        gfx_texto(izq ? pxx - 12 - an_cod : pxx + 12, pyy - 18,
+                  par[k]->iata, radar_tono(255), 1);
     }
 
     // Donde cae el avion, para que el dibujo de encima sepa adonde ir.
@@ -279,7 +294,9 @@ void radar_pintar_viaje(void) {
     // Barra de arriba: el vuelo a la izquierda y cuanto falta a la derecha.
     snprintf(buf, sizeof buf, "%s", ac->vuelo);
     gfx_texto(X + 10, Y + 8, buf, radar_tono(255), 1);
-    snprintf(buf, sizeof buf, "%s > %s", ac->origen, ac->destino);
+    if (o && d) snprintf(buf, sizeof buf, "%s %s  >  %s %s",
+                         ac->origen, o->ciudad, ac->destino, d->ciudad);
+    else        snprintf(buf, sizeof buf, "%s > %s", ac->origen, ac->destino);
     gfx_texto(X + 10 + gfx_ancho_texto(ac->vuelo, 1) + 10, Y + 8, buf, radar_tono(170), 1);
     if (d) {
         int km = km_gc(ac->lat, ac->lon, d->lat, d->lon);

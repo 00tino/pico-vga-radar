@@ -61,7 +61,9 @@ void demo_init(void) {
         // Los que en la semilla llegan a Ezeiza llegan en realidad al
         // aeropuerto que este elegido: si no, en Narita las tarjetas dirian
         // que todos van a Buenos Aires.
-        if (!strncmp(SEMILLA[i].des, "EZE", 3)) {
+        // Ojo con el vuelo que ya salia de ese aeropuerto: si no, queda con
+        // origen y destino iguales, como MAD > MAD.
+        if (!strncmp(SEMILLA[i].des, "EZE", 3) && strncmp(SEMILLA[i].ori, radar_apt.iata, 3)) {
             strncpy(a->destino, radar_apt.iata, 3);
             strncpy(a->ciudad_d, radar_apt.nombre, sizeof a->ciudad_d - 1);
         } else {
@@ -73,8 +75,11 @@ void demo_init(void) {
         strncpy(a->estado, SEMILLA[i].estado, sizeof a->estado - 1);
         a->pct = SEMILLA[i].pct;
         // Datos de puntualidad, repartidos para que se vean los dos casos.
-        a->demora = (int16_t)((i % 4 == 1) ? 10 + (i * 7) % 40 : 0);
-        a->falta_min = (int16_t)(5 + (100 - SEMILLA[i].pct) * 3);
+        // Uno de cada cuatro demorado y uno de cada cuatro adelantado, para
+        // que se vean los tres casos.
+        a->demora = (int16_t)((i % 4 == 1) ? 10 + (i * 7) % 40
+                            : (i % 4 == 2) ? -(5 + (i * 3) % 15) : 0);
+        a->falta_min = (int16_t)(5 + (100 - SEMILLA[i].pct) * 3);   // hasta unas cinco horas
         a->brillo = 82;
     }
 }

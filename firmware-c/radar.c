@@ -71,7 +71,16 @@ static uint32_t cuadros_pagina = 0;
 static int tarjetas_sucias = 99;
 static int tarjeta_en_curso = 0;
 
-void radar_marcar_sucio(void) { tarjetas_sucias = 99; tarjeta_en_curso = 0; }
+static int limpiar_todo = 1;
+
+void radar_marcar_sucio(void) {
+    tarjetas_sucias = 99;
+    tarjeta_en_curso = 0;
+    // Cada vista limpia solo su parte, asi que al cambiar de una a otra
+    // quedaban restos de la anterior: pedazos del mapa detras de las
+    // tarjetas y al costado del scope.
+    limpiar_todo = 1;
+}
 
 uint8_t radar_tono(int alpha255);
 
@@ -243,9 +252,10 @@ void radar_avanzar(void) {
     const int R = semi * 86 / 100;
     const int32_t span = (int32_t)radar_apt.radio_km * 10000 / 111;
 
+    const int coslat = geo_coslat(radar_apt.lat);
     for (int i = 0; i < radar_cantidad; i++) {
         avion_t *a = &radar_aviones[i];
-        int x = cx + (int)((int64_t)(a->lon - radar_apt.lon) * R / span);
+        int x = cx + (int)((int64_t)(a->lon - radar_apt.lon) * coslat / TRIG_UNO * R / span);
         int y = cy - (int)((int64_t)(a->lat - radar_apt.lat) * R / span);
         int ang = trig_atan2(y - cy, x - cx);
         if (dif_ang(ang, beam) < 8) a->brillo = 255;
@@ -314,7 +324,12 @@ static void radar_pintar(void) {
     // Grados de 1e-4 que entran en el radio del scope: 1 grado = 111 km.
     const int32_t span = (int32_t)radar_apt.radio_km * 10000 / 111;
 
-    #define PROY_X(la, lo) (cx + (int)((int64_t)((lo) - radar_apt.lon) * R / span))
+    // La longitud se achica por el coseno de la latitud. Sin esto las
+    // distancias este-oeste salen infladas y los rumbos se ven torcidos: la
+    // aproximacion a la 11 de Ezeiza parecia entrar por la 09.
+    const int coslat = geo_coslat(radar_apt.lat);
+
+    #define PROY_X(la, lo) (cx + (int)((int64_t)((lo) - radar_apt.lon) * coslat / TRIG_UNO * R / span))
     #define PROY_Y(la, lo) (cy - (int)((int64_t)((la) - radar_apt.lat) * R / span))
 
     // Pistas del aeropuerto. Las cortas se estiran a un largo minimo, si no
@@ -390,8 +405,8 @@ static void radar_pintar(void) {
 
     for (int i = 0; i < radar_cantidad; i++) {
         avion_t *a = &radar_aviones[i];
-        int x = cx + (int)((int64_t)(a->lon - radar_apt.lon) * R / span);
-        int y = cy - (int)((int64_t)(a->lat - radar_apt.lat) * R / span);
+        int x = PROY_X(a->lat, a->lon);
+        int y = PROY_Y(a->lat, a->lon);
         // Solo adentro del circulo: si no, quedan aviones sueltos flotando
         // en las esquinas, fuera del alcance que dice el radar.
         int rdx = x - cx, rdy = y - cy;
@@ -495,7 +510,10 @@ void radar_pintar_tarjetas(int x, int y, int an, int al, int grande) {
 
 static void pintar_pared(void) {
     if (!tarjetas_sucias) return;
-    vga_limpiar_filas(gfx_banda_y0, gfx_banda_y1, radar_tono(0));
+    // Solo en la primera pasada: el dibujo se reparte en varios cuadros y
+    // limpiar en todos borraba lo que habian dibujado los anteriores.
+    if (tarjeta_en_curso == 0)
+        vga_limpiar_filas(gfx_banda_y0, gfx_banda_y1, radar_tono(0));
     {
         char meta[72];
         const int por_pagina = radar_tarjetas < 1 ? 1 : radar_tarjetas;
@@ -553,6 +571,15 @@ static void cuadro_viaje(void) {
 }
 
 void radar_cuadro(void) {
+    if (limpiar_todo) {
+        // La limpieza se lleva un cuadro entero para ella sola: sumada al
+        // dibujo se pasaba del tiempo que tarda el haz en bajar.
+        gfx_banda(0, VGA_ALTO - 1);
+        vga_limpiar(radar_tono(0));
+        limpiar_todo = 0;
+        return;
+    }
+
     if (radar_vista == VISTA_SEGUIR || radar_vista == VISTA_SEGUIR_HIBRIDA) {
         cuadro_viaje();
         gfx_banda(0, VGA_ALTO - 1);

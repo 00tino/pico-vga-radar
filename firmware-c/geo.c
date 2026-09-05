@@ -3,6 +3,12 @@
 
 // Un grado de latitud son 111 km. En longitud hay que achicar por el coseno
 // de la latitud, si no las distancias este-oeste salen infladas.
+int geo_coslat(int32_t lat) {
+    int a = trig_de_grados((int)(lat / 10000));
+    int c = trig_cos(a);
+    return c < 0 ? -c : c;
+}
+
 static int coseno_lat(int32_t lat) {
     int a = trig_de_grados((int)(lat / 10000));
     int c = trig_cos(a);

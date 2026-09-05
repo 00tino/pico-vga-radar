@@ -3,6 +3,9 @@
 #define GEO_H
 #include <stdint.h>
 
+// Coseno de una latitud, en 1/1024. Lo usa la proyeccion del radar.
+int geo_coslat(int32_t lat);
+
 // Distancia aproximada en kilometros. Alcanza para el alcance de un radar
 // de unos cientos de km: no vale para vuelos largos.
 int geo_km(int32_t lat1, int32_t lon1, int32_t lat2, int32_t lon2);

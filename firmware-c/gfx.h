@@ -72,3 +72,10 @@ void gfx_poligono_lleno(const int *xs, const int *ys, int n, uint8_t c);
 // encima de un fondo caro de dibujar sin tener que rehacer el fondo.
 void gfx_guardar(int x, int y, int an, int al, uint8_t *dst);
 void gfx_reponer(int x, int y, int an, int al, const uint8_t *src);
+
+// Recorta un poligono contra un rectangulo (Sutherland-Hodgman) y lo rellena.
+// Acotar los puntos sueltos al borde no sirve: junta vertices que estan lejos
+// y el relleno se escapa en franjas a lo ancho de la pantalla.
+int gfx_poligono_recortar(const int *xs, const int *ys, int n,
+                          int rx0, int ry0, int rx1, int ry1,
+                          int *sx, int *sy, int max);

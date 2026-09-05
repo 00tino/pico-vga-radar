@@ -51,6 +51,9 @@ void logos_pantalla_pintar(void) {
         int cx = X + 10 + (i % cols) * paso_x;
         int cy = Y + 34 + (i / cols) * paso_y;
         if (cy + paso_y < gfx_banda_y0 || cy > gfx_banda_y1) continue;
+        // Marco fino: hay logos de fondo blanco con el dibujo muy tenue, y
+        // sin borde sobre fondo oscuro parecen un hueco.
+        gfx_rect(cx - 1, cy - 1, LOGO_LADO + 2, LOGO_LADO + 2, radar_tono(70));
         gfx_blit(cx, cy, LOGO_LADO, LOGO_LADO, &logos_datos[logos_indice[k].offset]);
         char cod[4] = { logos_indice[k].codigo[0], logos_indice[k].codigo[1], 0, 0 };
         gfx_texto_centrado(cx + LOGO_LADO / 2, cy + LOGO_LADO + 2, cod, radar_tono(150), 1);
