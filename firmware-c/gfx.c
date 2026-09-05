@@ -134,9 +134,12 @@ static inline uint8_t canal(int v, int max, int umbral) {
     return (uint8_t)(n > max ? max : n);
 }
 
+// El azul va sin dither a proposito: tiene 4 niveles, o sea escalones de 85
+// sobre 255. Un solo pixel encendido en una zona oscura se ve como suciedad
+// azul. En rojo y verde el escalon es 36 y el ruido no se nota.
 uint8_t gfx_rgb_dither(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
     int u = bayer4[(y & 3) * 4 + (x & 3)];
-    return vga_color(canal(r, 7, u), canal(g, 7, u), canal(b, 3, u));
+    return vga_color(canal(r, 7, u), canal(g, 7, u), (uint8_t)((b * 3 + 127) / 255));
 }
 
 void gfx_rect_dither(int x, int y, int an, int al, uint8_t r, uint8_t g, uint8_t b) {
