@@ -66,11 +66,13 @@ void demo_avanzar(void) {
         a->lat += resto_lat[i] / 1000; resto_lat[i] %= 1000;
         a->lon += resto_lon[i] / 1000; resto_lon[i] %= 1000;
 
-        // Cuando se van lejos del alcance, entran de nuevo por el otro lado.
+        // Cuando se van del alcance vuelven a entrar por el lado opuesto,
+        // desplazados un poco para que no terminen todos amontonados.
         int32_t span = (int32_t)radar_apt.radio_km * 10000 / 111;
-        if (a->lat - radar_apt.lat >  span) a->lat -= 2 * span;
-        if (a->lat - radar_apt.lat < -span) a->lat += 2 * span;
-        if (a->lon - radar_apt.lon >  span) a->lon -= 2 * span;
-        if (a->lon - radar_apt.lon < -span) a->lon += 2 * span;
+        int32_t sesgo = (int32_t)(i * 1700) - 6000;
+        if (a->lat - radar_apt.lat >  span) { a->lat -= 2 * span; a->lon = radar_apt.lon + sesgo; }
+        if (a->lat - radar_apt.lat < -span) { a->lat += 2 * span; a->lon = radar_apt.lon + sesgo; }
+        if (a->lon - radar_apt.lon >  span) { a->lon -= 2 * span; a->lat = radar_apt.lat + sesgo; }
+        if (a->lon - radar_apt.lon < -span) { a->lon += 2 * span; a->lat = radar_apt.lat + sesgo; }
     }
 }

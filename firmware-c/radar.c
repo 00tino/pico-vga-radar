@@ -114,6 +114,10 @@ static void radar_pintar(void) {
     gfx_texto(X + 10, Y + 8, radar_apt.iata, radar_tono(255), 1);
     gfx_texto(X + 10, Y + 24, radar_apt.nombre, radar_tono(178), 1);
 
+    // Hora de compilacion, abajo a la izquierda: sirve para saber si lo que
+    // se esta mirando por la camara es el firmware que se acaba de cargar.
+    gfx_texto(X + 6, Y + AL - 18, __TIME__, radar_tono(140), 1);
+
     // Etiquetas de alcance sobre el eje horizontal.
     char km[12];
     for (int i = 1; i <= 4; i++) {
@@ -150,7 +154,13 @@ static void radar_pintar(void) {
                             ROT_X(-4, 5),  ROT_Y(-4, 5), c);
         #undef ROT_X
         #undef ROT_Y
-        if (a->vuelo[0]) gfx_texto(x + 8, y - 12, a->vuelo, c, 1);
+        // En la vista hibrida solo llevan nombre los que salen en las
+        // tarjetas, igual que labeled.has(a.hex) en la web: con todos
+        // etiquetados el scope se vuelve ilegible.
+        int etiquetar = (radar_vista != VISTA_HIBRIDA);
+        for (int k = 0; !etiquetar && k < TARJETAS && k < radar_cantidad; k++)
+            if (orden[k] == i) etiquetar = 1;
+        if (etiquetar && a->vuelo[0]) gfx_texto(x + 8, y - 12, a->vuelo, c, 1);
     }
 
     if (radar_vista != VISTA_HIBRIDA) return;

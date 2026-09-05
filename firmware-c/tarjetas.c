@@ -37,7 +37,7 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a) {
     const uint8_t borde  = radar_tono(56);
     const uint8_t fuerte = radar_tono(255);
     const uint8_t medio  = radar_tono(180);
-    const uint8_t suave  = radar_tono(120);
+    const uint8_t suave  = radar_tono(150);
 
     gfx_rect(x, y, an, al, borde);
 
