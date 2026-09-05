@@ -63,15 +63,29 @@ Lo que ya hace, todo visto en el monitor:
   En el ViewSonic quedó en 4 px por lado.
 - **Logos** (`logos.c`): los 824, 36×36, **1,02 MB**. Entran todos.
 - **Pistas** (`pistas.c`): las 5600 de los 4040 aeropuertos, **190 KB**.
-- **El scope** (`radar.c`): anillos, cruz, etiquetas de alcance, barrido con
-  cuña, aviones con rumbo y efecto fósforo, pistas y senda de aproximación.
-- **Tarjetas** (`tarjetas.c`): la vista híbrida, scope al 54% y tarjetas al
-  costado con logo, estado, ruta, ciudades, horarios y métricas.
-- **Tráfico de prueba** (`demo.c`): 14 vuelos que se mueven de verdad.
+- **Aeropuertos** (`aeropuertos.c`): los 5334 con ciudad y coordenadas.
+- **El scope** (`radar.c`): barra de encabezado como `.mon-head`, anillos,
+  cruz, etiquetas de alcance, barrido con cuña, aviones con rumbo y efecto
+  fósforo, pistas y senda de aproximación con sus carteles.
+- **Tarjetas** (`tarjetas.c`): logo, indicativo, tipo, estado, ruta con barra
+  de avance, ciudades, horarios y métricas. Reparten el alto disponible y van
+  sacando filas cuando no entran, como `SHRINK_ORDER` en la web.
+- **Las cuatro vistas**: sólo radar, híbrida (scope al 54%), pared de tarjetas
+  a pantalla completa, y seguimiento de un vuelo (`viaje.c`) con la ruta por
+  círculo máximo, rejilla, rastro recorrido, origen y destino.
+- **Carrusel**: cambia de página entera cada 8 segundos, con la lista
+  congelada mientras está a la vista.
+- **Tráfico de prueba** (`demo.c`): 15 vuelos que se mueven de verdad, uno
+  siempre aproximando, y el aeropuerto se puede cambiar en caliente.
 
-Firmware completo: **1,32 MB de flash de 4 MB**. Sobran 2,7 MB.
+Firmware completo: **1,52 MB de flash de 4 MB**, 315 KB de RAM. **60 fps.**
 
-Falta: WiFi, portal de configuración, QR y datos ADS-B reales.
+`main.c` recorre nueve escenas de 12 segundos para poder revisarlas todas.
+Cuando esté el portal, la vista saldrá de la configuración del cliente.
+
+Falta: WiFi, portal de configuración, QR y datos ADS-B reales. En la vista de
+seguimiento faltan los aeropuertos intermedios de la ruta y el dibujo de las
+costas (`land.json`), que la web sí tiene.
 
 ---
 
@@ -250,6 +264,18 @@ después de un rato largo de mirar barras de colores tratando de adivinarlo.
 17. **Cuidado con premultiplicar por `TRIG_UNO` y dividir una sola vez.** Los
     triángulos de los aviones salían con vértices a ±6000 px y el rasterizado
     se comía 70 de los 83 ms del cuadro: 12 fps en vez de 60.
+18. **Las bandas no alcanzan si el cuadro entero tarda lo mismo que el haz en
+    bajar.** Dentro de una banda, lo que se dibuja último llega tarde a sus
+    primeras filas. Por eso las tarjetas **no se redibujan cada cuadro**: sólo
+    cuando cambian. Sin eso salían rasgadas.
+19. **Las longitudes hay que envolverlas respecto de un ancla** (`wrap_lon`).
+    Sin eso un Sydney-Buenos Aires se dibuja cruzando el mundo por el lado
+    largo, y la rejilla sale con cientos de meridianos pegados.
+20. **`geo_km` es plana**: sirve para el alcance de un radar, no para un vuelo
+    intercontinental. Para eso está `km_gc` en `viaje.c`.
+21. **El puerto serie se queda en 1200 baudios** después del truco de
+    reinicio, así que un simple `cat` manda la placa a BOOTSEL y se corta el
+    video. Hay que hacer `stty -f /dev/cu.usbmodem11201 115200` antes de leer.
 
 ---
 
