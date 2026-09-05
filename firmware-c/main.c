@@ -159,7 +159,7 @@ static void pantallas_de_ejemplo(void) {
     snprintf(p->apt, sizeof p->apt, "EZE");
     p->radio_km = 220;  p->tarjetas = 4;
     snprintf(p->tema, sizeof p->tema, "crt_amber");
-    p->seguir[0] = 0;   p->segundos = 5;
+    p->seguir[0] = 0;   p->segundos = PANTALLA_SEGUNDOS_MIN;
 
     p = &pantallas[pantallas_n++];
     snprintf(p->nombre, sizeof p->nombre, "siguiendo AA954");
@@ -168,11 +168,11 @@ static void pantallas_de_ejemplo(void) {
     p->radio_km = 220;  p->tarjetas = 1;
     snprintf(p->tema, sizeof p->tema, "crt_amber");
     snprintf(p->seguir, sizeof p->seguir, "AA954");
-    p->segundos = 5;
+    p->segundos = PANTALLA_SEGUNDOS_MIN;
 
     // Que la lista pase de pagina justo cuando la pantalla se va: asi cada
     // visita muestra el grupo siguiente y no repite el mismo.
-    radar_rotacion_s = 5;
+    radar_rotacion_s = PANTALLA_SEGUNDOS_MIN;
 }
 
 int main(void) {

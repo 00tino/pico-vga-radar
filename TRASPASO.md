@@ -87,6 +87,12 @@ lugar en el carrusel y ese lugar **sólo avanza mientras esa pantalla está a la
 vista**. Verificado por consola: la pantalla de Ezeiza recorre los grupos
 2, 3, 0, 1, 2, 3 sin repetir.
 
+Cada cambio de pantalla limpia la imagen entera y eso se come un cuadro, o sea
+un parpadeo. Por eso la duración se acota entre **15 y 120 segundos**
+(`PANTALLA_SEGUNDOS_MIN` y `MAX` en `pantallas.h`): a los quince no se nota, a
+los cinco sí. Es un límite del equipo, no algo que el cliente pueda saltear
+desde la web.
+
 Ojo con `radar_carrusel_poner()`: **no puede poner `lista_n` en cero**. Eso
 entra por la rama que rearma la lista, que resetea el reloj y no incrementa la
 página, y entonces cada visita muestra los mismos cuatro vuelos.

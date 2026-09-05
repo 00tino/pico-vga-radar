@@ -34,6 +34,14 @@ static uint32_t cuadros_de[PANTALLAS_MAX];
 
 static char apt_puesto[4];
 
+// La duracion que pida la web se acota a lo que el equipo banca.
+static int segundos_de(int i) {
+    int s = pantallas[i].segundos;
+    if (s < PANTALLA_SEGUNDOS_MIN) s = PANTALLA_SEGUNDOS_MIN;
+    if (s > PANTALLA_SEGUNDOS_MAX) s = PANTALLA_SEGUNDOS_MAX;
+    return s;
+}
+
 static void aplicar(int i) {
     const pantalla_t *p = &pantallas[i];
     if (strncmp(apt_puesto, p->apt, 3)) {
@@ -52,7 +60,7 @@ static void aplicar(int i) {
     // Repone el carrusel donde lo habia dejado esta pantalla.
     radar_carrusel_poner(pag_de[i], cuadros_de[i]);
     printf("pantalla %d: %s (%d s) | grupo %d de la lista\n",
-           i, p->nombre, p->segundos, radar_pagina_actual());
+           i, p->nombre, segundos_de(i), radar_pagina_actual());
 }
 
 void pantallas_init(void) {
@@ -66,8 +74,7 @@ void pantallas_init(void) {
 
 void pantallas_avanzar(void) {
     if (pantallas_n <= 1) return;    // con una sola no hay nada que rotar
-    const int segs = pantallas[actual].segundos > 0 ? pantallas[actual].segundos : 10;
-    if (++cuadros < (uint32_t)(segs * 60)) return;
+    if (++cuadros < (uint32_t)(segundos_de(actual) * 60)) return;
     cuadros = 0;
     // Se guarda donde quedo el carrusel de esta, para retomarlo al volver.
     radar_carrusel_guardar(&pag_de[actual], &cuadros_de[actual]);
