@@ -4,7 +4,7 @@ project(radar C CXX ASM)
 set(PICO_BOARD pico2_w)
 pico_sdk_init()
 
-add_executable(radar main.c vga.c gfx.c fuente.c)
+add_executable(radar main.c vga.c gfx.c fuente.c area.c logos.c)
 pico_generate_pio_header(radar ${CMAKE_CURRENT_LIST_DIR}/vga.pio)
 target_link_libraries(radar
     pico_stdlib

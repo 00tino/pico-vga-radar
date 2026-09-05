@@ -2,22 +2,14 @@
 // y rectangulos. Usa el tema crt_amber de la web (#e8b86d sobre #0a0805).
 #include "vga.h"
 #include "gfx.h"
+#include "area.h"
+#include "logos.h"
 #include "pico/stdlib.h"
 #include <stdio.h>
 
-int main(void) {
-    stdio_init_all();
-    sleep_ms(2500);                       // margen para que el Mac tome el puerto
-    printf("arrancando firmware en C\n");
-    vga_init();
-    printf("video inicializado: %dx%d, 256 colores\n", VGA_ANCHO, VGA_ALTO);
+static uint8_t fondo, ambar, tenue, apagado, blanco;
 
-    const uint8_t fondo  = vga_rgb(0x0a, 0x08, 0x05);
-    const uint8_t ambar  = vga_rgb(0xe8, 0xb8, 0x6d);
-    const uint8_t tenue  = vga_rgb(0x7a, 0x60, 0x38);
-    const uint8_t apagado= vga_rgb(0x3d, 0x30, 0x1c);
-    const uint8_t blanco = vga_color(7, 7, 3);
-
+static void dibujar_patron(void) {
     vga_limpiar(fondo);
 
     // Marco: si no se ve entero, el monitor esta recortando.
@@ -69,9 +61,11 @@ int main(void) {
     gfx_rect(442, 100, 180, 300, apagado);
     gfx_texto(450, 104, "RECTANGULOS", tenue, 1);
     gfx_rect(450, 124, 164, 86, tenue);            // tarjeta
-    gfx_rect_lleno(458, 132, 32, 32, blanco);      // hueco del logo
-    gfx_texto(496, 132, "AR1301", ambar, 1);
-    gfx_texto(496, 148, "EZE > MAD", tenue, 1);
+    const uint8_t *logo = logo_buscar("AR");       // logo real de la flash
+    if (logo) gfx_blit(458, 130, LOGO_LADO, LOGO_LADO, logo);
+    else gfx_rect_lleno(458, 130, LOGO_LADO, LOGO_LADO, blanco);
+    gfx_texto(502, 134, "AR1301", ambar, 1);
+    gfx_texto(502, 150, "EZE > MAD", tenue, 1);
     gfx_rect(458, 176, 148, 8, apagado);           // barra de progreso
     gfx_rect_lleno(459, 177, 92, 6, ambar);
     gfx_texto(458, 190, "FL350  842 km/h", tenue, 1);
@@ -82,23 +76,48 @@ int main(void) {
                  (i & 1) ? tenue : apagado);
     gfx_texto(450, 372, "contorno y relleno", apagado, 1);
 
-    // --- RAMPA DE COLOR: la misma ambar dos veces, para comparar ---
-    // Arriba tal cual la cuantiza el hardware (3-3-2 bits): se ven bandas y
-    // vira de tono. Abajo con dithering ordenado: deberia verse pareja.
-    gfx_texto(20, 408, "RAMPA", tenue, 1);
-    gfx_texto(20, 424, "cruda", apagado, 1);
-    gfx_texto(20, 440, "dither", apagado, 1);
+    // --- LOGOS: reales, sacados de la flash ---
+    gfx_texto(20, 410, "LOGOS", tenue, 1);
+    static const char *muestra[] = {"AR", "LA", "AA", "IB", "JL", "NH",
+                                    "AF", "BA", "UA", "DL", "EK", "QF"};
+    for (int i = 0; i < 12; i++) {
+        const uint8_t *l = logo_buscar(muestra[i]);
+        if (l) gfx_blit(80 + i * 44, 406, LOGO_LADO, LOGO_LADO, l);
+    }
+    gfx_texto(20, 426, "RAMPA", tenue, 1);
     for (int i = 0; i < 128; i++) {
         int n = 255 * i / 127;
-        uint8_t r = 0xe8 * n / 255, g = 0xb8 * n / 255, b = 0x6d * n / 255;
-        gfx_rect_lleno(80 + i * 4, 420, 4, 16, vga_rgb(r, g, b));
-        gfx_rect_dither(80 + i * 4, 438, 4, 16, r, g, b);
+        gfx_rect_dither(80 + i * 4, 448, 4, 14,
+                        0xe8 * n / 255, 0xb8 * n / 255, 0x6d * n / 255);
     }
-    gfx_texto_centrado(320, 458, "si la de abajo se ve pareja, el dither sirve", apagado, 1);
+    gfx_texto(600, 448, "824 logos", apagado, 1);
 
-    printf("patron dibujado\n");
+}
+
+int main(void) {
+    stdio_init_all();
+    sleep_ms(2500);                       // margen para que el Mac tome el puerto
+    printf("arrancando firmware en C\n");
+    vga_init();
+    printf("video inicializado: %dx%d, 256 colores\n", VGA_ANCHO, VGA_ALTO);
+
+    fondo   = vga_rgb(0x0a, 0x08, 0x05);
+    ambar   = vga_rgb(0xe8, 0xb8, 0x6d);
+    tenue   = vga_rgb(0x7a, 0x60, 0x38);
+    apagado = vga_rgb(0x3d, 0x30, 0x1c);
+    blanco  = vga_color(7, 7, 3);
+
+    // Todavia sin margenes: primero hay que leerlos de la pantalla de
+    // calibracion. Cuando esten, van aca.
+    area_set(0, 0, 0, 0);
+
+    // Alterna las dos pantallas para poder fotografiar las dos.
     while (true) {
-        printf("vivo\n");
-        sleep_ms(5000);
+        area_calibrar(fondo, tenue, ambar);
+        printf("calibracion\n");
+        sleep_ms(9000);
+        dibujar_patron();
+        printf("patron\n");
+        sleep_ms(9000);
     }
 }

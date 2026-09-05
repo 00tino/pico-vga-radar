@@ -147,3 +147,15 @@ void gfx_rect_dither(int x, int y, int an, int al, uint8_t r, uint8_t g, uint8_t
         for (int i = 0; i < an; i++)
             gfx_punto(x + i, y + j, gfx_rgb_dither(x + i, y + j, r, g, b));
 }
+
+void gfx_blit(int x, int y, int an, int al, const uint8_t *datos) {
+    for (int j = 0; j < al; j++) {
+        int fy = y + j;
+        if ((unsigned)fy >= VGA_ALTO) continue;
+        for (int i = 0; i < an; i++) {
+            int fx = x + i;
+            if ((unsigned)fx < VGA_ANCHO)
+                vga_fb[fy * VGA_ANCHO + fx] = datos[j * an + i];
+        }
+    }
+}

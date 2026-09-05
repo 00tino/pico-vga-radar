@@ -37,3 +37,6 @@ int  gfx_texto_centrado(int cx, int y, const char *s, uint8_t c, int escala);
 // hace falta la posicion en pantalla para elegir el umbral.
 uint8_t gfx_rgb_dither(int x, int y, uint8_t r, uint8_t g, uint8_t b);
 void gfx_rect_dither(int x, int y, int an, int al, uint8_t r, uint8_t g, uint8_t b);
+
+// Copia una imagen ya en formato de pantalla (un byte por pixel).
+void gfx_blit(int x, int y, int an, int al, const uint8_t *datos);
