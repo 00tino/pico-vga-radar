@@ -11,6 +11,7 @@
 #include "trig.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdio.h>
 
 extern uint8_t radar_tono(int alpha255);
 
@@ -21,10 +22,39 @@ static void puntualidad(char *dst, size_t n, const avion_t *a) {
     else                    snprintf(dst, n, "A TIEMPO");
 }
 
-// Verde si llega antes o a horario, rojo si viene atrasado. Son los unicos
-// dos colores que se salen del tema: la puntualidad se lee de un vistazo.
-static uint8_t color_puntualidad(const avion_t *a) {
-    return a->demora > 0 ? vga_rgb(0xff, 0x5a, 0x4a) : vga_rgb(0x5a, 0xe0, 0x78);
+// Lo mismo abreviado, para la tabla del aeropuerto, donde no entra el texto
+// entero: A HORA, ADEL 10, DEM 25.
+static void puntualidad_corta(char *dst, size_t n, const avion_t *a) {
+    if (a->demora > 0)      snprintf(dst, n, "DEM %d", a->demora);
+    else if (a->demora < 0) snprintf(dst, n, "ADEL %d", -a->demora);
+    else                    snprintf(dst, n, "A HORA");
+}
+
+// La hora de llegada corrida por la demora, que es a la que llega de verdad.
+static void hora_real(char *dst, size_t n, const avion_t *a) {
+    int h = 0, m = 0;
+    if (sscanf(a->arr, "%d:%d", &h, &m) != 2) { snprintf(dst, n, "%s", a->arr); return; }
+    int t = h * 60 + m + a->demora;
+    t = ((t % 1440) + 1440) % 1440;
+    snprintf(dst, n, "%02d:%02d", t / 60, t % 60);
+}
+
+// El color de puntualidad no se usa todo el vuelo: recien cuando esta por
+// llegar. En vuelos de dos horas o mas, en la ultima hora; en los cortos, en
+// los ultimos treinta minutos. Antes de eso va con el color del tema, que es
+// lo que pidio Valentino para que no cante todo el tiempo.
+static int puntualidad_a_la_vista(const avion_t *a) {
+    if (a->alt <= 0 || a->falta_min <= 0) return 0;
+    const int largo = (a->vuelo_min >= 120);
+    return a->falta_min <= (largo ? 60 : 30);
+}
+
+// Verde a tiempo, rojo atrasado, azul adelantado.
+static uint8_t color_puntualidad(const avion_t *a, uint8_t normal) {
+    if (!puntualidad_a_la_vista(a)) return normal;
+    if (a->demora > 0) return vga_rgb(0xff, 0x5a, 0x4a);
+    if (a->demora < 0) return vga_rgb(0x6a, 0xb0, 0xff);
+    return vga_rgb(0x5a, 0xe0, 0x78);
 }
 
 // Cuanto falta, en horas y minutos: mas de una hora en minutos no se lee.
@@ -153,7 +183,7 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande)
         // recorrido marcado, el que falta apagado, y el avion en el medio.
         const int by = cy + alto_ruta / 2 - 1;
         const int hecho = ban * a->pct / 100;
-        const uint8_t c_hecho = (a->alt > 0) ? color_puntualidad(a) : medio;
+        const uint8_t c_hecho = color_puntualidad(a, fuerte);
         gfx_rect_lleno(bx, by, ban, 3, borde);
         gfx_rect_lleno(bx, by, hecho, 3, c_hecho);
         // El avioncito, apuntando hacia el destino.
@@ -184,7 +214,7 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande)
     // Pie: puntualidad y cuanto falta, como el .fa-foot de la web.
     if (filas >= 5) {
         puntualidad(buf, sizeof buf, a);
-        gfx_texto(px, cy, buf, color_puntualidad(a), esc2);
+        gfx_texto(px, cy, buf, color_puntualidad(a, medio), esc2);
         falta_texto(buf, sizeof buf, a);
         gfx_texto(px + anu - gfx_ancho_texto(buf, esc2), cy, buf, medio, esc2);
         cy += alto_fila + sep;
@@ -229,6 +259,7 @@ void fids_dibujar(int x, int y, int an, int al, const avion_t **vuelos, int n,
     const int c_est   = compacto ? c_dep + 46 : c_arr + 52;
     const int c_vel   = compacto ? 0 : c_est + 60;
     const int c_pun   = compacto ? 0 : c_vel + 100;
+    const int c_pun2  = compacto ? 0 : c_pun + 56;
 
     if (paso == 0) {
         gfx_texto(c_vuelo, y, "VUELO", suave, 1);
@@ -238,7 +269,8 @@ void fids_dibujar(int x, int y, int an, int al, const avion_t **vuelos, int n,
         gfx_texto(c_est, y, "ESTADO", suave, 1);
         if (!compacto) {
             gfx_texto(c_vel, y, "VEL/RUMBO", suave, 1);
-            gfx_texto(c_pun, y, "PUNTUALIDAD", suave, 1);
+            gfx_texto(c_pun, y, "ESTIMADA", suave, 1);
+            gfx_texto(c_pun2, y, "PUNTUAL", suave, 1);
         }
         gfx_hlinea(x, y + 16, an, borde);
     }
@@ -287,8 +319,10 @@ void fids_dibujar(int x, int y, int an, int al, const avion_t **vuelos, int n,
         if (!compacto) {
             snprintf(buf, sizeof buf, "%d kt / %03d", a->gs, a->track);
             gfx_texto(c_vel, ty, buf, medio, 1);
-            puntualidad(buf, sizeof buf, a);
-            gfx_texto(c_pun, ty, buf, color_puntualidad(a), 1);
+            hora_real(buf, sizeof buf, a);
+            gfx_texto(c_pun, ty, buf, a->demora ? color_puntualidad(a, fuerte) : fuerte, 1);
+            puntualidad_corta(buf, sizeof buf, a);
+            gfx_texto(c_pun2, ty, buf, color_puntualidad(a, medio), 1);
         }
 
         if (i + 1 < n) gfx_hlinea(x, fy + alto_fila - 1, an, radar_tono(28));

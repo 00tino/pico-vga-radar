@@ -89,7 +89,9 @@ void demo_init(void) {
         // que se vean los tres casos.
         a->demora = (int16_t)((i % 4 == 1) ? 10 + (i * 7) % 40
                             : (i % 4 == 2) ? -(5 + (i * 3) % 15) : 0);
-        a->falta_min = (int16_t)(5 + (100 - SEMILLA[i].pct) * 3);   // hasta unas cinco horas
+        // Duracion del vuelo y cuanto falta, coherentes con el avance.
+        a->vuelo_min = (int16_t)(60 + (i * 97) % 600);
+        a->falta_min = (int16_t)(a->vuelo_min * (100 - SEMILLA[i].pct) / 100);
         a->brillo = 82;
     }
 }
@@ -111,14 +113,22 @@ void demo_avanzar(void) {
         a->lat += resto_lat[i] / 1000; resto_lat[i] %= 1000;
         a->lon += resto_lon[i] / 1000; resto_lon[i] %= 1000;
 
-        // AR2451 da vueltas alrededor de la casa, para que se vea el aviso.
+        // AR2451 pasa una y otra vez por encima de la casa, siempre con el
+        // mismo rumbo: un avion de verdad no gira sobre el lugar.
         if (!strncmp(a->vuelo, "AR2451", 6) && radar_casa_on) {
-            static int vuelta = 0;
-            vuelta = (vuelta + 1) % 1024;
-            int t = trig_de_grados(vuelta * 360 / 1024);
-            a->lat = radar_casa_lat + (int32_t)(trig_cos(t) * 40 / TRIG_UNO);
-            a->lon = radar_casa_lon + (int32_t)(trig_sen(t) * 40 / TRIG_UNO);
-            a->track = (vuelta * 360 / 1024 + 90) % 360;
+            a->track = 75;
+            int t = trig_de_grados(a->track);
+            int32_t paso = (int32_t)a->gs * 771 / 1000;
+            resto_lat[i] += paso * trig_cos(t) / TRIG_UNO;
+            resto_lon[i] += paso * trig_sen(t) / TRIG_UNO;
+            a->lat += resto_lat[i] / 1000; resto_lat[i] %= 1000;
+            a->lon += resto_lon[i] / 1000; resto_lon[i] %= 1000;
+            // Cuando se aleja, vuelve a arrancar antes de la casa.
+            if (a->lon - radar_casa_lon > 600) {
+                a->lat = radar_casa_lat - 160;
+                a->lon = radar_casa_lon - 600;
+                resto_lat[i] = resto_lon[i] = 0;
+            }
             continue;
         }
 

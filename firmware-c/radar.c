@@ -60,6 +60,7 @@ static const pista_t *senda_pista;
 static int senda_es_b;            // 0 = cabecera A, 1 = cabecera B
 static int senda_hay;
 static char senda_cartel[32];     // el aviso de arriba, listo para dibujar
+static int casa_encima = -1;      // avion que esta pasando sobre la casa
 
 void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande);
 
@@ -205,7 +206,7 @@ static void elegir_senda(void) {
             }
             if (n > mejor) {
                 mejor = n; senda_pista = &p[i]; senda_es_b = lado; senda_hay = 1;
-                snprintf(senda_cartel, sizeof senda_cartel, "APROXIMACION %s EN USO",
+                snprintf(senda_cartel, sizeof senda_cartel, "%s EN USO",
                          lado ? p[i].ident_b : p[i].ident_a);
             }
         }
@@ -405,7 +406,7 @@ static void radar_pintar(void) {
                 gfx_linea_punteada(sx, sy, tx2, ty2, 8, 6, c);
                 gfx_linea_punteada(sx, sy + 1, tx2, ty2 + 1, 8, 6, c);
                 char cartel[32];
-                snprintf(cartel, sizeof cartel, "APROXIMACION %s", ident);
+                snprintf(cartel, sizeof cartel, "%s", ident);
                 gfx_texto(sx + 6, sy - 16, cartel, c, 1);
             }
         }
@@ -424,7 +425,10 @@ static void radar_pintar(void) {
         // quintos del trabajo.
         if (y + 8 < gfx_banda_y0 || y - 14 > gfx_banda_y1) continue;
 
-        const uint8_t c = radar_tono(a->brillo);
+        // El que pasa sobre la casa va de otro color, para que salte a la
+        // vista sin taparle nada alrededor.
+        const uint8_t c = (i == casa_encima) ? vga_rgb(0xff, 0xc8, 0x3c)
+                                             : radar_tono(a->brillo);
 
         // Triangulito apuntando al rumbo. En la web: (0,-6) (3.6,5) (-3.6,5).
         int t = trig_de_grados(a->track);
@@ -454,10 +458,7 @@ static void radar_pintar(void) {
     // izquierda, hasta que se va del radio. La casa se dibuja siempre, para
     // saber donde esta respecto del aeropuerto.
     if (radar_casa_on) {
-        int hay_encima = 0;
-        for (int i = 0; i < radar_cantidad && !hay_encima; i++)
-            if (geo_km(radar_aviones[i].lat, radar_aviones[i].lon,
-                       radar_casa_lat, radar_casa_lon) <= radar_casa_km) hay_encima = 1;
+        const int hay_encima = (casa_encima >= 0);
 
         int hx = PROY_X(radar_casa_lat, radar_casa_lon);
         int hy = PROY_Y(radar_casa_lat, radar_casa_lon);
@@ -475,18 +476,10 @@ static void radar_pintar(void) {
             gfx_circulo(hx, hy, radar_casa_km * R / radar_apt.radio_km, radar_tono(70));
         }
 
-        int encima = -1;
-        for (int i = 0; i < radar_cantidad; i++) {
-            if (geo_km(radar_aviones[i].lat, radar_aviones[i].lon,
-                       radar_casa_lat, radar_casa_lon) <= radar_casa_km) { encima = i; break; }
-        }
+        const int encima = casa_encima;
         if (encima >= 0) {
             const avion_t *a = &radar_aviones[encima];
-            int x = PROY_X(a->lat, a->lon);
-            int y = PROY_Y(a->lat, a->lon);
-            const uint8_t c2 = radar_tono(255);
-            gfx_circulo(x, y, 18, c2);
-            gfx_circulo(x, y, 17, c2);
+            const uint8_t c2 = vga_rgb(0xff, 0xc8, 0x3c);
             char aviso[40];
             snprintf(aviso, sizeof aviso, "SOBRE %s", radar_casa_nombre);
 

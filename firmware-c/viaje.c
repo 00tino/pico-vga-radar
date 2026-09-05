@@ -12,6 +12,7 @@
 #include "area.h"
 #include "trig.h"
 #include "geo.h"
+#include "vga.h"
 #include "aeropuertos.h"
 #include "costas.h"
 #include <math.h>
@@ -67,8 +68,8 @@ void radar_pintar_viaje(void) {
     const int X = area.x, Y = area.y, AL = area.al;
     // En la vista con tarjeta al costado el mapa ocupa el 54 por ciento, igual
     // que el scope en la hibrida.
-    const int AN = (radar_vista == VISTA_SEGUIR_HIBRIDA) ? area.an * 54 / 100 : area.an;
-    vga_limpiar_rect(0, gfx_banda_y0, X + AN + 4, gfx_banda_y1, radar_tono(0));
+    const int AN = area.an;
+    vga_limpiar_rect(0, gfx_banda_y0, VGA_ANCHO, gfx_banda_y1, radar_tono(0));
 
     // El avion que se sigue.
     const avion_t *ac = 0;
@@ -84,15 +85,48 @@ void radar_pintar_viaje(void) {
     const aeropuerto_dato_t *o = aeropuerto_buscar(ac->origen);
     const aeropuerto_dato_t *d = aeropuerto_buscar(ac->destino);
 
-    const int x0 = X + 18, y0 = Y + 34;
-    const int anc = AN - 36, alt = AL - 46;
-    // Todo lo del mapa se recorta a este recuadro: sin esto los continentes
-    // y la rejilla se desbordaban por arriba y por los costados.
-    const int recorte_y0 = y0 > gfx_banda_y0 ? y0 : gfx_banda_y0;
-    const int recorte_y1 = (y0 + alt - 1) < gfx_banda_y1 ? (y0 + alt - 1) : gfx_banda_y1;
+    // El mapa y la tarjeta se acomodan segun la forma de la ruta. Un vuelo
+    // que cruza el Pacifico es ancho y bajo: si se lo mete en la mitad
+    // izquierda queda diminuto. En ese caso el mapa va arriba y la tarjeta
+    // abajo. Un vuelo norte-sur, como Buenos Aires a Miami, es alto y
+    // angosto, y ahi conviene el mapa a la izquierda con la tarjeta al lado.
+    int mapa_x = X, mapa_y = Y + 34, mapa_an = area.an, mapa_al = AL - 46;
+    int tarj_x = 0, tarj_y = 0, tarj_an = 0, tarj_al = 0;
+    if (radar_vista == VISTA_SEGUIR_HIBRIDA) {
+        int32_t ancho_ruta = 0, alto_ruta_geo = 0;
+        if (o && d) {
+            int32_t dlo = wrap_lon(d->lon, o->lon) - o->lon;
+            ancho_ruta = dlo < 0 ? -dlo : dlo;
+            int32_t dla = d->lat - o->lat;
+            alto_ruta_geo = dla < 0 ? -dla : dla;
+            // La longitud se achica por la latitud, para comparar peras con peras.
+            ancho_ruta = (int32_t)((int64_t)ancho_ruta * geo_coslat((o->lat + d->lat) / 2) / 1024);
+        }
+        if (ancho_ruta > alto_ruta_geo * 3 / 2) {
+            // Ruta ancha: mapa arriba, tarjeta abajo.
+            mapa_an = area.an;
+            mapa_al = (AL - 46) * 62 / 100;
+            tarj_x = X + 8;  tarj_y = mapa_y + mapa_al + 8;
+            tarj_an = area.an - 16;
+            tarj_al = AL - (tarj_y - Y) - 8;
+        } else {
+            // Ruta alta: mapa a la izquierda, tarjeta al costado.
+            mapa_an = area.an * 54 / 100;
+            tarj_x = X + mapa_an + 8;  tarj_y = Y + 34;
+            tarj_an = area.an - mapa_an - 16;
+            tarj_al = AL - 42;
+        }
+    }
+    const int x0 = mapa_x + 18, y0 = mapa_y;
+    const int anc = mapa_an - 36, alt = mapa_al;
+    // Todo lo del mapa se recorta a su recuadro; la barra y la tarjeta van
+    // fuera de el, asi que hay que guardar la banda para reponerla despues.
     const int banda_afuera_y0 = gfx_banda_y0, banda_afuera_y1 = gfx_banda_y1;
-    gfx_banda(recorte_y0, recorte_y1);
-
+    {
+        const int ry0 = y0 > gfx_banda_y0 ? y0 : gfx_banda_y0;
+        const int ry1 = (y0 + alt - 1) < gfx_banda_y1 ? (y0 + alt - 1) : gfx_banda_y1;
+        gfx_banda(ry0, ry1);
+    }
     // Todas las longitudes se miden respecto del origen, para que el
     // antimeridiano no parta la ruta al medio.
     const int32_t ancla = o ? o->lon : (d ? d->lon : ac->lon);
@@ -270,6 +304,49 @@ void radar_pintar_viaje(void) {
         }
     }
 
+    // Los puntos por donde pasa el vuelo: en cinco lugares de la ruta se
+    // busca el aeropuerto mas cercano y se lo marca, como hace la web. Se
+    // calcula solo cuando cambia el vuelo, que recorrer los 5334 aeropuertos
+    // cinco veces no es para hacerlo en cada cuadro.
+    if (o && d) {
+        static char cache_vuelo[9];
+        static int32_t hlat[5], hlon[5];
+        static char hcod[5][4];
+        static int hn = 0;
+        if (strncmp(cache_vuelo, ac->vuelo, sizeof cache_vuelo - 1)) {
+            snprintf(cache_vuelo, sizeof cache_vuelo, "%s", ac->vuelo);
+            hn = 0;
+            static const int FRAC[5] = { 18, 36, 54, 72, 88 };
+            for (int k = 0; k < 5; k++) {
+                int32_t la, lo;
+                interpolar(o->lat, o->lon, d->lat, d->lon, FRAC[k] / 100.0f, &la, &lo);
+                int mejor = -1, mejor_km = 260;
+                for (int i = 0; i < AEROPUERTOS_CANT; i++) {
+                    if (!strncmp(aeropuertos[i].iata, o->iata, 3) ||
+                        !strncmp(aeropuertos[i].iata, d->iata, 3)) continue;
+                    int km = km_gc(aeropuertos[i].lat, aeropuertos[i].lon, la, lo);
+                    if (km < mejor_km) { mejor_km = km; mejor = i; }
+                }
+                if (mejor >= 0) {
+                    int repetido = 0;
+                    for (int q = 0; q < hn; q++)
+                        if (!strncmp(hcod[q], aeropuertos[mejor].iata, 3)) repetido = 1;
+                    if (!repetido) {
+                        hlat[hn] = aeropuertos[mejor].lat;
+                        hlon[hn] = aeropuertos[mejor].lon;
+                        snprintf(hcod[hn], sizeof hcod[hn], "%s", aeropuertos[mejor].iata);
+                        hn++;
+                    }
+                }
+            }
+        }
+        for (int k = 0; k < hn; k++) {
+            int hx = MX(hlat[k], hlon[k]), hy = MY(hlat[k], hlon[k]);
+            gfx_circulo_lleno(hx, hy, 3, radar_tono(200));
+            gfx_texto(hx + 6, hy - 12, hcod[k], radar_tono(150), 1);
+        }
+    }
+
     // Origen y destino. El origen rotula hacia la izquierda y el destino
     // hacia la derecha, y en alturas distintas: con los dos del mismo lado se
     // pisaban cuando la ruta quedaba horizontal.
@@ -311,12 +388,10 @@ void radar_pintar_viaje(void) {
     gfx_texto(X + AN - 10 - gfx_ancho_texto(buf, 1), Y + 8, buf, radar_tono(170), 1);
     gfx_hlinea(X + 10, Y + 26, AN - 20, radar_tono(45));
 
-    // La tarjeta del vuelo al costado, si la vista la lleva.
-    if (radar_vista == VISTA_SEGUIR_HIBRIDA) {
+    // La tarjeta del vuelo, donde haya quedado lugar.
+    if (radar_vista == VISTA_SEGUIR_HIBRIDA && tarj_an > 40 && tarj_al > 40) {
         void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande);
-        extern int radar_tarjetas_sucias(void);
-        vga_limpiar_rect(X + AN + 4, gfx_banda_y0, area.an - AN - 4, gfx_banda_y1, radar_tono(0));
-        tarjeta_dibujar(X + AN + 8, Y + 8, area.an - AN - 16, AL - 16, ac, 0);
+        tarjeta_dibujar(tarj_x, tarj_y, tarj_an, tarj_al, ac, 0);
     }
 }
 

@@ -169,7 +169,7 @@ int main(void) {
     };
     const int ESCENAS = sizeof ESCENA / sizeof ESCENA[0];
 
-    int esc = 0;
+    int esc = 10;   // PRUEBA: mapa Miami-Ezeiza
     uint32_t desde = time_us_32();
     char apt_actual[4] = "";
     for (;;) {
