@@ -3,18 +3,52 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Configurar radar</title>
+  <title>Configurar el radar</title>
   <link rel="stylesheet" href="styles.css">
   <style>
-    .wrap { max-width: 1120px; }
-    .layout { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(280px, 1.1fr); gap: 22px; align-items: start; }
-    @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+    .wrap { max-width: 1180px; }
+    .layout { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr); gap: 22px; align-items: start; }
+    /* En el celular la vista previa va arriba: si queda al final hay que
+       recorrer todo el formulario para ver que se esta eligiendo. */
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .previa { order: -1; position: static; }
+    }
+
+    .previa { position: sticky; top: 16px; }
     .monitor-frame { background: #111; border: 8px solid #2b2b2b; border-bottom-width: 22px; border-radius: 8px; }
     .monitor-frame iframe { display: block; width: 100%; aspect-ratio: 4/3; border: 0; background: #050508; }
     .caption { font-size: 12px; color: #9a958b; margin: 8px 0 0; }
-    .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 13px; color: #ddd; }
+
+    .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 13px; }
     .checks label { color: #ddd; display: flex; gap: 8px; align-items: center; margin: 0; }
     .checks input { width: auto; margin: 0; }
+
+    /* Los catorce temas, cada uno con su color de verdad. */
+    .temas { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 6px; }
+    .tema { border: 1px solid #333; border-radius: 6px; padding: 7px 6px; cursor: pointer;
+            font-size: 11px; text-align: center; line-height: 1.5; }
+    .tema.on { outline: 2px solid #e8b86d; border-color: #e8b86d; }
+    .tema .muestra { display: block; height: 16px; border-radius: 3px; margin-bottom: 5px; }
+
+    /* La lista de pantallas entre las que el equipo va rotando. */
+    .pantalla { border: 1px solid #3a352c; border-radius: 8px; padding: 12px; margin-bottom: 10px;
+                background: #14120e; }
+    .pantalla.sel { border-color: #e8b86d; }
+    .pcab { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .pcab .n { color: #e8b86d; font-weight: 600; font-size: 13px; flex: 1; }
+    .pcab button { width: auto; padding: 3px 9px; font-size: 12px; margin: 0; }
+    .campos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+    .campos label { font-size: 11px; color: #9a958b; margin: 0 0 2px; display: block; }
+    .campos input, .campos select { margin: 0; }
+    .ancho { grid-column: 1 / -1; }
+    .aviso { font-size: 12px; color: #c9a227; margin: 8px 0 0; }
+    .quitar { color: #d98b7a; }
+    .vacio { color: #9a958b; font-size: 13px; padding: 10px 0; }
+    .resumen { font-size: 12px; color: #9a958b; margin-top: 4px; }
+    details.instalador summary { cursor: pointer; color: #9a958b; font-size: 13px; }
+    pre.json { background: #0d0c0a; border: 1px solid #2b2822; border-radius: 6px; padding: 10px;
+               font-size: 11px; color: #b9b2a4; overflow: auto; max-height: 220px; }
   </style>
 </head>
 <body>
@@ -22,108 +56,330 @@
     <nav><a href="index.html">Inicio</a> <a href="sim.html?v=4">Simulador</a></nav>
     <p class="kicker">Setup</p>
     <h1>Configurar el radar</h1>
-    <p class="hint">Vista previa a la derecha. Esta web puede ser pesada; al Pico le llega un JSON chico.</p>
+    <p class="hint">Todo lo que elijas queda guardado en el equipo. Si lo mudás a otra casa,
+      sólo vas a tener que cargar la red nueva: el resto aparece como lo dejaste.</p>
+
     <div class="layout">
-      <form id="f">
-        <div class="card">
-          <label>Wi-Fi de casa (solo 2.4 GHz)</label>
-          <input name="ssid" placeholder="Nombre de la red" required>
-          <input name="pass" type="password" placeholder="Clave" autocomplete="new-password">
-        </div>
-        <div class="card">
-          <label>Aeropuerto (IATA)</label>
-          <input name="airport" value="AEP" placeholder="AEP, LGA, DXB, JFK...">
-          <label>O coordenadas de tu casa</label>
-          <div class="row">
-            <div><label>Lat</label><input name="lat" placeholder="-34.55"></div>
-            <div><label>Lon</label><input name="lon" placeholder="-58.44"></div>
-          </div>
-          <label>Radio (km)</label>
-          <input name="radius_km" type="number" value="80" min="5" max="400">
-        </div>
-        <div class="card">
-          <label>Vista</label>
-          <select name="mode">
-            <option value="hybrid">Radar + lista</option>
-            <option value="radar">Solo radar</option>
-            <option value="wall">Solo lista</option>
-          </select>
-          <label>Formato de lista</label>
-          <select name="list_style">
-            <option value="fa">Tarjetas FlightAware</option>
-            <option value="fids">Pantalla de aeropuerto</option>
-            <option value="carousel">Un vuelo por vez</option>
-          </select>
-          <label>Rotar lista cada (s)</label>
-          <input name="rotate_s" type="number" value="7" min="3" max="30">
-          <label>Estilo radar</label>
-          <select name="theme">
-            <option value="crt_amber">CRT ambar</option>
-            <option value="crt_green">CRT verde</option>
-            <option value="atc_dark">ATC oscuro</option>
-          </select>
-        </div>
-        <div class="card">
-          <label>Que mostrar</label>
-          <div class="checks">
-            <label><input name="f_air" type="checkbox" checked> Aerolineas</label>
-            <label><input name="f_ga" type="checkbox"> Gral. aviacion</label>
-            <label><input name="f_biz" type="checkbox"> Jets ejecutivos</label>
-            <label><input name="f_heli" type="checkbox"> Helicopteros</label>
-          </div>
-          <label>Seguir aerolinea</label>
-          <input name="follow_airline" placeholder="JetSMART o JES">
-          <label>Seguir vuelo</label>
-          <input name="follow_flight" placeholder="JA3166">
-          <label>Max. aviones</label>
-          <input name="max_aircraft" type="number" value="16" min="1" max="24">
-          <label><input name="include_ground" type="checkbox" style="width:auto;display:inline"> Incluir en tierra</label>
-        </div>
-        <button type="submit">Guardar</button>
-        <p class="ok" id="msg" hidden>Guardado. En el Pico esto reinicia y aplica.</p>
-      </form>
       <div>
-        <div class="monitor-frame">
-          <iframe id="prev" title="Vista previa" src="sim.html?embed=1&v=4"></iframe>
+        <div class="card">
+          <label>Wi-Fi de casa (sólo 2.4 GHz)</label>
+          <input id="ssid" placeholder="Nombre de la red">
+          <input id="pass" type="password" placeholder="Clave" autocomplete="new-password">
         </div>
-        <p class="caption">Solo se muestran tarjetas enteras. La lista rota.</p>
+
+        <div class="card">
+          <label>Estilo</label>
+          <div class="temas" id="temas"></div>
+          <p class="resumen">El mismo estilo se usa en todas las pantallas.</p>
+        </div>
+
+        <div class="card">
+          <label>Mi casa</label>
+          <p class="resumen">Cuando pasa un avión por encima, sale un cartel abajo a la izquierda.</p>
+          <label style="margin-top:8px"><input id="casa_on" type="checkbox" style="width:auto;display:inline"> Marcar mi casa en el radar</label>
+          <div class="row">
+            <div><label>Lat</label><input id="casa_lat" placeholder="-34.55"></div>
+            <div><label>Lon</label><input id="casa_lon" placeholder="-58.44"></div>
+            <div><label>Radio (km)</label><input id="casa_km" type="number" value="3" min="1" max="20"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <label>Qué mostrar</label>
+          <div class="checks">
+            <label><input id="f_air" type="checkbox" checked> Aerolíneas</label>
+            <label><input id="f_ga" type="checkbox"> Gral. aviación</label>
+            <label><input id="f_biz" type="checkbox"> Jets ejecutivos</label>
+            <label><input id="f_heli" type="checkbox"> Helicópteros</label>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <div><label>Máx. aviones</label><input id="max_aircraft" type="number" value="16" min="1" max="24"></div>
+            <div><label style="display:flex;gap:8px;align-items:center;margin-top:18px">
+              <input id="include_ground" type="checkbox" style="width:auto;margin:0"> Incluir en tierra</label></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <label>Pantallas</label>
+          <p class="resumen">El equipo va pasando de una a otra. Si ponés una sola, se queda en esa.
+            La lista de vuelos no vuelve a empezar cuando regresa: sigue con los que faltan.</p>
+          <div id="pantallas"></div>
+          <button type="button" id="agregar">Agregar pantalla</button>
+        </div>
+
+        <button type="button" id="guardar">Guardar en el equipo</button>
+        <p class="ok" id="msg" hidden>Guardado.</p>
+
+        <details class="instalador" style="margin-top:18px">
+          <summary>Lo que se le manda al equipo</summary>
+          <pre class="json" id="json"></pre>
+        </details>
+      </div>
+
+      <div class="previa">
+        <div class="monitor-frame">
+          <iframe id="prev" title="Vista previa"></iframe>
+        </div>
+        <p class="caption" id="cap">Vista previa de la pantalla seleccionada.</p>
       </div>
     </div>
   </div>
+
   <script>
-    const f = document.getElementById('f');
-    const frame = document.getElementById('prev');
-    function cfg() {
-      const data = Object.fromEntries(new FormData(f).entries());
-      data.include_ground = f.include_ground.checked;
-      data.f_air = f.f_air.checked;
-      data.f_ga = f.f_ga.checked;
-      data.f_biz = f.f_biz.checked;
-      data.f_heli = f.f_heli.checked;
-      data.max_aircraft = Number(data.max_aircraft);
-      data.radius_km = Number(data.radius_km);
-      data.rotate_s = Number(data.rotate_s);
-      data.type = 'config';
-      return data;
-    }
-    function push() { try { frame.contentWindow.postMessage(cfg(), '*'); } catch (e) {} }
-    f.addEventListener('input', push);
-    frame.addEventListener('load', () => setTimeout(push, 400));
-    const saved = localStorage.getItem('picoRadarConfig');
-    if (saved) {
-      const c = JSON.parse(saved);
-      Object.entries(c).forEach(([k,v]) => {
-        if (!f[k]) return;
-        if (f[k].type === 'checkbox') f[k].checked = !!v;
-        else f[k].value = v;
-      });
-    }
-    f.addEventListener('submit', e => {
-      e.preventDefault();
-      localStorage.setItem('picoRadarConfig', JSON.stringify(cfg()));
-      document.getElementById('msg').hidden = false;
-      push();
+  // Los catorce temas, los mismos de radar.js y de radar.c. Si se toca uno hay
+  // que tocarlo en los tres lados: acá es sólo la muestra de color.
+  const TEMAS = {
+    crt_amber: ["CRT ámbar", "#e8b86d", "#0a0805"],
+    crt_green: ["CRT verde",  "#b4ff50", "#031105"],
+    phosphor:  ["Fósforo",    "#c6f59a", "#030805"],
+    atc_dark:  ["ATC oscuro", "#7ec8e3", "#07090c"],
+    navy:      ["Azul noche", "#b4d2ff", "#061018"],
+    violet:    ["Violeta",    "#c4a8ff", "#0c0814"],
+    magenta:   ["Magenta",    "#ff7ad9", "#120814"],
+    red:       ["Rojo",       "#ff9a8c", "#120606"],
+    orange:    ["Naranja",    "#ff9a4a", "#120804"],
+    gold:      ["Oro",        "#ffd56a", "#0c0a04"],
+    ice:       ["Hielo",      "#d9f6ff", "#081016"],
+    cyan:      ["Cian",       "#5eead4", "#041210"],
+    olive:     ["Oliva",      "#b7c47a", "#0c0e08"],
+    rose:      ["Rosa",       "#ff8fab", "#14080c"],
+  };
+
+  // Las seis vistas que hace el equipo. El simulador de la web todavía no
+  // dibuja las dos de seguimiento ni la de logos, así que para esas la vista
+  // previa avisa en vez de mostrar cualquier cosa.
+  const VISTAS = {
+    hybrid:       ["Radar + lista", true],
+    radar:        ["Sólo radar", true],
+    wall:         ["Sólo lista", true],
+    follow:       ["Seguir un vuelo (mapa)", false],
+    follow_hybrid:["Seguir un vuelo (mapa + ficha)", false],
+    logos:        ["Logos de aerolíneas", false],
+  };
+
+  const LISTAS = { fa: "Tarjetas", fids: "Pantalla de aeropuerto" };
+
+  // Los mismos límites que el firmware (PANTALLA_SEGUNDOS_MIN y MAX). Cada
+  // cambio de pantalla limpia la imagen entera y se come un cuadro: por debajo
+  // de quince segundos el parpadeo se nota.
+  const SEG_MIN = 15, SEG_MAX = 120;
+
+  const PANTALLA_NUEVA = () => ({
+    nombre: "Pantalla", vista: "hybrid", apt: "EZE", km: 150,
+    lista: "fa", vuelos: 3, seguir: "", segundos: 30,
+  });
+
+  let cfg = {
+    wifi: { ssid: "", pass: "" },
+    tema: "crt_amber",
+    casa: { on: false, lat: "", lon: "", km: 3 },
+    filtros: { aerolineas: true, ga: false, biz: false, heli: false, en_tierra: false, max: 16 },
+    pantallas: [
+      { nombre: "Vuelos de Ezeiza", vista: "hybrid", apt: "EZE", km: 220,
+        lista: "fa", vuelos: 4, seguir: "", segundos: 15 },
+    ],
+  };
+  let sel = 0;
+
+  const $ = (id) => document.getElementById(id);
+
+  function pintarTemas() {
+    $("temas").innerHTML = Object.entries(TEMAS).map(([k, [nombre, fg, bg]]) => `
+      <div class="tema${k === cfg.tema ? " on" : ""}" data-tema="${k}" style="background:${bg};color:${fg}">
+        <span class="muestra" style="background:${fg}"></span>${nombre}
+      </div>`).join("");
+    $("temas").querySelectorAll("[data-tema]").forEach((el) => {
+      el.onclick = () => { cfg.tema = el.dataset.tema; pintarTemas(); previa(); volcarJson(); };
     });
+  }
+
+  function pintarPantallas() {
+    const cont = $("pantallas");
+    if (!cfg.pantallas.length) {
+      cont.innerHTML = '<p class="vacio">Todavía no hay ninguna. Agregá al menos una.</p>';
+      return;
+    }
+    cont.innerHTML = cfg.pantallas.map((p, i) => {
+      const sigue = p.vista === "follow" || p.vista === "follow_hybrid";
+      const lista = p.vista !== "radar" && p.vista !== "logos" && !sigue;
+      return `
+      <div class="pantalla${i === sel ? " sel" : ""}" data-i="${i}">
+        <div class="pcab">
+          <span class="n">${i + 1}. ${p.nombre || "Sin nombre"}</span>
+          <button type="button" data-sube="${i}" ${i === 0 ? "disabled" : ""}>↑</button>
+          <button type="button" data-baja="${i}" ${i === cfg.pantallas.length - 1 ? "disabled" : ""}>↓</button>
+          <button type="button" class="quitar" data-quita="${i}">Quitar</button>
+        </div>
+        <div class="campos">
+          <div class="ancho"><label>Nombre</label>
+            <input data-c="nombre" data-i="${i}" value="${p.nombre}"></div>
+          <div><label>Vista</label>
+            <select data-c="vista" data-i="${i}">
+              ${Object.entries(VISTAS).map(([k, [n]]) =>
+                `<option value="${k}"${k === p.vista ? " selected" : ""}>${n}</option>`).join("")}
+            </select></div>
+          <div><label>Dura (segundos)</label>
+            <input data-c="segundos" data-i="${i}" type="number" min="${SEG_MIN}" max="${SEG_MAX}" value="${p.segundos}"></div>
+          ${p.vista === "logos" ? "" : `
+          <div><label>Aeropuerto (IATA)</label>
+            <input data-c="apt" data-i="${i}" value="${p.apt}" maxlength="3" placeholder="EZE"></div>
+          <div><label>Alcance (km)</label>
+            <input data-c="km" data-i="${i}" type="number" min="5" max="400" value="${p.km}"></div>`}
+          ${lista ? `
+          <div><label>Formato de la lista</label>
+            <select data-c="lista" data-i="${i}">
+              ${Object.entries(LISTAS).map(([k, n]) =>
+                `<option value="${k}"${k === p.lista ? " selected" : ""}>${n}</option>`).join("")}
+            </select></div>
+          <div><label>Vuelos por vez</label>
+            <input data-c="vuelos" data-i="${i}" type="number" min="1" max="6" value="${p.vuelos}"></div>` : ""}
+          ${sigue ? `
+          <div class="ancho"><label>Vuelo a seguir</label>
+            <input data-c="seguir" data-i="${i}" value="${p.seguir}" placeholder="AR1301"></div>` : ""}
+        </div>
+        <p class="aviso" data-aviso="${i}" ${p.segundos >= SEG_MIN ? "hidden" : ""}>Menos de ${SEG_MIN} segundos hace que se note el parpadeo al cambiar de pantalla. El equipo lo va a subir a ${SEG_MIN}.</p>
+      </div>`;
+    }).join("");
+
+    cont.querySelectorAll(".pantalla").forEach((el) => {
+      el.onclick = (e) => {
+        if (e.target.closest("button")) return;
+        sel = Number(el.dataset.i); pintarPantallas(); previa();
+      };
+    });
+    cont.querySelectorAll("[data-c]").forEach((el) => {
+      el.oninput = () => {
+        const i = Number(el.dataset.i), c = el.dataset.c;
+        let v = el.value;
+        if (c === "segundos" || c === "km" || c === "vuelos") v = Number(v) || 0;
+        if (c === "apt") v = v.toUpperCase();
+        cfg.pantallas[i][c] = v;
+        if (c === "vista") { sel = i; pintarPantallas(); }
+        // El aviso se prende y se apaga sin rehacer la lista: rehacerla le
+        // saca el foco al campo mientras se esta escribiendo.
+        const av = cont.querySelector(`[data-aviso="${i}"]`);
+        if (av) av.hidden = Number(cfg.pantallas[i].segundos) >= SEG_MIN;
+        const tit = cont.querySelector(`.pantalla[data-i="${i}"] .n`);
+        if (tit && c === "nombre") tit.textContent = (i + 1) + ". " + (v || "Sin nombre");
+        volcarJson();
+        if (i === sel) previa();
+      };
+    });
+    cont.querySelectorAll("[data-quita]").forEach((b) => b.onclick = () => {
+      cfg.pantallas.splice(Number(b.dataset.quita), 1);
+      if (sel >= cfg.pantallas.length) sel = Math.max(0, cfg.pantallas.length - 1);
+      pintarPantallas(); previa(); volcarJson();
+    });
+    cont.querySelectorAll("[data-sube]").forEach((b) => b.onclick = () => {
+      const i = Number(b.dataset.sube);
+      [cfg.pantallas[i - 1], cfg.pantallas[i]] = [cfg.pantallas[i], cfg.pantallas[i - 1]];
+      sel = i - 1; pintarPantallas(); volcarJson();
+    });
+    cont.querySelectorAll("[data-baja]").forEach((b) => b.onclick = () => {
+      const i = Number(b.dataset.baja);
+      [cfg.pantallas[i + 1], cfg.pantallas[i]] = [cfg.pantallas[i], cfg.pantallas[i + 1]];
+      sel = i + 1; pintarPantallas(); volcarJson();
+    });
+  }
+
+  // La vista previa se maneja por la URL del simulador. El postMessage que
+  // había antes no lo escuchaba nadie, así que la previa nunca cambiaba.
+  let previaUrl = "";
+  function previa() {
+    const p = cfg.pantallas[sel];
+    if (!p) { $("cap").textContent = "Agregá una pantalla para ver la vista previa."; return; }
+    const [nombre, simulable] = VISTAS[p.vista];
+    if (!simulable) {
+      $("cap").textContent = "«" + nombre + "» la hace el equipo, pero el simulador de la web todavía no la dibuja.";
+      return;
+    }
+    const q = new URLSearchParams({
+      embed: "1", v: "4", view: p.vista, list: p.lista,
+      theme: cfg.tema, apt: p.apt, r: String(p.km),
+    });
+    const url = "sim.html?" + q.toString();
+    if (url !== previaUrl) { previaUrl = url; $("prev").src = url; }
+    $("cap").textContent = nombre + " · " + p.apt + " · " + p.km + " km · " + p.segundos + " s";
+  }
+
+  function leerGenerales() {
+    cfg.wifi.ssid = $("ssid").value;
+    cfg.wifi.pass = $("pass").value;
+    cfg.casa.on = $("casa_on").checked;
+    cfg.casa.lat = $("casa_lat").value;
+    cfg.casa.lon = $("casa_lon").value;
+    cfg.casa.km = Number($("casa_km").value) || 3;
+    cfg.filtros.aerolineas = $("f_air").checked;
+    cfg.filtros.ga = $("f_ga").checked;
+    cfg.filtros.biz = $("f_biz").checked;
+    cfg.filtros.heli = $("f_heli").checked;
+    cfg.filtros.en_tierra = $("include_ground").checked;
+    cfg.filtros.max = Number($("max_aircraft").value) || 16;
+  }
+
+  function escribirGenerales() {
+    $("ssid").value = cfg.wifi.ssid;
+    $("pass").value = cfg.wifi.pass;
+    $("casa_on").checked = !!cfg.casa.on;
+    $("casa_lat").value = cfg.casa.lat;
+    $("casa_lon").value = cfg.casa.lon;
+    $("casa_km").value = cfg.casa.km;
+    $("f_air").checked = !!cfg.filtros.aerolineas;
+    $("f_ga").checked = !!cfg.filtros.ga;
+    $("f_biz").checked = !!cfg.filtros.biz;
+    $("f_heli").checked = !!cfg.filtros.heli;
+    $("include_ground").checked = !!cfg.filtros.en_tierra;
+    $("max_aircraft").value = cfg.filtros.max;
+  }
+
+  // Lo que se le manda al equipo. Las duraciones salen ya acotadas, para que
+  // lo que se ve acá sea lo que va a hacer la Pico.
+  function paraElEquipo() {
+    const c = JSON.parse(JSON.stringify(cfg));
+    c.pantallas.forEach((p) => {
+      p.segundos = Math.min(SEG_MAX, Math.max(SEG_MIN, Number(p.segundos) || SEG_MIN));
+      p.vuelos = Math.min(6, Math.max(1, Number(p.vuelos) || 1));
+      p.km = Math.min(400, Math.max(5, Number(p.km) || 150));
+    });
+    return c;
+  }
+
+  function volcarJson() { $("json").textContent = JSON.stringify(paraElEquipo(), null, 2); }
+
+  $("agregar").onclick = () => {
+    cfg.pantallas.push(PANTALLA_NUEVA());
+    sel = cfg.pantallas.length - 1;
+    pintarPantallas(); previa(); volcarJson();
+  };
+
+  document.querySelectorAll("input").forEach((el) => {
+    if (el.closest("#pantallas")) return;
+    el.addEventListener("input", () => { leerGenerales(); volcarJson(); previa(); });
+  });
+
+  $("guardar").onclick = () => {
+    leerGenerales();
+    // Mientras no esté el wifi, queda guardado en este navegador. Cuando el
+    // equipo tenga portal, esto va a mandarse a la Pico, que es donde tiene
+    // que vivir: así aparece igual desde cualquier celular.
+    localStorage.setItem("picoRadarConfig", JSON.stringify(paraElEquipo()));
+    $("msg").hidden = false;
+    setTimeout(() => { $("msg").hidden = true; }, 2500);
+    volcarJson();
+  };
+
+  const guardado = localStorage.getItem("picoRadarConfig");
+  if (guardado) {
+    try {
+      const c = JSON.parse(guardado);
+      if (c && c.pantallas && c.pantallas.length) cfg = c;
+    } catch (e) {}
+  }
+  escribirGenerales();
+  pintarTemas();
+  pintarPantallas();
+  previa();
+  volcarJson();
   </script>
 </body>
 </html>

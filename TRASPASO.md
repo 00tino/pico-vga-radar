@@ -21,6 +21,7 @@ Pico 2 W. Valentino lo va a **vender armado**, así que hay dos roles:
 | Parte | Dónde | Qué hace |
 |---|---|---|
 | **Web** | `docs/` → GitHub Pages | Simulador del radar y página de configuración |
+
 | **Proxy** | `sky-proxy/` → Vercel | Sirve datos ADS-B ya masticados |
 | **Firmware** | `firmware-c/` | Lo que corre en la placa (en C) |
 
@@ -71,6 +72,34 @@ verificados** en todas las vistas.
   seguimiento con tarjeta, y pantalla de logos.
 - **Los 14 temas de color** de la web.
 - **Tráfico de prueba** (`demo.c`): 15 vuelos que se mueven de verdad.
+
+### La página de configuración
+
+`docs/setup.html`. El cliente arma ahí la **lista de pantallas** (agregar,
+quitar, ordenar), y cada una lleva su vista, aeropuerto, alcance, formato de
+lista, cuántos vuelos y cuántos segundos dura. Arriba van las cosas generales:
+wifi, estilo, la casa y los filtros.
+
+Detalles que costaron y conviene no deshacer:
+
+- **La vista previa va por la URL del simulador, no por `postMessage`.** El
+  `postMessage` que había antes no lo escuchaba nadie: `radar.js` sólo lee
+  query params, así que la previa nunca cambiaba.
+- **El aviso de "menos de 15 segundos" se prende y apaga sin rehacer la
+  lista.** Rehacerla en cada tecla le saca el foco al campo que se está
+  escribiendo.
+- **La web ofrece las seis vistas del equipo**, pero el simulador sólo dibuja
+  tres: para las de seguimiento y la de logos, la previa lo dice en vez de
+  mostrar cualquier cosa.
+- Las duraciones se acotan a 15–120 en la web **y** en el firmware, para que
+  lo que se ve sea lo que va a hacer la Pico.
+- Todavía **guarda en el navegador** (`localStorage`). Cuando esté el portal
+  tiene que guardar en la Pico: es la única forma de que la configuración
+  aparezca igual desde cualquier celular.
+
+Lo que falta: el estilo es uno solo para todas las pantallas (el firmware lo
+soporta por pantalla), y no hay separación entre lo del instalador y lo del
+cliente.
 
 ### Las pantallas del cliente
 
