@@ -135,6 +135,15 @@ Detalles que costaron y conviene no deshacer:
   **Lo que todavía no se replica**: las tarjetas son HTML, así que su texto se
   ve más limpio de lo que se verá en el monitor. Para que sea idéntico habría
   que dibujarlas también en el canvas.
+- **La previa se carga UNA vez y los cambios se le mandan por `postMessage`.**
+  Pasarle la configuración por la URL la hacía recargar en cada tecla, o sea
+  volver a bajar 1,5 MB de firmware: en el celular la página se trababa y
+  parecía que no dejaba editar nada.
+- **El buscador de aeropuertos** usa `docs/airports.json`, los mismos 5334 que
+  tiene la Pico en la flash: escribiendo "syd" o "sydney" aparece Sydney.
+- El plano de cableado en PDF sale de `herramientas/cableado_a_pdf.py`, que
+  escribe el PDF a mano (sin librerías) y queda vectorial. **Si se cambia un
+  cable hay que cambiarlo ahí y en este documento.**
 - Todavía **guarda en el navegador** (`localStorage`). Cuando esté el portal
   tiene que guardar en la Pico: es la única forma de que la configuración
   aparezca igual desde cualquier celular.

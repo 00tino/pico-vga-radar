@@ -59,6 +59,9 @@
     <p class="hint">Todo lo que elijas queda guardado en el equipo. Si lo mudás a otra casa,
       sólo vas a tener que cargar la red nueva: el resto aparece como lo dejaste.</p>
 
+    <datalist id="lista-aeropuertos"></datalist>
+    <datalist id="lista-aerolineas"></datalist>
+
     <div class="layout">
       <div>
         <div class="card">
@@ -82,6 +85,8 @@
             <div><label>Lon</label><input id="casa_lon" placeholder="-58.44"></div>
             <div><label>Radio (km)</label><input id="casa_km" type="number" value="3" min="1" max="20"></div>
           </div>
+          <button type="button" id="ubicarme">Usar mi ubicación actual</button>
+          <p class="resumen" id="ubic_msg"></p>
         </div>
 
         <div class="card">
@@ -93,7 +98,8 @@
             <label><input id="f_heli" type="checkbox"> Helicópteros</label>
           </div>
           <div class="row" style="margin-top:10px">
-            <div><label>Máx. aviones</label><input id="max_aircraft" type="number" value="16" min="1" max="24"></div>
+            <div><label>Máx. aviones</label><input id="max_aircraft" type="number" value="16" min="1" max="24">
+              <p class="resumen">Hasta 24. Es lo que el equipo puede seguir sin que se le note.</p></div>
             <div><label style="display:flex;gap:8px;align-items:center;margin-top:18px">
               <input id="include_ground" type="checkbox" style="width:auto;margin:0"> Incluir en tierra</label></div>
           </div>
@@ -120,7 +126,6 @@
         <div class="monitor-frame">
           <iframe id="prev" title="Vista previa"></iframe>
         </div>
-        <p class="caption" id="cap">Vista previa de la pantalla seleccionada.</p>
         <p class="caption" id="equipo"></p>
       </div>
     </div>
@@ -231,8 +236,10 @@
           <div><label>Dura (segundos)</label>
             <input data-c="segundos" data-i="${i}" type="number" min="${SEG_MIN}" max="${SEG_MAX}" value="${p.segundos}"></div>
           ${p.vista === "logos" ? "" : `
-          <div><label>Aeropuerto (IATA)</label>
-            <input data-c="apt" data-i="${i}" value="${p.apt}" maxlength="3" placeholder="EZE"></div>
+          <div><label>Aeropuerto</label>
+            <input data-c="apt" data-i="${i}" value="${p.apt}" placeholder="Escribí una ciudad o un código"
+                   list="lista-aeropuertos" autocomplete="off">
+            <p class="resumen" data-apt-nombre="${i}"></p></div>
           <div><label>Alcance (km)</label>
             <input data-c="km" data-i="${i}" type="number" min="5" max="400" value="${p.km}"></div>`}
           ${lista ? `
@@ -245,7 +252,9 @@
             <input data-c="vuelos" data-i="${i}" type="number" min="1" max="6" value="${p.vuelos}"></div>` : ""}
           ${sigue ? `
           <div class="ancho"><label>Vuelo a seguir</label>
-            <input data-c="seguir" data-i="${i}" value="${p.seguir}" placeholder="AR1301"></div>` : ""}
+            <input data-c="seguir" data-i="${i}" value="${p.seguir}" placeholder="AR1301"
+                   list="lista-aerolineas" autocomplete="off">
+            <p class="resumen">Un indicativo (AR1301) o una aerolínea (AR): con la aerolínea sigue al primero que aparezca.</p></div>` : ""}
         </div>
         <p class="aviso" data-aviso="${i}" ${p.segundos >= SEG_MIN ? "hidden" : ""}>Menos de ${SEG_MIN} segundos hace que se note el parpadeo al cambiar de pantalla. El equipo lo va a subir a ${SEG_MIN}.</p>
       </div>`;
@@ -262,7 +271,14 @@
         const i = Number(el.dataset.i), c = el.dataset.c;
         let v = el.value;
         if (c === "segundos" || c === "km" || c === "vuelos") v = Number(v) || 0;
-        if (c === "apt") v = v.toUpperCase();
+        if (c === "apt") {
+          // El datalist devuelve el codigo IATA; si escribio una ciudad, se
+          // toma el primer aeropuerto que coincida.
+          const cand = buscarAeropuertos(v, 1);
+          v = (v.length === 3 && /^[A-Za-z]{3}$/.test(v)) ? v.toUpperCase()
+            : (cand.length ? cand[0][0] : v.toUpperCase());
+          pintarSugerencias();
+        }
         cfg.pantallas[i][c] = v;
         if (c === "vista") { sel = i; pintarPantallas(); }
         // El aviso se prende y se apaga sin rehacer la lista: rehacerla le
@@ -271,6 +287,7 @@
         if (av) av.hidden = Number(cfg.pantallas[i].segundos) >= SEG_MIN;
         const tit = cont.querySelector(`.pantalla[data-i="${i}"] .n`);
         if (tit && c === "nombre") tit.textContent = (i + 1) + ". " + (v || "Sin nombre");
+        if (c === "apt") pintarNombresApt();
         volcarJson();
         if (i === sel) previa();
       };
@@ -294,20 +311,27 @@
 
   // La vista previa se maneja por la URL del simulador. El postMessage que
   // había antes no lo escuchaba nadie, así que la previa nunca cambiaba.
-  let previaUrl = "";
+  // La previa es el firmware de la Pico compilado a WebAssembly, dibujando
+  // los mismos cuadros que va a dibujar la placa. Se carga UNA sola vez y
+  // despues los cambios se le mandan por mensaje: recargarla en cada tecla
+  // significaba volver a bajar el firmware entero, y la pagina se trababa.
+  let previaLista = false;
+  addEventListener("message", (e) => {
+    if (e.data && e.data.tipo === "replica-lista") { previaLista = true; mandarPrevia(); }
+  });
+  function mandarPrevia() {
+    if (!previaLista) return;
+    const marco = $("prev").contentWindow;
+    if (marco) marco.postMessage({ tipo: "config", cfg: paraElEquipo(), sel }, "*");
+  }
+  let pendiente = null;
   function previa() {
     const p = cfg.pantallas[sel];
-    if (!p) { $("cap").textContent = "Agregá una pantalla para ver la vista previa."; return; }
-    const [nombre] = VISTAS[p.vista];
-    // La previa no es el simulador: es el firmware de la Pico compilado a
-    // WebAssembly, dibujando los mismos cuadros que va a dibujar la placa.
-    // Por eso la letra, las esquinas y los colores son los de verdad.
-    const q = new URLSearchParams({ cfg: JSON.stringify(paraElEquipo()), sel: String(sel) });
-    const url = "replica.html?" + q.toString();
-    if (url !== previaUrl) { previaUrl = url; $("prev").src = url; }
-    $("cap").textContent = nombre + " · " + p.apt + " · " + p.km + " km · " + p.segundos + " s";
-    $("equipo").textContent = "Tal cual se va a ver: " + equipo.nombre;
+    if (!p) return;
+    clearTimeout(pendiente);
+    pendiente = setTimeout(mandarPrevia, 150);
   }
+  $("prev").src = "replica.html";
 
   function leerGenerales() {
     cfg.wifi.ssid = $("ssid").value;
@@ -356,7 +380,7 @@
   $("agregar").onclick = () => {
     cfg.pantallas.push(PANTALLA_NUEVA());
     sel = cfg.pantallas.length - 1;
-    pintarPantallas(); previa(); volcarJson();
+    pintarPantallas(); previa(); volcarJson(); pintarNombresApt();
   };
 
   document.querySelectorAll("input").forEach((el) => {
@@ -375,6 +399,87 @@
     volcarJson();
   };
 
+  // --- Buscar aeropuertos y aerolineas ---
+  //
+  // Los 5334 aeropuertos y las aerolineas ya estan en el sitio, son los mismos
+  // datos que tiene la Pico en la flash. Se cargan una sola vez y se busca
+  // sobre eso: escribiendo "syd" o "sydney" tiene que aparecer Sydney.
+  let AEROPUERTOS = [], AEROLINEAS = [];
+
+  function normalizar(t) {
+    return (t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function buscarAeropuertos(texto, tope) {
+    const q = normalizar(texto).trim();
+    if (!q) return [];
+    const empieza = [], contiene = [];
+    for (const a of AEROPUERTOS) {
+      const iata = normalizar(a[0]), ciudad = normalizar(a[1]), pais = normalizar(a[4]);
+      if (iata === q) { empieza.unshift(a); continue; }
+      if (iata.startsWith(q) || ciudad.startsWith(q)) empieza.push(a);
+      else if (ciudad.includes(q) || pais.startsWith(q)) contiene.push(a);
+      if (empieza.length >= tope) break;
+    }
+    return empieza.concat(contiene).slice(0, tope);
+  }
+
+  function pintarSugerencias() {
+    const campo = document.activeElement;
+    if (!campo || campo.dataset.c !== "apt") return;
+    const dl = $("lista-aeropuertos");
+    dl.innerHTML = buscarAeropuertos(campo.value, 12).map((a) =>
+      `<option value="${a[0]}">${a[0]} — ${a[1]}, ${a[4]}</option>`).join("");
+  }
+
+  function nombreDelAeropuerto(iata) {
+    const a = AEROPUERTOS.find((x) => x[0] === (iata || "").toUpperCase());
+    return a ? a[1] + ", " + a[4] : "";
+  }
+
+  function pintarNombresApt() {
+    document.querySelectorAll("[data-apt-nombre]").forEach((el) => {
+      const i = Number(el.dataset.aptNombre);
+      const p = cfg.pantallas[i];
+      if (!p) return;
+      const n = nombreDelAeropuerto(p.apt);
+      el.textContent = n || (p.apt && p.apt.length >= 2 ? "No encontré ese aeropuerto." : "");
+    });
+  }
+
+  (async () => {
+    try {
+      const [ap, al] = await Promise.all([
+        fetch("airports.json").then((r) => r.json()),
+        fetch("airlines.json").then((r) => r.json()).catch(() => null),
+      ]);
+      AEROPUERTOS = ap || [];
+      if (al) {
+        const pares = Array.isArray(al) ? al : Object.entries(al);
+        AEROLINEAS = pares.map((x) => Array.isArray(x) ? x : [x[0], x[1]]);
+        $("lista-aerolineas").innerHTML = AEROLINEAS.slice(0, 900).map((x) =>
+          `<option value="${x[0]}">${x[0]} — ${typeof x[1] === "string" ? x[1] : ""}</option>`).join("");
+      }
+      pintarNombresApt();
+    } catch (e) {}
+  })();
+
+  // --- Mi ubicación ---
+  $("ubicarme").onclick = () => {
+    const msg = $("ubic_msg");
+    if (!navigator.geolocation) { msg.textContent = "Este teléfono no da la ubicación."; return; }
+    msg.textContent = "Buscando…";
+    navigator.geolocation.getCurrentPosition((pos) => {
+      $("casa_lat").value = pos.coords.latitude.toFixed(4);
+      $("casa_lon").value = pos.coords.longitude.toFixed(4);
+      $("casa_on").checked = true;
+      leerGenerales(); volcarJson(); previa();
+      msg.textContent = "Listo, tomada de donde estás ahora.";
+    }, () => {
+      msg.textContent = "No me dejó. Hay que permitir la ubicación, o cargarla a mano.";
+    }, { enableHighAccuracy: true, timeout: 10000 });
+  };
+
   const guardado = localStorage.getItem("picoRadarConfig");
   if (guardado) {
     try {
@@ -382,9 +487,11 @@
       if (c && c.pantallas && c.pantallas.length) cfg = c;
     } catch (e) {}
   }
+  $("equipo").textContent = equipo.nombre;
   escribirGenerales();
   pintarTemas();
   pintarPantallas();
+  pintarNombresApt();
   previa();
   volcarJson();
   </script>

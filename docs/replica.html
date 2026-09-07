@@ -49,18 +49,33 @@
     { vista:"hybrid", apt:"EZE", km:220, lista:"fa", vuelos:4, seguir:"", segundos:15 },
   ];
   const tema = (cfg && cfg.tema) || "crt_amber";
-  // Con sel= se muestra una sola pantalla, la que se esta editando, y no
-  // rota: en la configuracion hay que ver la que se esta tocando.
-  const solo = q.has("sel") ? Number(q.get("sel")) : -1;
-  const aMostrar = (solo >= 0 && lista[solo]) ? [lista[solo]] : lista.slice(0, 8);
-  aMostrar.forEach((p, i) => {
-    pant(i, VISTAS[p.vista] ?? 1, LISTAS[p.lista] ?? 0, p.apt || "EZE",
-         p.km || 150, p.vuelos || 3, tema, p.seguir || "", p.segundos || 15);
+  // Aplicar una configuracion. Se puede llamar muchas veces sin recargar
+  // nada: volver a cargar la pagina significaria volver a bajar el firmware
+  // entero, y con eso la configuracion se trababa a cada tecla.
+  function aplicar(c, solo) {
+    const l = (c && c.pantallas && c.pantallas.length) ? c.pantallas : [
+      { vista:"hybrid", apt:"EZE", km:220, lista:"fa", vuelos:4, seguir:"", segundos:15 },
+    ];
+    const t = (c && c.tema) || "crt_amber";
+    const aMostrar = (solo >= 0 && l[solo]) ? [l[solo]] : l.slice(0, 8);
+    aMostrar.forEach((p, i) => {
+      pant(i, VISTAS[p.vista] ?? 1, LISTAS[p.lista] ?? 0, p.apt || "EZE",
+           p.km || 150, p.vuelos || 3, t, p.seguir || "", p.segundos || 15);
+    });
+    listo(aMostrar.length);
+    if (c && c.casa)
+      casa(c.casa.on ? 1 : 0, Math.round((Number(c.casa.lat) || 0) * 10000),
+           Math.round((Number(c.casa.lon) || 0) * 10000), Number(c.casa.km) || 3);
+  }
+
+  aplicar(cfg, q.has("sel") ? Number(q.get("sel")) : -1);
+
+  // La pagina de configuracion manda los cambios por aca en vez de recargar.
+  addEventListener("message", (e) => {
+    if (!e.data || e.data.tipo !== "config") return;
+    aplicar(e.data.cfg, typeof e.data.sel === "number" ? e.data.sel : -1);
   });
-  listo(aMostrar.length);
-  if (cfg && cfg.casa)
-    casa(cfg.casa.on ? 1 : 0, Math.round((Number(cfg.casa.lat) || 0) * 10000),
-         Math.round((Number(cfg.casa.lon) || 0) * 10000), Number(cfg.casa.km) || 3);
+  parent.postMessage({ tipo: "replica-lista" }, "*");
 
   const W = ancho(), H = alto();
   const cv = document.getElementById("pantalla");
@@ -78,7 +93,9 @@
   addEventListener("resize", encajar);
   const ctx = cv.getContext("2d");
   const img = ctx.createImageData(W, H);
-  if (q.has("sel")) estado.remove();          // embebida en la configuracion
+  // Embebida en la configuracion no va ningun cartel: molesta encima del
+  // radar y ahi el equipo ya se nombra abajo del monitor.
+  if (parent !== window) estado.remove();
   else estado.textContent = W + "×" + H + " · 256 colores · dibujado por el firmware";
 
   function tick() {
