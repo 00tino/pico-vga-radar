@@ -1595,8 +1595,12 @@ function drawJourney(ctx, W, H, left, fg, ac) {
 // placa y otro monitor va a pasar otra medida.
 let monitorReal = null;
 {
-  const m = /^(\d{3,4})x(\d{3,4})$/.exec(new URLSearchParams(location.search).get("real") || "");
-  if (m) monitorReal = { w: Number(m[1]), h: Number(m[2]) };
+  const q = new URLSearchParams(location.search);
+  const m = /^(\d{3,4})x(\d{3,4})$/.exec(q.get("real") || "");
+  // Los 256 colores son de la placa chica. Un equipo con placa grande saca
+  // color pleno, asi que ahi no hay que bajar nada: se pasa colores=full.
+  if (m) monitorReal = { w: Number(m[1]), h: Number(m[2]),
+                         bajar: q.get("colores") !== "full" };
 }
 
 // Los mismos 3-3-2 bits del firmware: tres de rojo, tres de verde y dos de
@@ -1635,7 +1639,7 @@ function loop() {
   const view = shownView();
   if (!running || view === "wall") { looping = false; return; }
   looping = true;
-  const ctx = radar.getContext("2d", { willReadFrequently: !!monitorReal });
+  const ctx = radar.getContext("2d", { willReadFrequently: !!(monitorReal && monitorReal.bajar) });
   const dpr = monitorReal ? 1 : Math.min(2, window.devicePixelRatio || 1);
   const w = monitorReal ? monitorReal.w : (radar.clientWidth || 640);
   const h = monitorReal ? monitorReal.h : (radar.clientHeight || 480);
@@ -1653,7 +1657,7 @@ function loop() {
   if (performance.now() - lastRot > rotateS * 1000) { lastRot = performance.now(); page++; renderWall(); }
   if (tripAc) {
     drawJourney(ctx, w, h, left, pair.fg, tripAc);
-    if (monitorReal) bajarA256(ctx, w, h);
+    if (monitorReal && monitorReal.bajar) bajarA256(ctx, w, h);
     requestAnimationFrame(loop);
     return;
   }
@@ -1790,7 +1794,7 @@ function loop() {
     ctx.fillStyle = "#fff"; ctx.fillText("SOBRE CASA", cx + 14, cy - 8);
     updateOver();
   }
-  if (monitorReal) bajarA256(ctx, w, h);
+  if (monitorReal && monitorReal.bajar) bajarA256(ctx, w, h);
   requestAnimationFrame(loop);
 }
 function grabForm() {

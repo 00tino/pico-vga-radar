@@ -169,8 +169,8 @@
   // montarlo, no el cliente: el cliente ya recibe su monitor. Por eso esto no
   // es un campo del formulario, viene en la URL (?equipo=premium).
   const EQUIPOS = {
-    base:    { nombre: "Pico 2 W - 640x480, 256 colores", real: "640x480" },
-    premium: { nombre: "Full HD - 1920x1080", real: "1920x1080" },
+    base:    { nombre: "Pico 2 W · 640×480 · 256 colores", real: "640x480",   colores: "256" },
+    premium: { nombre: "Full HD · 1920×1080 · color pleno", real: "1920x1080", colores: "full" },
   };
   const equipo = EQUIPOS[new URLSearchParams(location.search).get("equipo")] || EQUIPOS.base;
 
@@ -307,8 +307,9 @@
     // colores, en vez de a la resolucion del navegador: asi lo que se ve aca
     // es lo que va a salir por el cable.
     const q = new URLSearchParams({
-      embed: "1", v: "35", view: p.vista, list: p.lista,
-      theme: cfg.tema, apt: p.apt, r: String(p.km), real: equipo.real,
+      embed: "1", v: "37", view: p.vista, list: p.lista,
+      theme: cfg.tema, apt: p.apt, r: String(p.km),
+      real: equipo.real, colores: equipo.colores,
     });
     const url = "sim.html?" + q.toString();
     if (url !== previaUrl) { previaUrl = url; $("prev").src = url; }

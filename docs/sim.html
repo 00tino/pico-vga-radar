@@ -194,6 +194,16 @@ body.embed .monitor { width: 100%; height: 100%; max-width: none; border: 0; bor
    que el radar: si se dejaran a la resolución del navegador se verían mucho
    más finas de lo que el monitor puede mostrar. */
 body.embed .view.real { flex: none; transform-origin: center center; }
+
+/* En modo réplica no hay nada redondeado ni difuminado: el firmware dibuja
+   rectángulos con las esquinas rectas, sin sombras y sin medias tintas. Con
+   las puntas redondeadas la vista previa mentía sobre cómo queda. */
+body.embed .view.real .fa-card,
+body.embed .view.real .logo,
+body.embed .view.real .pill,
+body.embed .view.real .bar,
+body.embed .view.real .empty { border-radius: 0 !important; box-shadow: none !important; }
+body.embed .view.real * { text-shadow: none !important; }
 </style>
 </head>
 <body>
@@ -349,6 +359,6 @@ body.embed .view.real { flex: none; transform-origin: center center; }
     </div>
   </aside>
 </div>
-<script src="radar.js?v=35"></script>
+<script src="radar.js?v=37"></script>
 </body>
 </html>
