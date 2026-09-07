@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Réplica del equipo</title>
+<style>
+  body { margin: 0; background: #0b0a09; color: #b9b2a4; font: 13px system-ui, sans-serif; }
+  .caja { display: flex; align-items: center; justify-content: center; height: 100vh; }
+  /* Se agranda por numeros enteros: a media escala los pixeles se mezclan y
+     justo lo que se quiere mostrar es el grano que va a tener el monitor. */
+  canvas { image-rendering: pixelated; background: #000; }
+  #estado { position: fixed; left: 10px; top: 8px; font-size: 12px; opacity: .75; }
+</style>
+</head>
+<body>
+<div class="caja"><canvas id="pantalla"></canvas></div>
+<p id="estado">cargando el firmware…</p>
+<script src="radar-firmware.js"></script>
+<script>
+// La vista previa no dibuja nada por su cuenta: le pide los cuadros al mismo
+// codigo en C que corre en la Pico, compilado a WebAssembly. Por eso es una
+// replica y no una imitacion: la fuente, las esquinas, los colores y el
+// reparto de la pantalla salen del firmware.
+(async () => {
+  const q = new URLSearchParams(location.search);
+  const M = await RadarFirmware();
+  const estado = document.getElementById("estado");
+
+  const init  = M.cwrap("radar_web_init", null, ["number","number","number","number"]);
+  const pant  = M.cwrap("radar_web_pantalla", null,
+                  ["number","number","number","string","number","number","string","string","number"]);
+  const listo = M.cwrap("radar_web_pantallas_listas", null, ["number"]);
+  const casa  = M.cwrap("radar_web_casa", null, ["number","number","number","number"]);
+  const cuadro= M.cwrap("radar_web_cuadro", "number", []);
+  const ancho = M.cwrap("radar_web_ancho", "number", []);
+  const alto  = M.cwrap("radar_web_alto", "number", []);
+
+  const VISTAS = { radar:0, hybrid:1, wall:2, follow:3, follow_hybrid:4, logos:5 };
+  const LISTAS = { fa:0, fids:1 };
+
+  init(4, 4, 4, 4);
+
+  // Las pantallas vienen de la configuracion, en el mismo formato que guarda
+  // setup.html. Sin nada, se muestra una de ejemplo.
+  let cfg = null;
+  try { cfg = JSON.parse(q.get("cfg") || localStorage.getItem("picoRadarConfig") || "null"); } catch (e) {}
+  const lista = (cfg && cfg.pantallas && cfg.pantallas.length) ? cfg.pantallas : [
+    { vista:"hybrid", apt:"EZE", km:220, lista:"fa", vuelos:4, seguir:"", segundos:15 },
+  ];
+  const tema = (cfg && cfg.tema) || "crt_amber";
+  // Con sel= se muestra una sola pantalla, la que se esta editando, y no
+  // rota: en la configuracion hay que ver la que se esta tocando.
+  const solo = q.has("sel") ? Number(q.get("sel")) : -1;
+  const aMostrar = (solo >= 0 && lista[solo]) ? [lista[solo]] : lista.slice(0, 8);
+  aMostrar.forEach((p, i) => {
+    pant(i, VISTAS[p.vista] ?? 1, LISTAS[p.lista] ?? 0, p.apt || "EZE",
+         p.km || 150, p.vuelos || 3, tema, p.seguir || "", p.segundos || 15);
+  });
+  listo(aMostrar.length);
+  if (cfg && cfg.casa)
+    casa(cfg.casa.on ? 1 : 0, Math.round((Number(cfg.casa.lat) || 0) * 10000),
+         Math.round((Number(cfg.casa.lon) || 0) * 10000), Number(cfg.casa.km) || 3);
+
+  const W = ancho(), H = alto();
+  const cv = document.getElementById("pantalla");
+  cv.width = W; cv.height = H;
+  function encajar() {
+    let k = Math.min(innerWidth / W, innerHeight / H);
+    // Cuando hay lugar de sobra se agranda por numeros enteros, que es lo
+    // unico que deja el grano perfecto. Cuando no entra, se achica lo que
+    // haga falta: mejor verla entera que verla cortada.
+    if (k >= 1) k = Math.floor(k);
+    cv.style.width = Math.floor(W * k) + "px";
+    cv.style.height = Math.floor(H * k) + "px";
+  }
+  encajar();
+  addEventListener("resize", encajar);
+  const ctx = cv.getContext("2d");
+  const img = ctx.createImageData(W, H);
+  if (q.has("sel")) estado.remove();          // embebida en la configuracion
+  else estado.textContent = W + "×" + H + " · 256 colores · dibujado por el firmware";
+
+  function tick() {
+    const p = cuadro();
+    img.data.set(M.HEAPU8.subarray(p, p + W * H * 4));
+    ctx.putImageData(img, 0, 0);
+    requestAnimationFrame(tick);
+  }
+  tick();
+})();
+</script>
+</body>
+</html>

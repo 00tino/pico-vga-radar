@@ -160,6 +160,11 @@ uint8_t radar_tono(int alpha255) {
 void radar_init(void) {
     trig_init();
     beam = 0;
+    // El orden por cercania recien se calcula en el primer radar_avanzar, y
+    // hasta entonces quedaba en ceros: si se aplicaba una pantalla antes de
+    // eso, la lista se armaba con el avion 0 repetido y las cuatro tarjetas
+    // mostraban el mismo vuelo.
+    for (int i = 0; i < RADAR_MAX_AVIONES; i++) orden[i] = (uint8_t)i;
 }
 
 // Diagnostico: cuantas pistas encontro y donde caen en pantalla.

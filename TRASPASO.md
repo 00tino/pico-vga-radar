@@ -73,6 +73,37 @@ verificados** en todas las vistas.
 - **Los 14 temas de color** de la web.
 - **Tráfico de prueba** (`demo.c`): 15 vuelos que se mueven de verdad.
 
+### La réplica: la web dibuja con el firmware
+
+`web-firmware/` compila **el mismo código C que corre en la placa** a
+WebAssembly, y `docs/replica.html` le pide los cuadros y los pinta en un
+canvas. La vista previa de la configuración es eso, no una imitación: la
+fuente, las esquinas rectas, los logos, los colores y el reparto de la
+pantalla salen del firmware. Si mañana cambia cómo se dibuja una tarjeta, la
+web cambia sola y no se pueden desincronizar.
+
+```
+./web-firmware/compilar.sh     # deja docs/radar-firmware.js y .wasm (1,5 MB)
+```
+
+Lo único que se reemplaza es `vga.c`, que en la placa maneja el PIO y el DMA
+y en la web es sólo el framebuffer (`web-firmware/vga_web.c`). El resto —gfx,
+radar, tarjetas, viaje, pantallas, las fuentes y todos los datos— es el mismo
+archivo.
+
+**Emscripten en esta Mac** (se instaló con `brew install emscripten`):
+- Pide **Python 3.10 o más** y el del sistema es 3.9, así que hay que exportar
+  `EMSDK_PYTHON=/opt/homebrew/bin/python3.12`. Ya lo hace `compilar.sh`.
+- Su config vive en el `.emscripten` del Cellar y **hay que escribirla a
+  mano**: el `--generate-config` apunta a `/usr/bin`, que no tiene los targets
+  wasm. Va el LLVM propio de emscripten, `binaryen` (que se instala aparte) y
+  el node de brew.
+
+**Lo que falta**: el firmware está atado a 640×480 y a los 256 colores
+(`VGA_ANCHO`, el tamaño de las fuentes, los logos a 36×36). Para el equipo
+premium en Full HD hay que hacer eso parametrizable; los generadores de
+fuentes y logos ya existen, así que es ordenado.
+
 ### La página de configuración
 
 `docs/setup.html`. El cliente arma ahí la **lista de pantallas** (agregar,
