@@ -121,6 +121,7 @@
           <iframe id="prev" title="Vista previa"></iframe>
         </div>
         <p class="caption" id="cap">Vista previa de la pantalla seleccionada.</p>
+        <p class="caption" id="equipo"></p>
       </div>
     </div>
   </div>
@@ -163,6 +164,15 @@
   // cambio de pantalla limpia la imagen entera y se come un cuadro: por debajo
   // de quince segundos el parpadeo se nota.
   const SEG_MIN = 15, SEG_MAX = 120;
+
+  // El equipo con el que se arma cada radar. Lo define el instalador al
+  // montarlo, no el cliente: el cliente ya recibe su monitor. Por eso esto no
+  // es un campo del formulario, viene en la URL (?equipo=premium).
+  const EQUIPOS = {
+    base:    { nombre: "Pico 2 W - 640x480, 256 colores", real: "640x480" },
+    premium: { nombre: "Full HD - 1920x1080", real: "1920x1080" },
+  };
+  const equipo = EQUIPOS[new URLSearchParams(location.search).get("equipo")] || EQUIPOS.base;
 
   const PANTALLA_NUEVA = () => ({
     nombre: "Pantalla", vista: "hybrid", apt: "EZE", km: 150,
@@ -293,13 +303,17 @@
       $("cap").textContent = "«" + nombre + "» la hace el equipo, pero el simulador de la web todavía no la dibuja.";
       return;
     }
+    // real= hace que el simulador dibuje al tamano del equipo y con sus 256
+    // colores, en vez de a la resolucion del navegador: asi lo que se ve aca
+    // es lo que va a salir por el cable.
     const q = new URLSearchParams({
-      embed: "1", v: "4", view: p.vista, list: p.lista,
-      theme: cfg.tema, apt: p.apt, r: String(p.km),
+      embed: "1", v: "35", view: p.vista, list: p.lista,
+      theme: cfg.tema, apt: p.apt, r: String(p.km), real: equipo.real,
     });
     const url = "sim.html?" + q.toString();
     if (url !== previaUrl) { previaUrl = url; $("prev").src = url; }
     $("cap").textContent = nombre + " · " + p.apt + " · " + p.km + " km · " + p.segundos + " s";
+    $("equipo").textContent = "Tal cual se va a ver: " + equipo.nombre;
   }
 
   function leerGenerales() {

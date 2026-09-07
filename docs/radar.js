@@ -1585,15 +1585,66 @@ function drawJourney(ctx, W, H, left, fg, ac) {
   ctx.fillText(rem != null ? ("Ruta del viaje · " + rem + " km al destino") : "Ruta del viaje", 10, 32);
   ctx.globalAlpha = 1;
 }
+// Modo monitor: en vez de dibujar a la resolucion del navegador y con color
+// verdadero, se dibuja al tamano real del equipo y despues se bajan los
+// colores a los 256 que salen por el VGA. Sirve para que el cliente vea en la
+// web exactamente lo que va a ver en la pantalla, no una version linda.
+//
+// El equipo lo define el instalador, no el cliente: por eso viene por la URL
+// (real=640x480) y no hay boton para cambiarlo. Un equipo premium con otra
+// placa y otro monitor va a pasar otra medida.
+let monitorReal = null;
+{
+  const m = /^(\d{3,4})x(\d{3,4})$/.exec(new URLSearchParams(location.search).get("real") || "");
+  if (m) monitorReal = { w: Number(m[1]), h: Number(m[2]) };
+}
+
+// Los mismos 3-3-2 bits del firmware: tres de rojo, tres de verde y dos de
+// azul. Redondea en vez de truncar, igual que vga_rgb en vga.h; truncando,
+// todos los colores salian mas claros de lo pedido.
+function bajarA256(ctx, w, h) {
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    d[i]     = Math.round(Math.round((d[i]     * 7) / 255) * (255 / 7));
+    d[i + 1] = Math.round(Math.round((d[i + 1] * 7) / 255) * (255 / 7));
+    d[i + 2] = Math.round(Math.round((d[i + 2] * 3) / 255) * (255 / 3));
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+// Pone el bloque de la pantalla al tamaño exacto del equipo y lo agranda
+// entero para llenar el hueco. El texto de las tarjetas queda del tamaño que
+// va a tener en el monitor, no del que le daría el navegador.
+function ajustarPantallaReal() {
+  if (!monitorReal) return;
+  const vista = document.querySelector(".view");
+  const caja = vista && vista.parentElement;
+  if (!vista || !caja) return;
+  vista.classList.add("real");
+  vista.style.width = monitorReal.w + "px";
+  vista.style.height = monitorReal.h + "px";
+  const r = caja.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const k = Math.min(r.width / monitorReal.w, r.height / monitorReal.h);
+  vista.style.transform = "scale(" + k + ")";
+}
+addEventListener("resize", ajustarPantallaReal);
+
 function loop() {
   const view = shownView();
   if (!running || view === "wall") { looping = false; return; }
   looping = true;
-  const ctx = radar.getContext("2d");
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const w = radar.clientWidth || 640, h = radar.clientHeight || 480;
+  const ctx = radar.getContext("2d", { willReadFrequently: !!monitorReal });
+  const dpr = monitorReal ? 1 : Math.min(2, window.devicePixelRatio || 1);
+  const w = monitorReal ? monitorReal.w : (radar.clientWidth || 640);
+  const h = monitorReal ? monitorReal.h : (radar.clientHeight || 480);
   radar.width = w * dpr; radar.height = h * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (monitorReal) {
+    radar.style.imageRendering = "pixelated";
+    ajustarPantallaReal();
+  }
   const pair = THEMES[theme] || THEMES.crt_amber;
   ctx.fillStyle = pair.bg; ctx.fillRect(0, 0, w, h);
   const left = view === "hybrid" ? 0.54 : 1;
@@ -1602,6 +1653,7 @@ function loop() {
   if (performance.now() - lastRot > rotateS * 1000) { lastRot = performance.now(); page++; renderWall(); }
   if (tripAc) {
     drawJourney(ctx, w, h, left, pair.fg, tripAc);
+    if (monitorReal) bajarA256(ctx, w, h);
     requestAnimationFrame(loop);
     return;
   }
@@ -1738,6 +1790,7 @@ function loop() {
     ctx.fillStyle = "#fff"; ctx.fillText("SOBRE CASA", cx + 14, cy - 8);
     updateOver();
   }
+  if (monitorReal) bajarA256(ctx, w, h);
   requestAnimationFrame(loop);
 }
 function grabForm() {

@@ -93,6 +93,17 @@ Detalles que costaron y conviene no deshacer:
   mostrar cualquier cosa.
 - Las duraciones se acotan a 15–120 en la web **y** en el firmware, para que
   lo que se ve sea lo que va a hacer la Pico.
+- **La vista previa es el equipo, no el navegador.** Con `real=640x480` el
+  simulador dibuja al tamaño exacto de la pantalla, baja los colores a los 256
+  del VGA (los mismos 3-3-2 de `vga_rgb`, redondeando) y arma el bloque entero
+  a esa medida para agrandarlo después: así el texto de las tarjetas tiene el
+  tamaño que va a tener en el monitor. Con `embed=1` se esconde toda la
+  interfaz del simulador. **Los dos parámetros existían en la URL desde antes
+  pero no los implementaba nadie**, igual que el `postMessage`.
+  El equipo lo elige el instalador (`?equipo=premium`), nunca el cliente.
+  **Lo que todavía no se replica**: las tarjetas son HTML, así que su texto se
+  ve más limpio de lo que se verá en el monitor. Para que sea idéntico habría
+  que dibujarlas también en el canvas.
 - Todavía **guarda en el navegador** (`localStorage`). Cuando esté el portal
   tiene que guardar en la Pico: es la única forma de que la configuración
   aparezca igual desde cualquier celular.
