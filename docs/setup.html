@@ -65,12 +65,6 @@
     <div class="layout">
       <div>
         <div class="card">
-          <label>Wi-Fi de casa (sólo 2.4 GHz)</label>
-          <input id="ssid" placeholder="Nombre de la red">
-          <input id="pass" type="password" placeholder="Clave" autocomplete="new-password">
-        </div>
-
-        <div class="card">
           <label>Estilo</label>
           <div class="temas" id="temas"></div>
           <p class="resumen">El mismo estilo se usa en todas las pantallas.</p>
@@ -86,6 +80,7 @@
             <div><label>Radio (km)</label><input id="casa_km" type="number" value="3" min="1" max="20"></div>
           </div>
           <button type="button" id="ubicarme">Usar mi ubicación actual</button>
+          <button type="button" id="ubicar_apt">Usar el aeropuerto elegido</button>
           <p class="resumen" id="ubic_msg"></p>
         </div>
 
@@ -126,7 +121,6 @@
         <div class="monitor-frame">
           <iframe id="prev" title="Vista previa"></iframe>
         </div>
-        <p class="caption" id="equipo"></p>
       </div>
     </div>
   </div>
@@ -262,12 +256,21 @@
 
     cont.querySelectorAll(".pantalla").forEach((el) => {
       el.onclick = (e) => {
-        if (e.target.closest("button")) return;
-        sel = Number(el.dataset.i); pintarPantallas(); previa();
+        // Tocar un campo NO es elegir la pantalla. Antes sí lo era, y como
+        // elegirla rehace todo el HTML de la lista, el campo que acababas de
+        // tocar desaparecía y volvía a nacer vacío de foco: no se podía
+        // escribir ni abrir un desplegable. Y si la pantalla ya está elegida
+        // tampoco hay nada que rehacer.
+        if (e.target.closest("button, input, select, textarea, label, option")) return;
+        const i = Number(el.dataset.i);
+        if (i === sel) return;
+        sel = i; pintarPantallas(); previa();
       };
     });
     cont.querySelectorAll("[data-c]").forEach((el) => {
-      el.oninput = () => {
+      // change ademas de input: los desplegables de Safari no avisan por
+      // "input" y la vista y el formato de lista quedaban sin poder cambiarse.
+      el.onchange = el.oninput = () => {
         const i = Number(el.dataset.i), c = el.dataset.c;
         let v = el.value;
         if (c === "segundos" || c === "km" || c === "vuelos") v = Number(v) || 0;
@@ -334,8 +337,6 @@
   $("prev").src = "replica.html";
 
   function leerGenerales() {
-    cfg.wifi.ssid = $("ssid").value;
-    cfg.wifi.pass = $("pass").value;
     cfg.casa.on = $("casa_on").checked;
     cfg.casa.lat = $("casa_lat").value;
     cfg.casa.lon = $("casa_lon").value;
@@ -349,8 +350,6 @@
   }
 
   function escribirGenerales() {
-    $("ssid").value = cfg.wifi.ssid;
-    $("pass").value = cfg.wifi.pass;
     $("casa_on").checked = !!cfg.casa.on;
     $("casa_lat").value = cfg.casa.lat;
     $("casa_lon").value = cfg.casa.lon;
@@ -520,19 +519,46 @@
   })();
 
   // --- Mi ubicación ---
+  function ponerCasa(lat, lon, texto) {
+    $("casa_lat").value = Number(lat).toFixed(4);
+    $("casa_lon").value = Number(lon).toFixed(4);
+    $("casa_on").checked = true;
+    leerGenerales(); volcarJson(); previa();
+    $("ubic_msg").textContent = texto;
+  }
+
   $("ubicarme").onclick = () => {
     const msg = $("ubic_msg");
     if (!navigator.geolocation) { msg.textContent = "Este teléfono no da la ubicación."; return; }
     msg.textContent = "Buscando…";
-    navigator.geolocation.getCurrentPosition((pos) => {
-      $("casa_lat").value = pos.coords.latitude.toFixed(4);
-      $("casa_lon").value = pos.coords.longitude.toFixed(4);
-      $("casa_on").checked = true;
-      leerGenerales(); volcarJson(); previa();
-      msg.textContent = "Listo, tomada de donde estás ahora.";
-    }, () => {
-      msg.textContent = "No me dejó. Hay que permitir la ubicación, o cargarla a mano.";
-    }, { enableHighAccuracy: true, timeout: 10000 });
+    navigator.geolocation.getCurrentPosition(
+      (pos) => ponerCasa(pos.coords.latitude, pos.coords.longitude,
+                         "Listo, tomada de donde estás ahora."),
+      (err) => {
+        // Decir cuál de los tres motivos fue, porque la salida es distinta en
+        // cada caso. El primero es el que más pasa y el que más confunde: el
+        // teléfono ni pregunta, porque el permiso ya estaba dicho que no.
+        const porque =
+          err.code === 1 ? "El teléfono no dio permiso, y por eso no te preguntó nada. " +
+                           "En iPhone se arregla en Ajustes → Safari → Ubicación → Preguntar, " +
+                           "y en Android tocando el candado de la barra de direcciones."
+        : err.code === 2 ? "El teléfono no pudo averiguar dónde está. Suele pasar bajo techo."
+        : "Tardó demasiado. Probá de nuevo cerca de una ventana.";
+        msg.textContent = porque + " O usá el botón de acá abajo, que alcanza y sobra.";
+      },
+      { enableHighAccuracy: true, timeout: 10000 });
+  };
+
+  // La salida cómoda cuando la ubicación no anda: la casa queda en el
+  // aeropuerto que ya elegiste. Para lo único que se usa es para avisar
+  // cuando pasa un avión cerca, así que con estar en la zona alcanza, y se
+  // puede correr después con los dos números de arriba.
+  $("ubicar_apt").onclick = () => {
+    const p = cfg.pantallas[sel] || cfg.pantallas[0];
+    const cod = (p && p.apt || "").toUpperCase();
+    const a = AEROPUERTOS.find((x) => x[0] === cod);
+    if (!a) { $("ubic_msg").textContent = "Elegí primero un aeropuerto en alguna pantalla."; return; }
+    ponerCasa(a[2], a[3], "Puesta en " + cod + ". Si querés, corregí los números de arriba.");
   };
 
   const guardado = localStorage.getItem("picoRadarConfig");
@@ -542,7 +568,8 @@
       if (c && c.pantallas && c.pantallas.length) cfg = c;
     } catch (e) {}
   }
-  $("equipo").textContent = equipo.nombre;
+  // El nombre del equipo no se muestra: al cliente no le dice nada y abajo de
+  // la vista previa solo hace ruido.
   escribirGenerales();
   pintarTemas();
   pintarPantallas();
