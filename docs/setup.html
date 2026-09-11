@@ -390,7 +390,23 @@
 
   // El equipo al que hay que mandarle todo esto. La dirección la cuelga la
   // propia Pico del QR que muestra en el monitor: setup.html?pico=192.168.1.40
-  const PICO = new URLSearchParams(location.search).get("pico");
+  //
+  // Se comprueba que sea una dirección de red doméstica y no cualquier cosa.
+  // La dirección viene de la barra del navegador, así que la puede poner
+  // cualquiera que te pase un enlace: sin este control, un enlace preparado
+  // manda tu configuración al servidor del que lo armó en vez de a tu equipo.
+  // La Pico siempre está en la red de casa, nunca en internet.
+  function equipoDeLaRedDeCasa(dir) {
+    if (!dir) return null;
+    const p = dir.split(".").map(Number);
+    if (p.length !== 4 || p.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+    const casero = p[0] === 192 && p[1] === 168
+                || p[0] === 10
+                || (p[0] === 172 && p[1] >= 16 && p[1] <= 31);
+    return casero ? p.join(".") : null;
+  }
+
+  const PICO = equipoDeLaRedDeCasa(new URLSearchParams(location.search).get("pico"));
 
   // Los mismos números que el firmware, en el orden de vista_t y lista_t de
   // radar.h. Si alguna vez se agrega una vista, se agrega en los dos lados.
