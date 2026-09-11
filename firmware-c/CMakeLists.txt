@@ -4,7 +4,7 @@ project(radar C CXX ASM)
 set(PICO_BOARD pico2_w)
 pico_sdk_init()
 
-add_executable(radar main.c volcado.c fuente_grande.c monitor.c arranques.c pantallas.c vga.c gfx.c fuente.c area.c logos.c trig.c geo.c pistas.c aeropuertos.c radar.c viaje.c logos_pantalla.c costas.c tarjetas.c demo.c sky.c vivo.c aerolineas.c config.c sky_parse.c qr.c portal.c portal_parse.c ap.c)
+add_executable(radar main.c volcado.c fuente_grande.c monitor.c arranques.c pantallas.c vga.c gfx.c fuente.c area.c logos.c trig.c geo.c pistas.c aeropuertos.c radar.c viaje.c logos_pantalla.c costas.c tarjetas.c demo.c sky.c vivo.c aerolineas.c config.c sky_parse.c qr.c portal.c portal_parse.c ap.c seguir.c)
 pico_generate_pio_header(radar ${CMAKE_CURRENT_LIST_DIR}/vga.pio)
 # lwipopts.h y mbedtls_config.h estan aca al lado.
 target_include_directories(radar PRIVATE ${CMAKE_CURRENT_LIST_DIR})

@@ -16,6 +16,12 @@ bool config_leer(void);
 #define CONFIG_MAX_PUNTOS_DEF 16
 extern int config_max_puntos;
 
+// Mostrar solo vuelos de aerolinea. Arriba de un aeropuerto grande la mitad
+// de lo que vuela son avionetas y aviones de instruccion: no tienen ruta ni
+// horario y sus tarjetas salen vacias. Lo aplica el proxy, no la placa, para
+// que los 32 lugares se llenen con vuelos que sirvan.
+extern bool config_solo_aerolineas;
+
 extern char config_ssid[33];
 extern char config_pass[64];
 

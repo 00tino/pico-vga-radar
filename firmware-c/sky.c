@@ -194,7 +194,7 @@ static err_t al_conectar(void *arg, struct altcp_pcb *tpcb, err_t err) {
 
     char get[320];
     int n = snprintf(get, sizeof get,
-        "GET %s?lat=%ld.%04ld&lon=%ld.%04ld&dist=%d&n=%d&tz=%d HTTP/1.1\r\n"
+        "GET %s?lat=%ld.%04ld&lon=%ld.%04ld&dist=%d&n=%d&tz=%d%s HTTP/1.1\r\n"
         "Host: " PROXY_HOST "\r\n"
         "User-Agent: pico-radar/1.0\r\n"
         "Connection: close\r\n\r\n",
@@ -205,7 +205,9 @@ static err_t al_conectar(void *arg, struct altcp_pcb *tpcb, err_t err) {
         // Una milla nautica son 1852 metros, asi que hay que pasar los
         // kilometros a metros primero: con un cero de menos, un radio de 220
         // km pedia un circulo de 11 millas y no venia casi ningun avion.
-        (int)((long)mirar_km * 1000 / 1852), SKY_MAX, INSTALACION_TZ_MINUTOS);
+        (int)((long)mirar_km * 1000 / 1852), SKY_MAX, INSTALACION_TZ_MINUTOS,
+        // Que el proxy mande solo vuelos de aerolinea, si es lo que se pidio.
+        config_solo_aerolineas ? "&com=1" : "");
 
     if (altcp_write(tpcb, get, n, TCP_WRITE_FLAG_COPY) != ERR_OK) {
         pedido = P_FALLO;

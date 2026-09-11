@@ -8,6 +8,7 @@
 // RP2350: son 48 puntos por cuadro y sale barato. En lineas rectas de lat/lon
 // una ruta larga se iria varios grados de donde va en serio.
 #include "radar.h"
+#include "seguir.h"
 #include "gfx.h"
 #include "area.h"
 #include "trig.h"
@@ -80,7 +81,7 @@ void radar_pintar_viaje(void) {
     // El avion que se sigue.
     const avion_t *ac = 0;
     for (int i = 0; i < radar_cantidad; i++)
-        if (!strncmp(radar_aviones[i].vuelo, radar_seguir, sizeof radar_seguir - 1))
+        if (radar_sigue_a(&radar_aviones[i]))
             { ac = &radar_aviones[i]; break; }
     if (!ac) {
         gfx_texto_centrado(X + AN / 2, Y + AL / 2 - 8, "Buscando el vuelo...", radar_tono(200), 2);
@@ -450,7 +451,7 @@ void radar_viaje_avion(void) {
     extern int avion_x, avion_y;
     const avion_t *ac = 0;
     for (int i = 0; i < radar_cantidad; i++)
-        if (!strncmp(radar_aviones[i].vuelo, radar_seguir, sizeof radar_seguir - 1))
+        if (radar_sigue_a(&radar_aviones[i]))
             { ac = &radar_aviones[i]; break; }
     if (!ac) return;
 

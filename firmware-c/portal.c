@@ -180,6 +180,8 @@ static void guardar_pantallas(struct tcp_pcb *pcb, const char *consulta) {
 
     // Cuantos puntos van en el circulo. Es uno solo para todo el equipo, no
     // por pantalla, asi que viaja suelto y no adentro de cada una.
+    config_solo_aerolineas = portal_numero(consulta, "com", config_solo_aerolineas ? 1 : 0) != 0;
+
     const int tope = portal_numero(consulta, "max", config_max_puntos);
     if (tope >= 1 && tope <= RADAR_MAX_AVIONES) {
         config_max_puntos = tope;      // para que se guarde en la flash

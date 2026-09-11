@@ -93,6 +93,14 @@
           <p class="resumen"><b>La lista de vuelos no se toca.</b> Sigue pasando por
             todos los que haya en el aire, de a una página por vez: si hay cincuenta,
             los cincuenta van a ir apareciendo.</p>
+
+          <label style="display:flex;gap:8px;align-items:center;margin-top:18px">
+            <input id="solo_lineas" type="checkbox" checked style="width:auto;margin:0">
+            Sólo vuelos de aerolínea</label>
+          <p class="resumen">Arriba de un aeropuerto grande, la mitad de lo que vuela
+            son avionetas, aviones de instrucción y vuelos militares: no tienen ruta ni
+            horario, y sus fichas salen casi vacías. Con esto no aparecen, ni en el radar
+            ni en la lista. Se reconocen por el indicativo y por tener una ruta conocida.</p>
         </div>
 
         <div class="card">
@@ -178,6 +186,7 @@
     tema: "crt_amber",
     casa: { on: false, lat: "", lon: "", km: 3 },
     max_puntos: 16,
+    solo_lineas: true,
     pantallas: [
       { nombre: "Vuelos de Ezeiza", vista: "hybrid", apt: "EZE", km: 220,
         lista: "fa", vuelos: 4, seguir: "", segundos: 15 },
@@ -337,6 +346,7 @@
     cfg.casa.lon = $("casa_lon").value;
     cfg.casa.km = Number($("casa_km").value) || 3;
     cfg.max_puntos = Number($("max_aircraft").value) || 16;
+    cfg.solo_lineas = $("solo_lineas").checked;
   }
 
   function escribirGenerales() {
@@ -345,6 +355,7 @@
     $("casa_lon").value = cfg.casa.lon;
     $("casa_km").value = cfg.casa.km;
     $("max_aircraft").value = cfg.max_puntos;
+    $("solo_lineas").checked = cfg.solo_lineas !== false;
   }
 
   // Lo que se le manda al equipo. Las duraciones salen ya acotadas, para que
@@ -413,6 +424,7 @@
     const q = new URLSearchParams();
     // Uno solo para todo el equipo, no por pantalla.
     q.set("max", Math.min(32, Math.max(1, Number(c.max_puntos) || 16)));
+    q.set("com", c.solo_lineas === false ? 0 : 1);
     q.set("n", c.pantallas.length);
     c.pantallas.forEach((p, i) => q.set("p" + i, campos(p)));
     return q.toString();

@@ -102,6 +102,10 @@ export default async function handler(req, res) {
   const dist = Math.min(250, Math.max(15, Math.round(Number(req.query.dist) || 80)));
   // Cuantos aviones como mucho. La placa guarda 32 (RADAR_MAX_AVIONES).
   const tope = Math.min(48, Math.max(1, Math.round(Number(req.query.n) || 32)));
+  // Solo vuelos de aerolinea. Sin esto, arriba de un aeropuerto grande la
+  // mitad de lo que vuela son avionetas y aviones de instruccion: ocupan
+  // lugar, no tienen ruta ni horario, y sus tarjetas salen casi vacias.
+  const soloAerolineas = req.query.com === "1";
   // Minutos que hay que sumarle al UTC para la hora local del equipo.
   const tz = Math.min(840, Math.max(-720, Math.round(Number(req.query.tz) || 0)));
 
@@ -132,17 +136,36 @@ export default async function handler(req, res) {
 
   // Los que no reportan posicion no se pueden dibujar. Los mas cercanos
   // primero: si sobran, los que se cortan son los del borde del alcance.
-  const utiles = lista
+  let candidatos = lista
     .filter((a) => a && a.lat != null && a.lon != null)
-    .sort((a, b) => (Number(a.dst) || 1e9) - (Number(b.dst) || 1e9))
-    .slice(0, tope);
+    // Un vuelo de linea se reconoce por la forma del indicativo: tres letras
+    // de aerolinea y un numero (ARG1885). Una avioneta manda su matricula
+    // (LVS100) o no manda nada.
+    .filter((a) => !soloAerolineas || claveDeRuta(limpiar(a.flight)))
+    .sort((a, b) => (Number(a.dst) || 1e9) - (Number(b.dst) || 1e9));
+
+  // Con el filtro puesto se buscan mas de los que se van a mandar, porque
+  // abajo se cae otra tanda: la de los que tienen pinta de vuelo de linea
+  // pero no tienen ruta.
+  candidatos = candidatos.slice(0, soloAerolineas ? tope * 2 : tope);
 
   // Las rutas, todas de una. Las que ya estan en cache no salen a la red.
-  const claves = [...new Set(utiles.map((a) => claveDeRuta(limpiar(a.flight))).filter(Boolean))];
+  const claves = [...new Set(candidatos.map((a) => claveDeRuta(limpiar(a.flight))).filter(Boolean))];
   const rutas = new Map();
   await Promise.all(
     claves.map(async (cs) => { rutas.set(cs, await buscarRuta(cs)); })
   );
+
+  // El filtro fino: sin ruta conocida no es un vuelo de linea. Es lo que saca
+  // a los militares y a los de trabajo aereo, que tienen indicativo con forma
+  // de aerolinea (FAG532) pero no salen ni llegan a ningun lado publicado, y
+  // cuya tarjeta quedaria vacia.
+  const utiles = (soloAerolineas
+    ? candidatos.filter((a) => {
+        const cs = claveDeRuta(limpiar(a.flight));
+        return cs && (rutas.get(cs) || "|") !== "|";
+      })
+    : candidatos).slice(0, tope);
 
   const lineas = utiles.map((a) => {
     const vuelo = limpiar(a.flight);
