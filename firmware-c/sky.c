@@ -8,10 +8,19 @@
 // lwIP y mbedTLS viven enteros en el nucleo 1, que no toca el framebuffer, y
 // lo unico que cruza entre nucleos es un lote de aviones ya parseado.
 //
-// lwIP va en modo poll y no en el de fondo, justamente por lo mismo: en el de
-// fondo el driver se cuelga de una interrupcion y se atiende cuando quiere.
-// En poll se atiende cuando este nucleo lo pide, y no hay forma de que
-// interrumpa al otro.
+// La radio se atiende por interrupcion. El primer intento fue al reves, en
+// modo poll, para que nada interrumpiera al video: no sirve. En ese modo el
+// chip solo se atiende cuando uno llama a poll, y para asociarse a una red el
+// driver hace comandos bloqueantes por adentro; mientras dura uno de esos
+// nadie atiende la respuesta del chip y el comando muere por tiempo
+// ("do_ioctl: timeout"). El equipo veia la red y nunca lograba entrar.
+//
+// Que sea por interrupcion no le hace dano al video porque la interrupcion
+// del VGA tiene la prioridad mas alta que hay: la del video puede interrumpir
+// a la de la radio, nunca al reves.
+//
+// A cambio, lwIP pasa a correr adentro de una interrupcion, asi que todo lo
+// que se le pida desde el bucle va entre cyw43_arch_lwip_begin() y end().
 //
 // El pedido es un GET a /api/pico, que devuelve texto: una linea por avion.
 // No hay parser de JSON en la placa; ver sky-proxy/api/pico.js.
@@ -81,17 +90,25 @@ static struct altcp_pcb *pcb;
 static ip_addr_t         proxy_ip;
 static bool              proxy_ip_lista;
 static volatile pedido_t pedido;
+static struct altcp_tls_config *tls_conf;   // se arma una sola vez, ver abajo
 static uint32_t          pedido_ms;     // cuando arranco el que esta en curso
 static char              cuerpo[CUERPO_MAX];
 static int               cuerpo_n;
 static bool              encabezado_pasado;
 
+// Todo lo que se le pide a lwIP desde el bucle del nucleo 1 va protegido: lwIP
+// corre adentro de una interrupcion y no se lo puede tocar en el medio.
 static void cerrar(void) {
     if (!pcb) return;
+    // Entre begin y end: lwIP corre adentro de una interrupcion, asi que
+    // tocarlo desde el bucle sin avisar lo agarra a mitad de algo. Sin esto
+    // el equipo traia el primer lote y despues se quedaba mudo para siempre.
+    cyw43_arch_lwip_begin();
     altcp_arg(pcb, NULL);
     altcp_recv(pcb, NULL);
     altcp_err(pcb, NULL);
     if (altcp_close(pcb) != ERR_OK) altcp_abort(pcb);
+    cyw43_arch_lwip_end();
     pcb = NULL;
 }
 
@@ -102,7 +119,13 @@ static void cerrar(void) {
 // Convierte el cuerpo entero en el lote y lo publica. Devuelve cuantos
 // aviones entraron.
 static int digerir(void) {
-    sky_avion_t nuevos[SKY_MAX];
+    // Estatico y no en la pila: son casi dos kilobytes, y la pila del nucleo
+    // 1 trae cuatro de fabrica. Pedirle eso de una sola vez la pasaba por
+    // arriba y el nucleo se quedaba mudo justo despues del primer lote, que
+    // es la razon por la que el equipo traia vuelos una vez y nunca mas.
+    // Lo llama un solo nucleo y de a una vez, asi que no hay con quien
+    // pelearse por el.
+    static sky_avion_t nuevos[SKY_MAX];
     int hora = -1;
     const int n = sky_parse(cuerpo, nuevos, SKY_MAX, &hora);
     if (hora >= 0) {
@@ -179,7 +202,10 @@ static err_t al_conectar(void *arg, struct altcp_pcb *tpcb, err_t err) {
         (long)(mirar_lat / 10000), (long)labs(mirar_lat % 10000),
         (long)(mirar_lon / 10000), (long)labs(mirar_lon % 10000),
         // El proxy pide millas nauticas; el firmware piensa en kilometros.
-        (int)(mirar_km * 100 / 1852), SKY_MAX, INSTALACION_TZ_MINUTOS);
+        // Una milla nautica son 1852 metros, asi que hay que pasar los
+        // kilometros a metros primero: con un cero de menos, un radio de 220
+        // km pedia un circulo de 11 millas y no venia casi ningun avion.
+        (int)((long)mirar_km * 1000 / 1852), SKY_MAX, INSTALACION_TZ_MINUTOS);
 
     if (altcp_write(tpcb, get, n, TCP_WRITE_FLAG_COPY) != ERR_OK) {
         pedido = P_FALLO;
@@ -206,7 +232,9 @@ static void arrancar_pedido(void) {
 
     if (!proxy_ip_lista) {
         pedido = P_RESOLVIENDO;
+        cyw43_arch_lwip_begin();
         err_t e = dns_gethostbyname(PROXY_HOST, &proxy_ip, al_resolver, NULL);
+        cyw43_arch_lwip_end();
         if (e == ERR_OK) { proxy_ip_lista = true; pedido = P_LIBRE; }
         else if (e != ERR_INPROGRESS) pedido = P_FALLO;
         return;
@@ -220,19 +248,33 @@ static void arrancar_pedido(void) {
     // lectura: posiciones de aviones que cualquiera baja de adsb.fi. El dia
     // que por aca pase algo del cliente (las credenciales del portal, por
     // ejemplo) esto tiene que cambiar.
-    struct altcp_tls_config *tls = altcp_tls_create_config_client(NULL, 0);
-    if (!tls) { pedido = P_FALLO; return; }
-    pcb = altcp_tls_new(tls, IPADDR_TYPE_V4);
-    if (!pcb) { altcp_tls_free_config(tls); pedido = P_FALLO; return; }
+    // La configuracion de TLS se arma UNA sola vez y se reusa. Armar una por
+    // pedido parece inofensivo y no lo es: cada una se queda con su pedazo de
+    // memoria y nadie la devuelve, asi que despues del primer lote no queda
+    // lugar y todos los pedidos siguientes fallan. Como fallaban en silencio,
+    // el equipo se quedaba con los aviones del primer lote para siempre, que
+    // es exactamente el sintoma con el que empezo todo esto.
+    if (!tls_conf) {
+        tls_conf = altcp_tls_create_config_client(NULL, 0);
+        if (!tls_conf) { printf("sky: no se pudo preparar el cifrado\n"); pedido = P_FALLO; return; }
+    }
+    cyw43_arch_lwip_begin();
+    pcb = altcp_tls_new(tls_conf, IPADDR_TYPE_V4);
+    if (pcb) {
+        // SNI: Vercel sirve muchos dominios en la misma IP y sin esto devuelve
+        // el certificado equivocado.
+        mbedtls_ssl_set_hostname(altcp_tls_context(pcb), PROXY_HOST);
+        altcp_recv(pcb, al_recibir);
+        altcp_err(pcb, al_fallar);
+    }
+    cyw43_arch_lwip_end();
+    if (!pcb) { printf("sky: sin memoria para la conexion\n"); pedido = P_FALLO; return; }
 
-    // SNI: Vercel sirve muchos dominios en la misma IP y sin esto devuelve
-    // el certificado equivocado.
-    mbedtls_ssl_set_hostname(altcp_tls_context(pcb), PROXY_HOST);
-
-    altcp_recv(pcb, al_recibir);
-    altcp_err(pcb, al_fallar);
     pedido = P_CONECTANDO;
-    if (altcp_connect(pcb, &proxy_ip, PROXY_PUERTO, al_conectar) != ERR_OK) {
+    cyw43_arch_lwip_begin();
+    const err_t e = altcp_connect(pcb, &proxy_ip, PROXY_PUERTO, al_conectar);
+    cyw43_arch_lwip_end();
+    if (e != ERR_OK) {
         cerrar();
         pedido = P_FALLO;
     }
@@ -310,7 +352,22 @@ static void nucleo1(void) {
     }
 
     for (;;) {
-        cyw43_arch_poll();
+        // Latido al principio de todo, antes de tocar el chip: si esto deja
+        // de salir, el bucle se trabo en la vuelta anterior; si sale y lo que
+        // falta no, se trabo hablando con el chip.
+        {
+            static uint32_t ultimo;
+            static uint32_t vueltas;
+            vueltas++;
+            const uint32_t t = to_ms_since_boot(get_absolute_time());
+            if (t - ultimo >= 5000) {
+                ultimo = t;
+                static const char *NOMBRE[] = {"libre","resolviendo","conectando",
+                                               "leyendo","listo","fallo"};
+                printf("sky: latido | modo=%d pedido=%s | %lu vueltas\n",
+                       (int)modo, NOMBRE[pedido], (unsigned long)vueltas);
+            }
+        }
 
         if (modo == M_PORTAL) {
             portal_atender();
@@ -335,9 +392,32 @@ static void nucleo1(void) {
 
         if (modo == M_CONECTAR) {
             estado = SKY_CONECTANDO;
+
+            // Un barrido antes de cada intento. Cuesta un par de segundos y
+            // dice si la red esta en el aire: sin esto, cuando el equipo no
+            // conecta no hay forma de saber si es que no la ve o que no lo
+            // dejan entrar.
+            portal_barrer();
+            // portal_atender() es quien da por terminado el barrido: sin
+            // llamarlo aca, esto se queda girando para siempre. Y un tope de
+            // tiempo por si el barrido nunca contesta, que es justo la clase
+            // de cosa que deja al equipo mudo sin que se sepa por que.
+            {
+                const uint32_t hasta = to_ms_since_boot(get_absolute_time()) + 6000;
+                while (portal_barriendo() &&
+                       to_ms_since_boot(get_absolute_time()) < hasta) {
+                    portal_atender();
+                    sleep_ms(20);
+                }
+            }
+            printf("sky: la red \"%s\" %s\n", config_ssid,
+                   portal_vio(config_ssid) ? "SI esta en el aire" : "NO aparece en el barrido");
+
             printf("sky: conectando a \"%s\"\n", config_ssid);
+            // MIXED y no solo AES: hay routers que anuncian WPA2 pero
+            // aceptan las dos formas, y con la estricta no entran.
             const int r = cyw43_arch_wifi_connect_timeout_ms(
-                config_ssid, config_pass, CYW43_AUTH_WPA2_AES_PSK, 20000);
+                config_ssid, config_pass, CYW43_AUTH_WPA2_MIXED_PSK, 20000);
             if (r) {
                 fallos++;
                 printf("sky: no se pudo conectar (%d), intento %d de %d\n",
@@ -366,7 +446,10 @@ static void nucleo1(void) {
         }
 
         // --- modo normal ---
-        if (cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA) != CYW43_LINK_UP) {
+        cyw43_arch_lwip_begin();
+        const int enlace = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
+        cyw43_arch_lwip_end();
+        if (enlace != CYW43_LINK_UP) {
             printf("sky: se perdio la red\n");
             cerrar();
             pedido = P_LIBRE;
@@ -398,6 +481,9 @@ static void nucleo1(void) {
         }
         case P_FALLO:
             cerrar();
+            // Antes esto no decia nada, y un equipo que no trae vuelos sin
+            // decir por que es lo mas caro de diagnosticar que hay.
+            printf("sky: el pedido fallo, se reintenta en %d s\n", REINTENTO_SEGUNDOS);
             estado = SKY_PROXY_CAIDO;
             pedido = P_LIBRE;
             proximo = ahora + REINTENTO_SEGUNDOS * 1000;
@@ -422,15 +508,25 @@ static void nucleo1(void) {
 // baja el nucleo 0, que es el unico que puede tocar el dibujo.
 volatile bool pantallas_rehacer_pedido;
 
+// La pila del nucleo 1, aparte.
+//
+// La que da la placa de fabrica son cuatro kilobytes justos, en una zona que
+// no se puede agrandar, y ahi adentro tiene que entrar el saludo de TLS, que
+// pide bastante mas. El sintoma era feo y dificil de leer: el equipo traia el
+// primer lote de vuelos y despues el nucleo se quedaba mudo para siempre, sin
+// avisar nada, y en pantalla quedaban los mismos aviones congelados.
+static uint32_t pila_nucleo1[4096];   // 16 kB
+
 void sky_init(bool pedir_portal) {
     mutex_init(&candado);
     portal_pedido = pedir_portal;
     // La radio se prende siempre: aunque no haya ninguna red cargada, hace
     // falta para levantar el portal y que el cliente pueda cargar una.
-    multicore_launch_core1(nucleo1);
+    multicore_launch_core1_with_stack(nucleo1, pila_nucleo1, sizeof pila_nucleo1);
 }
 
 bool sky_en_portal(void) { return modo == M_PORTAL; }
+bool sky_intentando_conectar(void) { return modo == M_CONECTAR; }
 const char *sky_ap_nombre(void) { return ap_nombre; }
 const char *sky_ap_clave(void) { return AP_CLAVE; }
 const char *sky_portal_url(void) { return url_portal; }

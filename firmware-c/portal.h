@@ -19,6 +19,8 @@ void portal_parar(void);
 // Pide un barrido de redes y lo va atendiendo. Las dos desde el nucleo 1.
 void portal_barrer(void);
 void portal_atender(void);
+bool portal_barriendo(void);
+bool portal_vio(const char *ssid);   // si esa red aparecio en el ultimo barrido
 
 portal_pasa_t portal_paso(void);
 void          portal_paso_limpiar(void);

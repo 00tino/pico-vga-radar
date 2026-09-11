@@ -120,8 +120,21 @@ bool config_guardar_wifi(const char *ssid, const char *pass) {
     if (!ssid || !ssid[0]) return false;
     snprintf(config_ssid, sizeof config_ssid, "%s", ssid);
     snprintf(config_pass, sizeof config_pass, "%s", pass ? pass : "");
-    // Se conservan las pantallas que ya estuvieran armadas.
-    armar(pantallas_n > 0 && pantallas_n <= PANTALLAS_MAX ? pantallas_n : 0);
+
+    // Solo se conservan las pantallas que el cliente YA HABIA GUARDADO, no
+    // las que esten puestas en memoria. La diferencia importa: mientras nadie
+    // configuro nada, lo que hay en memoria son las de ejemplo, y guardarlas
+    // aca las convertia en "las del cliente". El equipo entonces creia que ya
+    // estaba configurado y no mostraba nunca el QR para configurarlo.
+    int cuantas = 0;
+    if (en_flash->firma == FIRMA && en_flash->version == VERSION &&
+        en_flash->n > 0 && en_flash->n <= PANTALLAS_MAX &&
+        sumar(en_flash) == en_flash->suma) {
+        memcpy(pantallas, en_flash->p, sizeof(pantalla_t) * en_flash->n);
+        pantallas_n = en_flash->n;
+        cuantas = en_flash->n;
+    }
+    armar(cuantas);
     if (flash_safe_execute(hacer_guardado, NULL, 3000) != PICO_OK) {
         printf("config: no se pudo guardar la red\n");
         return false;

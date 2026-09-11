@@ -22,6 +22,7 @@
 #include "vivo.h"
 #include "pantallas.h"
 #include "pico/stdlib.h"
+#include "pico/multicore.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -229,6 +230,53 @@ int main(void) {
     // Antes del video: si hubo un borrado de flash, aca no molesta a nadie.
     const bool pedir_config = arranques_contar();
 
+    // El reloj primero de todo. Tiene que quedar en su valor final antes de
+    // que arranque la radio, porque el bus del chip de WiFi se temporiza a
+    // partir de este reloj y cambiarselo despues lo desacomoda.
+    vga_reloj();
+
+    // Lo guardado se lee ANTES de largar el otro nucleo, y el orden importa:
+    // lo primero que hace ese nucleo es preguntar si hay una red cargada. Si
+    // todavia no se leyo la flash, no la ve, y el equipo se va al portal a
+    // pedir una red que en realidad ya tenia.
+    bool hay_pantallas = config_leer();
+
+    // El gesto de los tres cortes borra lo guardado: la red y las pantallas.
+    // Es la unica forma que tiene el cliente de empezar de cero si cambio de
+    // router o le regalo el equipo a otro.
+    if (pedir_config) {
+        printf("tres cortes seguidos: se olvida la red y las pantallas\n");
+        config_borrar();
+        hay_pantallas = false;
+    }
+
+    // Y esto antes tambien: cuando el otro nucleo escriba la flash (al
+    // guardar la red o las pantallas) va a tener que congelar a este, y un
+    // nucleo no se puede congelar si antes no dijo que se deja. El caso al
+    // reves ya estaba contemplado del otro lado, en sky.c.
+    multicore_lockout_victim_init();
+
+    // Si el cliente hizo el gesto de los tres cortes, va derecho al portal.
+    sky_init(pedir_config);
+
+    // Y se le da tiempo a la radio ANTES de encender el video.
+    //
+    // Se midio en la placa: con el video apagado la radio entra a la red en
+    // diez segundos; con el video andando no entra nunca, y el driver larga
+    // "do_ioctl: timeout". El dibujo le come el bus al chip de WiFi justo
+    // mientras esta negociando, que es cuando menos aguanta esperar.
+    //
+    // El costo es que el monitor arranca en negro unos segundos. Pasa una vez
+    // por encendido y es preferible a un equipo que no se conecta nunca.
+    {
+        const uint32_t hasta = to_ms_since_boot(get_absolute_time()) + 40000;
+        while (sky_intentando_conectar() &&
+               to_ms_since_boot(get_absolute_time()) < hasta) {
+            sleep_ms(50);
+        }
+        printf("la radio ya se acomodo: se enciende el video\n");
+    }
+
     vga_init();
     printf("video inicializado: %dx%d, 256 colores\n", VGA_ANCHO, VGA_ALTO);
 
@@ -247,13 +295,6 @@ int main(void) {
              INSTALACION_MARGEN_IZQUIERDA, INSTALACION_MARGEN_DERECHA);
     printf("area util: %dx%d en %d,%d\n", area.an, area.al, area.x, area.y);
 
-    // La radio arranca aca: conectarse y pedir el primer lote tarda unos
-    // segundos, y mientras tanto se termina de armar el radar y se ve el
-    // trafico de prueba en vez de una pantalla negra.
-    //
-    // Si el cliente hizo el gesto de los tres cortes, va derecho al portal.
-    sky_init(pedir_config);
-
     radar_init();
     demo_init();
     { void demo_casa(void); demo_casa(); }
@@ -263,7 +304,7 @@ int main(void) {
     // 18 escenas de prueba sigue disponible con la tecla 'e'.
     // Manda lo que haya guardado el cliente; si no guardo nada todavia, las
     // de fabrica.
-    if (!config_leer()) {
+    if (!hay_pantallas) {
         printf("no hay pantallas guardadas: se usan las de fabrica\n");
         pantallas_de_ejemplo();
     }
@@ -274,12 +315,33 @@ int main(void) {
     bool marcado_largo = false;
     uint32_t desde_informe = time_us_32();
     char portal_puesto[32] = "";
+    // Mientras el cliente no haya elegido sus pantallas, el equipo muestra el
+    // QR en vez del radar: es el segundo paso del armado, despues de cargar
+    // la red. Con pantallas guardadas esto no aparece nunca y el equipo
+    // arranca derecho en lo que el cliente dejo configurado.
+    bool esperando_config = !hay_pantallas;
+    if (esperando_config) printf("sin pantallas del cliente: se muestra el QR para configurar\n");
     for (;;) {
         // Mientras el equipo espera que lo configuren no hay radar que
         // dibujar: esta la pantalla del QR y nada mas. Se redibuja solo
         // cuando cambia la direccion, que es una vez, al terminar de
         // levantar el wifi propio.
-        if (sky_en_portal()) {
+        // La web mando pantallas nuevas: el nucleo 1 ya las guardo, aca solo
+        // hay que empezar a mostrarlas. Y si el equipo estaba esperando que
+        // lo configuraran, ese era el paso que faltaba.
+        if (pantallas_rehacer_pedido) {
+            pantallas_rehacer_pedido = false;
+            printf("pantallas nuevas desde la web: %d\n", pantallas_n);
+            pantallas_init();
+            esperando_config = false;
+            portal_puesto[0] = 0;
+            radar_marcar_sucio();
+        }
+
+        // Las dos situaciones en las que se ve el QR y no el radar: cuando el
+        // equipo esta pidiendo una red, y cuando ya la tiene pero todavia no
+        // le dijeron que mostrar.
+        if (sky_en_portal() || esperando_config) {
             if (strcmp(portal_puesto, sky_portal_url())) {
                 snprintf(portal_puesto, sizeof portal_puesto, "%s", sky_portal_url());
                 pantalla_configuracion();
@@ -290,14 +352,6 @@ int main(void) {
         if (portal_puesto[0]) {
             portal_puesto[0] = 0;
             radar_marcar_sucio();
-        }
-
-        // La web mando pantallas nuevas: el nucleo 1 ya las guardo, aca solo
-        // hay que empezar a mostrarlas.
-        if (pantallas_rehacer_pedido) {
-            pantallas_rehacer_pedido = false;
-            printf("pantallas nuevas desde la web: %d\n", pantallas_n);
-            pantallas_init();
         }
 
         int c = getchar_timeout_us(0);

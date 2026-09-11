@@ -16,6 +16,7 @@
 //   Es el mismo truco que el wifi de un hotel.
 #include "ap.h"
 #include "lwip/udp.h"
+#include "pico/cyw43_arch.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -171,17 +172,19 @@ static void dns_llego(void *arg, struct udp_pcb *pcb, struct pbuf *p,
 
 // --- prender y apagar -----------------------------------------------------
 bool ap_servicios_arrancar(void) {
+    // Entre begin y end, como todo lo que se le pide a lwIP desde el bucle.
+    cyw43_arch_lwip_begin();
     pcb_dhcp = udp_new();
     pcb_dns  = udp_new();
-    if (!pcb_dhcp || !pcb_dns) { ap_servicios_parar(); return false; }
-
-    if (udp_bind(pcb_dhcp, IP_ANY_TYPE, PUERTO_DHCP_SERVIDOR) != ERR_OK ||
-        udp_bind(pcb_dns,  IP_ANY_TYPE, PUERTO_DNS) != ERR_OK) {
-        ap_servicios_parar();
-        return false;
+    bool bien = pcb_dhcp && pcb_dns &&
+                udp_bind(pcb_dhcp, IP_ANY_TYPE, PUERTO_DHCP_SERVIDOR) == ERR_OK &&
+                udp_bind(pcb_dns,  IP_ANY_TYPE, PUERTO_DNS) == ERR_OK;
+    if (bien) {
+        udp_recv(pcb_dhcp, dhcp_llego, NULL);
+        udp_recv(pcb_dns,  dns_llego,  NULL);
     }
-    udp_recv(pcb_dhcp, dhcp_llego, NULL);
-    udp_recv(pcb_dns,  dns_llego,  NULL);
+    cyw43_arch_lwip_end();
+    if (!bien) { ap_servicios_parar(); return false; }
     printf("ap: dando direcciones y contestando nombres\n");
     return true;
 }

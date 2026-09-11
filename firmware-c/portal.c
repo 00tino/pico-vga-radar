@@ -86,7 +86,20 @@ void portal_atender(void) {
     if (barriendo && !cyw43_wifi_scan_active(&cyw43_state)) {
         barriendo = false;
         printf("portal: %d redes a la vista\n", redes_n);
+        // Con el nombre y la senal de cada una: cuando el equipo dice que no
+        // encuentra una red, esto es lo unico que despeja si el problema es
+        // que no la ve o que no logra entrar.
+        for (int i = 0; i < redes_n; i++)
+            printf("   \"%s\"  %d dBm\n", redes[i], redes_rssi[i]);
     }
+}
+
+bool portal_barriendo(void) { return barriendo; }
+
+bool portal_vio(const char *ssid) {
+    for (int i = 0; i < redes_n; i++)
+        if (!strcmp(redes[i], ssid)) return true;
+    return false;
 }
 
 // --- lo que se contesta ---------------------------------------------------
@@ -194,6 +207,15 @@ static err_t al_llegar(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
     char *fin_ruta = strchr(ruta, ' ');
     if (fin_ruta) *fin_ruta = 0;
 
+    // Se imprime solo hasta el "?" a proposito: en /wifi lo que viene despues
+    // es la red y su contrasena, y una contrasena no se escribe en ningun
+    // registro, ni siquiera en la consola de depuracion.
+    {
+        const char *interrogante = strchr(ruta, '?');
+        const int hasta = interrogante ? (int)(interrogante - ruta) : (int)strlen(ruta);
+        printf("portal: piden %.*s%s\n", hasta, ruta, interrogante ? "?..." : "");
+    }
+
     if (!strncmp(ruta, "/wifi?", 6)) {
         char ssid[33], pass[64];
         portal_parametro(ruta, "ssid", ssid, sizeof ssid);
@@ -201,10 +223,17 @@ static err_t al_llegar(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
         if (ssid[0]) {
             char limpio[200], detalle[256];
             portal_escapar(ssid, limpio, sizeof limpio);
-            snprintf(detalle, sizeof detalle, "Reiniciando y conectando a %s...", limpio);
-            aviso(pcb, "Guardado", detalle);
-            config_guardar_wifi(ssid, pass);
-            paso = PORTAL_WIFI;
+            // Se guarda ANTES de contestar: si la flash falla, el cliente
+            // tiene que enterarse en vez de ver un "guardado" mentiroso y
+            // quedarse esperando un equipo que nunca se conecto.
+            if (config_guardar_wifi(ssid, pass)) {
+                snprintf(detalle, sizeof detalle, "Reiniciando y conectando a %s...", limpio);
+                aviso(pcb, "Guardado", detalle);
+                paso = PORTAL_WIFI;
+            } else {
+                aviso(pcb, "No se pudo guardar",
+                      "El equipo no pudo escribir la red en su memoria. Proba de nuevo.");
+            }
         } else {
             aviso(pcb, "Falta la red", "Elegi una red de la lista.");
         }
@@ -250,6 +279,19 @@ static err_t al_llegar(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
 static err_t al_conectarse(void *arg, struct tcp_pcb *pcb, err_t err) {
     (void)arg;
     if (err != ERR_OK || !pcb) return ERR_VAL;
+
+    // Cada conexion aceptada ocupa un lugar de la cola de espera, y el lugar
+    // NO se devuelve solo: hay que avisar que ya se atendio. Sin esto el
+    // servidor atiende tantas conexiones como lugares tenga la cola y despues
+    // deja de aceptar para siempre.
+    //
+    // Es facil no darse cuenta probando de a un pedido por vez, y con un
+    // telefono no pasa nunca: apenas se conecta a una red, iOS y Android
+    // abren varias conexiones sueltas para ver si hay internet o si hay un
+    // portal. Esas se comen la cola entera antes de que el cliente llegue a
+    // abrir la pagina.
+    tcp_accepted(escucha);
+
     tcp_recv(pcb, al_llegar);
     // Que no se quede una conexion colgada ocupando memoria si el telefono
     // se va sin cerrar.
@@ -263,12 +305,22 @@ bool portal_arrancar(bool es_ap, const char *ip) {
     paso = PORTAL_NADA;
     if (escucha) return true;
 
+    // Todo lo que se le pide a lwIP desde el bucle va entre begin y end: lwIP
+    // corre adentro de una interrupcion. Ver sky.c.
+    cyw43_arch_lwip_begin();
     struct tcp_pcb *p = tcp_new();
+    if (p && tcp_bind(p, IP_ANY_TYPE, PUERTO) != ERR_OK) { tcp_close(p); p = NULL; }
+    cyw43_arch_lwip_end();
     if (!p) return false;
-    if (tcp_bind(p, IP_ANY_TYPE, PUERTO) != ERR_OK) { tcp_close(p); return false; }
-    escucha = tcp_listen_with_backlog(p, 2);
-    if (!escucha) { tcp_close(p); return false; }
-    tcp_accept(escucha, al_conectarse);
+    // Lugares en la cola de espera. Un telefono abre varias conexiones a la
+    // vez apenas entra a la red, asi que dos quedan cortos aunque la cola se
+    // libere bien.
+    cyw43_arch_lwip_begin();
+    escucha = tcp_listen_with_backlog(p, 8);
+    if (escucha) tcp_accept(escucha, al_conectarse);
+    else tcp_close(p);
+    cyw43_arch_lwip_end();
+    if (!escucha) return false;
     printf("portal: atendiendo en http://%s\n", mi_ip);
     return true;
 }

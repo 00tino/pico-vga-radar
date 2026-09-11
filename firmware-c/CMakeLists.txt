@@ -14,9 +14,14 @@ target_include_directories(radar PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 target_link_libraries(radar
     pico_stdlib
     pico_multicore
-    # La radio con lwIP en modo poll: nada de interrupciones asincronicas que
-    # le roben tiempo al video. Ver sky.c.
-    pico_cyw43_arch_lwip_poll
+    # La radio con lwIP atendido por interrupcion. Se probo primero en modo
+    # poll, para no meterle interrupciones al video, y no sirve: en ese modo
+    # el chip solo se atiende cuando uno lo pide, y los comandos internos del
+    # driver (los que hacen falta para asociarse a una red) se quedan sin
+    # respuesta y dan timeout. Es seguro para el video porque la interrupcion
+    # del VGA corre en prioridad maxima: puede interrumpir a la de la radio,
+    # nunca al reves. Ver sky.c.
+    pico_cyw43_arch_lwip_threadsafe_background
     pico_lwip_mbedtls
     pico_mbedtls
     hardware_pio
@@ -28,7 +33,43 @@ target_link_libraries(radar
     pico_flash
 )
 # Consola por USB, para poder ver que hace el firmware mientras se depura.
+# La pila del nucleo 1 vive en SCRATCH_X y son cuatro kilobytes justos: no se
+# puede agrandar. Por eso lo que ocupa lugar ahi (el armado de cada lote) se
+# saca de la pila y se guarda aparte. Ver digerir() en sky.c.
 pico_enable_stdio_usb(radar 1)
 pico_enable_stdio_uart(radar 0)
+
+# Firmware de prueba: solo la radio, sin video. Sirve para separar un problema
+# de la radio de uno de convivencia con el video. Ver prueba_wifi.c.
+add_executable(prueba_wifi prueba_wifi.c config.c)
+target_include_directories(prueba_wifi PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+target_link_libraries(prueba_wifi
+    pico_stdlib
+    pico_flash
+    hardware_flash
+    pico_cyw43_arch_lwip_threadsafe_background
+    # lwipopts.h es el mismo para los dos y pide TLS, asi que tambien aca.
+    pico_lwip_mbedtls
+    pico_mbedtls
+)
+pico_enable_stdio_usb(prueba_wifi 1)
+pico_enable_stdio_uart(prueba_wifi 0)
+pico_add_extra_outputs(prueba_wifi)
+
+# La misma prueba pero con el reloj bajo, como lo deja el video.
+add_executable(prueba_wifi_lento prueba_wifi.c config.c)
+target_compile_definitions(prueba_wifi_lento PRIVATE PRUEBA_RELOJ_LENTO=1)
+target_include_directories(prueba_wifi_lento PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+target_link_libraries(prueba_wifi_lento
+    pico_stdlib
+    pico_flash
+    hardware_flash
+    pico_cyw43_arch_lwip_threadsafe_background
+    pico_lwip_mbedtls
+    pico_mbedtls
+)
+pico_enable_stdio_usb(prueba_wifi_lento 1)
+pico_enable_stdio_uart(prueba_wifi_lento 0)
+pico_add_extra_outputs(prueba_wifi_lento)
 
 pico_add_extra_outputs(radar)

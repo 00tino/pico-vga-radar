@@ -25,6 +25,7 @@ void sky_init(bool pedir_portal);
 
 // Lo que el nucleo 0 necesita para dibujar la pantalla del QR.
 bool        sky_en_portal(void);
+bool        sky_intentando_conectar(void);  // todavia peleando con la red
 const char *sky_ap_nombre(void);
 const char *sky_ap_clave(void);
 const char *sky_portal_url(void);

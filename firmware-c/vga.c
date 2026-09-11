@@ -57,18 +57,28 @@ void vga_limpiar_rect(int x, int y0, int an, int y1, uint8_t color) {
     for (int y = y0; y <= y1; y++) memset(&vga_fb[y * VGA_ANCHO + x], color, (size_t)an);
 }
 
-void vga_init(void) {
-    vga_limpiar(0);
-
-    // 100,8 MHz. Sale de dividir el VCO de 1008 MHz por 10, y a su vez divide
-    // exacto para las tres maquinas de estado:
-    //     hsync y vsync  6,3 MHz  = 100,8 / 16
-    //     pixeles       50,4 MHz  = 100,8 / 2
-    // Sin divisores fraccionarios, que meten temblor en la imagen. Y sin
-    // sobrefrecuencia: a 252 MHz la placa puede no arrancar por tension.
+// El reloj del sistema, aparte del resto del arranque del video.
+//
+// Esta separado porque el orden importa: la radio tiene que arrancar DESPUES
+// de que el reloj quedo en su valor final (su bus se temporiza a partir de
+// este reloj, y cambiarselo despues lo desacomoda) pero ANTES de que el video
+// empiece a dibujar (ver main.c). O sea que esto va primero de todo, y
+// vga_init() despues.
+//
+// 100,8 MHz. Sale de dividir el VCO de 1008 MHz por 10, y a su vez divide
+// exacto para las tres maquinas de estado:
+//     hsync y vsync  6,3 MHz  = 100,8 / 16
+//     pixeles       50,4 MHz  = 100,8 / 2
+// Sin divisores fraccionarios, que meten temblor en la imagen. Y sin
+// sobrefrecuencia: a 252 MHz la placa puede no arrancar por tension.
+void vga_reloj(void) {
     if (!set_sys_clock_khz(100800, false)) {
         set_sys_clock_khz(126000, true);   // plan B
     }
+}
+
+void vga_init(void) {
+    vga_limpiar(0);
 
     uint off_h = pio_add_program(VGA_PIO, &hsync_program);
     uint off_v = pio_add_program(VGA_PIO, &vsync_program);
@@ -122,7 +132,16 @@ void vga_init(void) {
     channel_config_set_read_increment(&d, true);
     channel_config_set_write_increment(&d, false);
     channel_config_set_dreq(&d, pio_get_dreq(VGA_PIO, 2, true));
-    channel_config_set_high_priority(&d, true);
+    // SIN prioridad alta en el bus, y es a proposito. Este canal transfiere
+    // sin parar (una linea cada 32 us, todo el tiempo), asi que marcarlo como
+    // prioritario no le saca un poco de bus al resto: se lo saca siempre. Con
+    // la radio prendida eso se nota enseguida, porque el chip de WiFi
+    // tambien anda por DMA y sus comandos se quedan sin respuesta: el equipo
+    // ve la red y nunca logra entrar ("do_ioctl: timeout").
+    //
+    // Se midio: sin el video, la radio conecta en diez segundos; con el video
+    // y esta linea puesta, no conecta nunca.
+    channel_config_set_high_priority(&d, false);
     dma_channel_configure(dma_datos, &d, &VGA_PIO->txf[2], vga_fb,
                           sizeof(vga_fb) / 4, false);
 

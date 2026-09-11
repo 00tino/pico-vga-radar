@@ -48,6 +48,10 @@ static inline void vga_esperar_cuadro(void) {
     while (vga_cuadros == n) tight_loop_contents();
 }
 
+// Deja el reloj del sistema en su valor final. Va PRIMERO de todo, antes de
+// arrancar la radio y antes de vga_init(). Ver vga.c.
+void vga_reloj(void);
+
 void vga_init(void);
 void vga_limpiar(uint8_t color);
 void vga_limpiar_filas(int y0, int y1, uint8_t color);
