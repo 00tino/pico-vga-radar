@@ -388,15 +388,54 @@
     el.addEventListener("input", () => { leerGenerales(); volcarJson(); previa(); });
   });
 
+  // El equipo al que hay que mandarle todo esto. La dirección la cuelga la
+  // propia Pico del QR que muestra en el monitor: setup.html?pico=192.168.1.40
+  const PICO = new URLSearchParams(location.search).get("pico");
+
+  // Los mismos números que el firmware, en el orden de vista_t y lista_t de
+  // radar.h. Si alguna vez se agrega una vista, se agrega en los dos lados.
+  const VISTA_N = { radar: 0, hybrid: 1, wall: 2, follow: 3, follow_hybrid: 4, logos: 5 };
+  const LISTA_N = { fa: 0, fids: 1 };
+
+  // Una pantalla por parámetro, con los campos separados por "~". No va como
+  // JSON a propósito: del otro lado lo lee la placa, y con un JSON tendría
+  // que cargar un parser entero para leer nueve campos.
+  function paraLaPlaca() {
+    const c = paraElEquipo();
+    const campos = (p) => [
+      (p.nombre || "").slice(0, 23),
+      VISTA_N[p.vista] ?? 1,
+      LISTA_N[p.lista] ?? 0,
+      (p.apt || "").toUpperCase().slice(0, 3),
+      p.km, p.vuelos, c.tema, (p.seguir || "").toUpperCase().slice(0, 8), p.segundos,
+    ].map((v) => String(v).replace(/[~&|]/g, "")).join("~");
+
+    const q = new URLSearchParams();
+    q.set("n", c.pantallas.length);
+    c.pantallas.forEach((p, i) => q.set("p" + i, campos(p)));
+    return q.toString();
+  }
+
   $("guardar").onclick = () => {
     leerGenerales();
-    // Mientras no esté el wifi, queda guardado en este navegador. Cuando el
-    // equipo tenga portal, esto va a mandarse a la Pico, que es donde tiene
-    // que vivir: así aparece igual desde cualquier celular.
+    // Queda siempre en este navegador, así la próxima vez que abrís la página
+    // te encuentra lo que habías armado.
     localStorage.setItem("picoRadarConfig", JSON.stringify(paraElEquipo()));
-    $("msg").hidden = false;
-    setTimeout(() => { $("msg").hidden = true; }, 2500);
     volcarJson();
+
+    if (!PICO) {
+      // Sin equipo a la vista: la página se abrió sola, no desde el QR.
+      $("msg").hidden = false;
+      setTimeout(() => { $("msg").hidden = true; }, 2500);
+      return;
+    }
+
+    // Se NAVEGA a la Pico en vez de mandarle un fetch. Esta página va por
+    // https y el equipo por http: el navegador bloquea cualquier pedido de
+    // fondo entre los dos, pero dejar que la ventana vaya ahí lo permite. El
+    // equipo contesta con su propia página de "listo", que es la que ve el
+    // cliente mientras el monitor ya se está actualizando.
+    location.href = "http://" + PICO + "/save?" + paraLaPlaca();
   };
 
   // --- Buscar aeropuertos y aerolineas ---

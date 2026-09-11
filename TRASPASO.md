@@ -186,8 +186,65 @@ pantallas; está en el historial de git si hace falta volver a mirarlo.
 
 ### Lo que falta del proyecto
 
-WiFi, portal de configuración, QR y datos ADS-B reales. **Nada de eso está
-empezado.** El tráfico es simulado.
+**Nada de esto se probó en la placa todavía.** Todo lo de abajo compila y
+tiene pruebas que corren en la Mac, pero ningún equipo lo ejecutó.
+
+**El portal y el QR**: el equipo arranca, y si no tiene una red cargada (o no
+logra entrar a la que tiene después de cuatro intentos, o el cliente hizo el
+gesto de los tres cortes), levanta su propio wifi `RADAR-XXXX` con la clave
+`radar1234`, y muestra el QR en el monitor. El celular entra, el portal
+cautivo le abre solo el formulario, el cliente elige su red de una lista (la
+Pico barre el aire, no hay que escribirla) y el equipo se reinicia y se
+conecta. Ya con red, el QR lleva a `docs/setup.html?pico=<ip>`, que es la
+página completa, y el botón de guardar **navega** a `/save` en la Pico — no
+puede ser un fetch, porque el navegador bloquea los pedidos de fondo de https
+a http.
+
+Lo que la Pico sirve de su propia flash es un único formulario, el de la red.
+Todo el resto (mapas, logos, vista previa) sigue viviendo en GitHub Pages,
+igual que lo había dejado `pico/portal.py`. El DHCP y el DNS del portal
+cautivo están en `ap.c`: no vienen con el SDK y son cortos, así que se
+escribieron.
+
+**No se puede** hacer que el celular le "comparta" la red al equipo como
+cuando compartís wifi entre dos teléfonos: eso necesita que el aparato que se
+conecta lea un QR con la cámara, y la Pico no tiene cámara. La lista de redes
+barridas es lo más cerca que se llega.
+
+**El WiFi y los datos reales**: `sky.c` levanta la radio en el **núcleo 1**
+(lwIP en modo poll, para no robarle tiempo al video del núcleo 0) y le pide
+cada 20 s un lote a `sky-proxy/api/pico.js`, que devuelve **texto plano, una
+línea por avión, con la ruta ya resuelta** — 1,5 kB en vez de los ~50 kB del
+JSON crudo, y sin parser de JSON en la placa. `vivo.c` lo pasa a los aviones
+del radar y calcula ciudades, distancia, avance y hora estimada de llegada
+con los 5334 aeropuertos que ya estaban.
+
+La red se carga en `instalacion.h`. **Si queda vacía, el equipo ni prende la
+radio** y se ve el tráfico simulado de siempre, igual que antes.
+
+**La demora de las tarjetas queda siempre en cero**, y es a propósito: ADS-B
+no manda el horario que publicó la aerolínea, así que no hay contra qué
+comparar. Lo que sí se calcula es la hora estimada de llegada. Está marcado
+en `vivo.c`.
+
+**Las pantallas ahora se guardan en la flash** (`config.c`, anteúltimo
+sector; el último sigue siendo el de `arranques.c`). Con `g` por consola se
+guardan las que estén puestas y con `G` se vuelve a las de fábrica. Es lo que
+va a llamar el portal cuando exista.
+
+**Sin la placa se prueba así** — las tres tienen que dar en verde:
+
+| | qué prueba |
+|---|---|
+| `herramientas/probar_sky.sh` | Pide un lote de verdad al proxy y lo hace pasar por el mismo parser y los mismos cálculos que el firmware, mostrando las tarjetas que saldrían. Salta si alguien toca el formato del proxy. |
+| `herramientas/probar_portal.sh` | Le pide la dirección a `docs/setup.html` **ejecutando su código de verdad** (no una copia) y se la da al parser del firmware. Salta si la web y la placa dejan de hablar el mismo idioma. |
+| `herramientas/probar_qr.sh` | Dibuja el QR y lo hace **leer por el lector de códigos de macOS**, el mismo que usa la cámara del teléfono. No alcanza con comparar la matriz contra otra implementación: las dos pueden estar mal. |
+
+**El gesto de los tres cortes** ahora tiene una ventana de tres minutos
+(`ARRANQUES_SEGUNDOS` en `arranques.h`): mientras cada tramo encendido dure
+menos que eso, los tres cortes cuentan como seguidos. Del otro lado, cortar
+antes de unos tres segundos tampoco cuenta, porque la placa no llega a anotar
+el arranque.
 
 ---
 
