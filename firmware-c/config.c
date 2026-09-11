@@ -23,12 +23,13 @@
 #define SECTOR_OFF  (PICO_FLASH_SIZE_BYTES - 2 * FLASH_SECTOR_SIZE)
 
 #define FIRMA    0x57535031u    // "WSP1", de Wingsplit pantallas
-#define VERSION  1
+#define VERSION  2
 
 typedef struct {
     uint32_t   firma;
     uint16_t   version;
     uint16_t   n;                  // cuantas pantallas, 0 si solo hay wifi
+    uint16_t   max_puntos;         // cuantos aviones se dibujan en el circulo
     char       ssid[33];
     char       pass[64];
     pantalla_t p[PANTALLAS_MAX];
@@ -37,6 +38,11 @@ typedef struct {
 
 char config_ssid[33];
 char config_pass[64];
+
+// Cuantos aviones se dibujan como punto en el circulo. Vive aca y no en
+// radar.c porque este archivo tambien lo compilan las pruebas de wifi, que no
+// tienen radar: quien se lo pasa al dibujo es main.c.
+int config_max_puntos = CONFIG_MAX_PUNTOS_DEF;
 
 static const guardado_t *en_flash = (const guardado_t *)(XIP_BASE + SECTOR_OFF);
 
@@ -90,6 +96,7 @@ bool config_leer(void) {
     // El wifi sirve aunque todavia no haya ni una pantalla armada: el cliente
     // carga primero la red y recien despues configura lo que quiere ver.
     elegir_wifi(en_flash->ssid, en_flash->pass);
+    if (en_flash->max_puntos >= 1) config_max_puntos = en_flash->max_puntos;
     if (en_flash->n == 0) {
         printf("config: hay wifi guardado pero ninguna pantalla\n");
         return false;
@@ -110,6 +117,7 @@ static void armar(int cuantas) {
     g->firma = FIRMA;
     g->version = VERSION;
     g->n = (uint16_t)cuantas;
+    g->max_puntos = (uint16_t)config_max_puntos;
     snprintf(g->ssid, sizeof g->ssid, "%s", config_ssid);
     snprintf(g->pass, sizeof g->pass, "%s", config_pass);
     if (cuantas > 0) memcpy(g->p, pantallas, sizeof(pantalla_t) * cuantas);

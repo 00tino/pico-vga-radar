@@ -85,19 +85,14 @@
         </div>
 
         <div class="card">
-          <label>Qué mostrar</label>
-          <div class="checks">
-            <label><input id="f_air" type="checkbox" checked> Aerolíneas</label>
-            <label><input id="f_ga" type="checkbox"> Gral. aviación</label>
-            <label><input id="f_biz" type="checkbox"> Jets ejecutivos</label>
-            <label><input id="f_heli" type="checkbox"> Helicópteros</label>
-          </div>
-          <div class="row" style="margin-top:10px">
-            <div><label>Máx. aviones</label><input id="max_aircraft" type="number" value="16" min="1" max="24">
-              <p class="resumen">Hasta 24. Es lo que el equipo puede seguir sin que se le note.</p></div>
-            <div><label style="display:flex;gap:8px;align-items:center;margin-top:18px">
-              <input id="include_ground" type="checkbox" style="width:auto;margin:0"> Incluir en tierra</label></div>
-          </div>
+          <label>Puntos en el radar</label>
+          <input id="max_aircraft" type="number" value="16" min="1" max="32">
+          <p class="resumen">Cuántos aviones se dibujan dentro del círculo, empezando
+            por los más cercanos al aeropuerto. Es sólo para que el radar se entienda:
+            con treinta puntos encimados no se lee nada.</p>
+          <p class="resumen"><b>La lista de vuelos no se toca.</b> Sigue pasando por
+            todos los que haya en el aire, de a una página por vez: si hay cincuenta,
+            los cincuenta van a ir apareciendo.</p>
         </div>
 
         <div class="card">
@@ -182,7 +177,7 @@
     wifi: { ssid: "", pass: "" },
     tema: "crt_amber",
     casa: { on: false, lat: "", lon: "", km: 3 },
-    filtros: { aerolineas: true, ga: false, biz: false, heli: false, en_tierra: false, max: 16 },
+    max_puntos: 16,
     pantallas: [
       { nombre: "Vuelos de Ezeiza", vista: "hybrid", apt: "EZE", km: 220,
         lista: "fa", vuelos: 4, seguir: "", segundos: 15 },
@@ -341,12 +336,7 @@
     cfg.casa.lat = $("casa_lat").value;
     cfg.casa.lon = $("casa_lon").value;
     cfg.casa.km = Number($("casa_km").value) || 3;
-    cfg.filtros.aerolineas = $("f_air").checked;
-    cfg.filtros.ga = $("f_ga").checked;
-    cfg.filtros.biz = $("f_biz").checked;
-    cfg.filtros.heli = $("f_heli").checked;
-    cfg.filtros.en_tierra = $("include_ground").checked;
-    cfg.filtros.max = Number($("max_aircraft").value) || 16;
+    cfg.max_puntos = Number($("max_aircraft").value) || 16;
   }
 
   function escribirGenerales() {
@@ -354,12 +344,7 @@
     $("casa_lat").value = cfg.casa.lat;
     $("casa_lon").value = cfg.casa.lon;
     $("casa_km").value = cfg.casa.km;
-    $("f_air").checked = !!cfg.filtros.aerolineas;
-    $("f_ga").checked = !!cfg.filtros.ga;
-    $("f_biz").checked = !!cfg.filtros.biz;
-    $("f_heli").checked = !!cfg.filtros.heli;
-    $("include_ground").checked = !!cfg.filtros.en_tierra;
-    $("max_aircraft").value = cfg.filtros.max;
+    $("max_aircraft").value = cfg.max_puntos;
   }
 
   // Lo que se le manda al equipo. Las duraciones salen ya acotadas, para que
@@ -426,6 +411,8 @@
     ].map((v) => String(v).replace(/[~&|]/g, "")).join("~");
 
     const q = new URLSearchParams();
+    // Uno solo para todo el equipo, no por pantalla.
+    q.set("max", Math.min(32, Math.max(1, Number(c.max_puntos) || 16)));
     q.set("n", c.pantallas.length);
     c.pantallas.forEach((p, i) => q.set("p" + i, campos(p)));
     return q.toString();

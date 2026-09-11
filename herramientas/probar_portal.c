@@ -55,6 +55,25 @@ int main(int argc, char **argv) {
             p[i].segundos > PANTALLA_SEGUNDOS_MAX)    mal("una duracion fuera de rango");
     }
 
+    // El tope de puntos del circulo viaja suelto, no adentro de cada pantalla.
+    printf("== puntos en el circulo ==\n");
+    struct { const char *que, *consulta; int espera; } topes[] = {
+        {"el que manda la web", argv[1], 16},
+        {"sin el campo",        "n=1&p0=X~1~0~EZE~150~3~t~~30", 16},
+        {"uno solo",            "max=1&n=1&p0=X~1~0~EZE~150~3~t~~30", 1},
+        {"el maximo",           "max=32&n=1&p0=X~1~0~EZE~150~3~t~~30", 32},
+        {"pasado de rosca",     "max=999&n=1&p0=X~1~0~EZE~150~3~t~~30", 16},
+        {"negativo",            "max=-5&n=1&p0=X~1~0~EZE~150~3~t~~30", 16},
+    };
+    for (unsigned i = 0; i < sizeof topes / sizeof *topes; i++) {
+        // Igual que en portal.c: fuera de rango se queda con el que tenia.
+        const int leido = portal_numero(topes[i].consulta, "max", 16);
+        const int queda = (leido >= 1 && leido <= 32) ? leido : 16;
+        printf("  %-20s -> %d puntos\n", topes[i].que, queda);
+        if (queda != topes[i].espera) mal("el tope de puntos no quedo donde debia");
+    }
+    printf("\n");
+
     // Lo que tiene que aguantar sin romperse: basura, campos de menos, y una
     // direccion con cosas que no son pantallas.
     printf("== cosas mal formadas ==\n");

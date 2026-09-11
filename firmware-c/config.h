@@ -11,6 +11,11 @@ bool config_leer(void);
 
 // La red del cliente, cargada desde el portal. Si nunca guardo ninguna, los
 // dos quedan vacios y manda lo que diga instalacion.h.
+// Cuantos aviones se dibujan como punto en el circulo. La lista de tarjetas
+// no se toca: pasa por todos los vuelos que haya.
+#define CONFIG_MAX_PUNTOS_DEF 16
+extern int config_max_puntos;
+
 extern char config_ssid[33];
 extern char config_pass[64];
 

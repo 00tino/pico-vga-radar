@@ -85,6 +85,10 @@ extern vista_t radar_vista;
 
 // Cuantas tarjetas por pagina y cada cuantos segundos rota el carrusel.
 extern int radar_tarjetas;
+
+// Cuantos aviones se dibujan como punto en el circulo. La lista de tarjetas
+// no se toca: pasa por todos los que haya. Ver radar.c.
+extern int radar_max_puntos;
 extern int radar_rotacion_s;
 
 // Indicativo del vuelo que se sigue en VISTA_SEGUIR.

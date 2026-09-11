@@ -119,6 +119,27 @@ static void encabezado_ancho(const char *derecha) { encabezado(derecha, area.an)
 
 static int beam = 0;              // angulo del barrido, en unidades de trig.h
 static uint8_t orden[RADAR_MAX_AVIONES];   // aviones ordenados por cercania
+
+// Cuantos puntos se dibujan en el circulo. NO limita la lista: las tarjetas
+// siguen pasando por todos los vuelos que haya, de a una pagina por vez. Son
+// dos cosas distintas y el cliente las elige por separado, porque un scope
+// con treinta puntos encimados no se entiende y una lista con treinta vuelos
+// si.
+int radar_max_puntos = RADAR_MAX_AVIONES;
+
+// Se recalcula una vez por cuadro, en radar_avanzar: el dibujo pasa por cada
+// avion una vez por banda, y buscarlo en el orden cada vez saldria caro.
+static uint8_t en_el_scope[RADAR_MAX_AVIONES];
+
+static void marcar_los_del_scope(void) {
+    memset(en_el_scope, 0, sizeof en_el_scope);
+    int tope = radar_max_puntos;
+    if (tope < 1) tope = 1;
+    if (tope > radar_cantidad) tope = radar_cantidad;
+    // orden[] viene de mas cerca a mas lejos: los que se dibujan son los que
+    // estan encima del aeropuerto, no los del borde.
+    for (int i = 0; i < tope; i++) en_el_scope[orden[i]] = 1;
+}
 static uint8_t lista[RADAR_MAX_AVIONES];   // la que ven las tarjetas, congelada
 static int lista_n = 0;
 
@@ -278,6 +299,7 @@ void radar_avanzar(void) {
     if (radar_vista == VISTA_LOGOS) { void logos_pantalla_avanzar(void); logos_pantalla_avanzar(); }
     anotar_rastro();
     ordenar_por_cercania();
+    marcar_los_del_scope();
     elegir_senda();
 
     // Quien esta pasando sobre la casa. Se elige el mas cercano dentro del
@@ -508,6 +530,9 @@ static void radar_pintar(void) {
     }
 
     for (int i = 0; i < radar_cantidad; i++) {
+        // Los que no entran en el tope de puntos no se dibujan, pero siguen
+        // estando en la lista de abajo.
+        if (!en_el_scope[i]) continue;
         avion_t *a = &radar_aviones[i];
         int x = PROY_X(a->lat, a->lon);
         int y = PROY_Y(a->lat, a->lon);

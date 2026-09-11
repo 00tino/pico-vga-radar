@@ -26,6 +26,7 @@
 #include "portal.h"
 #include "config.h"
 #include "pantallas.h"
+#include "radar.h"
 #include "portal_parse.h"
 #include "pico/cyw43_arch.h"
 #include "lwip/tcp.h"
@@ -175,6 +176,14 @@ static void guardar_pantallas(struct tcp_pcb *pcb, const char *consulta) {
     if (!puestas) {
         aviso(pcb, "No se pudo", "Ninguna pantalla vino completa.");
         return;
+    }
+
+    // Cuantos puntos van en el circulo. Es uno solo para todo el equipo, no
+    // por pantalla, asi que viaja suelto y no adentro de cada una.
+    const int tope = portal_numero(consulta, "max", config_max_puntos);
+    if (tope >= 1 && tope <= RADAR_MAX_AVIONES) {
+        config_max_puntos = tope;      // para que se guarde en la flash
+        radar_max_puntos  = tope;      // y para que se vea ya mismo
     }
 
     memcpy(pantallas, nuevas, sizeof(pantalla_t) * puestas);
