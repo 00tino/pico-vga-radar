@@ -67,19 +67,55 @@ int main(int argc, char **argv) {
         {"mas de las que entran", "n=99&p0=X~1~0~EZE~150~3~crt_amber~~30"},
         {"nombre larguisimo",     "n=1&p0=" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                                   "~1~0~EZE~150~3~crt_amber~~30"},
+        // Los negativos pasaban el control de la vista, porque -5 no es mayor
+        // que la ultima vista, y terminaban usandose como indice.
+        {"vista negativa",        "n=1&p0=X~-5~0~EZE~150~3~crt_amber~~30"},
+        {"lista negativa",        "n=1&p0=X~1~-9~EZE~150~3~crt_amber~~30"},
+        {"todo negativo",         "n=-1&p0=X~-1~-1~EZE~-150~-3~crt_amber~~-30"},
     };
     for (unsigned i = 0; i < sizeof feas / sizeof *feas; i++) {
         pantalla_t q[PANTALLAS_MAX];
         const int cuantas = portal_leer_pantallas(feas[i].consulta, q, PANTALLAS_MAX);
         printf("  %-22s -> %d pantallas", feas[i].que, cuantas);
         if (cuantas > 0) {
-            printf(" (%s, %d km, %d s)", q[0].apt, q[0].radio_km, q[0].segundos);
+            printf(" (%s, %d km, %d s, vista %d, lista %d)", q[0].apt, q[0].radio_km,
+                   q[0].segundos, (int)q[0].vista, (int)q[0].lista);
             if (q[0].radio_km < 5 || q[0].radio_km > 400) mal("dejo pasar un radio imposible");
             if (q[0].segundos > PANTALLA_SEGUNDOS_MAX) mal("dejo pasar una duracion imposible");
-            if (q[0].vista > VISTA_LOGOS) mal("dejo pasar una vista que no existe");
+            if ((int)q[0].vista < 0 || q[0].vista > VISTA_LOGOS)
+                mal("dejo pasar una vista que no existe");
+            if ((int)q[0].lista < 0 || q[0].lista > LISTA_FIDS)
+                mal("dejo pasar una forma de lista que no existe");
+            if (q[0].tarjetas < 1 || q[0].tarjetas > 6)
+                mal("dejo pasar una cantidad de vuelos imposible");
         }
         if (cuantas > PANTALLAS_MAX) mal("devolvio mas pantallas de las que entran");
         printf("\n");
+    }
+
+    // Los nombres de red los pone cualquiera que este cerca: tienen que poder
+    // salir en la pagina y en el JSON sin romper ninguno de los dos.
+    printf("\n== nombres de red con mala intencion ==\n");
+    const char *feos[] = {
+        "<script>alert(1)</script>",
+        "Red\"; DROP",
+        "comillas \" y \\ barra",
+        "<img src=x onerror=alert(1)>",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",     // los 32 del maximo
+    };
+    for (unsigned i = 0; i < sizeof feos / sizeof *feos; i++) {
+        char html[512], json[512];
+        portal_escapar(feos[i], html, sizeof html);
+        portal_escapar_json(feos[i], json, sizeof json);
+        printf("  %-30s\n    html: %s\n    json: \"%s\"\n", feos[i], html, json);
+        if (strchr(html, '<') || strchr(html, '>') || strchr(html, '"'))
+            mal("quedo html sin escapar");
+        // En el JSON, toda comilla que quede tiene que venir precedida de su
+        // barra: si no, cierra la cadena antes de tiempo.
+        for (const char *c = json; *c; c++) {
+            if (*c == '\\') { if (c[1]) c++; continue; }
+            if (*c == '"') { mal("quedo una comilla suelta en el json"); break; }
+        }
     }
 
     printf("\n%s\n", fallos ? "HAY FALLAS" : "todo bien");

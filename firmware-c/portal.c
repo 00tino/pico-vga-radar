@@ -199,8 +199,9 @@ static err_t al_llegar(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
         portal_parametro(ruta, "ssid", ssid, sizeof ssid);
         portal_parametro(ruta, "pass", pass, sizeof pass);
         if (ssid[0]) {
-            char detalle[96];
-            snprintf(detalle, sizeof detalle, "Reiniciando y conectando a %s...", ssid);
+            char limpio[200], detalle[256];
+            portal_escapar(ssid, limpio, sizeof limpio);
+            snprintf(detalle, sizeof detalle, "Reiniciando y conectando a %s...", limpio);
             aviso(pcb, "Guardado", detalle);
             config_guardar_wifi(ssid, pass);
             paso = PORTAL_WIFI;
@@ -210,11 +211,23 @@ static err_t al_llegar(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err
     } else if (!strncmp(ruta, "/save?", 6)) {
         guardar_pantallas(pcb, ruta);
     } else if (!strcmp(ruta, "/redes")) {
-        char json[REDES_MAX * 48 + 4];
+        // Un SSID de 32 caracteres, todos escapados, ocupa seis veces mas:
+        // el lugar se calcula para el peor caso y no para el habitual.
+        char json[REDES_MAX * (33 * 6 + 24) + 8];
         int n = snprintf(json, sizeof json, "[");
-        for (int i = 0; i < redes_n; i++)
-            n += snprintf(json + n, sizeof json - n, "%s{\"n\":\"%s\",\"s\":%d}",
-                          i ? "," : "", redes[i], redes_rssi[i]);
+        for (int i = 0; i < redes_n; i++) {
+            // snprintf devuelve lo que HABRIA escrito, no lo que escribio: si
+            // se suma sin mirar, n se pasa del buffer y el tamano que queda,
+            // que no tiene signo, da vuelta y se vuelve enorme.
+            if (n >= (int)sizeof json - 2) break;
+            char limpio[33 * 6 + 1];
+            portal_escapar_json(redes[i], limpio, sizeof limpio);
+            const int puesto = snprintf(json + n, sizeof json - n,
+                                        "%s{\"n\":\"%s\",\"s\":%d}",
+                                        i ? "," : "", limpio, redes_rssi[i]);
+            if (puesto < 0 || puesto >= (int)sizeof json - n) break;
+            n += puesto;
+        }
         snprintf(json + n, sizeof json - n, "]");
         mandar(pcb, "application/json", json);
     } else if (modo_ap) {
