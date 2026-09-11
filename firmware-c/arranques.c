@@ -18,6 +18,7 @@
 #include "arranques.h"
 #include "hardware/flash.h"
 #include "hardware/sync.h"
+#include "pico/flash.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -31,16 +32,28 @@ static const uint8_t *sector = (const uint8_t *)(XIP_BASE + SECTOR_OFF);
 static uint8_t pagina[FLASH_PAGE_SIZE];
 static int marcas_puestas;
 
-static void borrar(void) {
-    uint32_t irq = save_and_disable_interrupts();
+// Escribir en la flash deja el chip sin poder leer programa mientras dura, y
+// el nucleo 1 corre desde flash: si se lo agarra en el medio, se cuelga la
+// placa. flash_safe_execute lo frena antes y lo suelta despues. Con el nucleo
+// 1 todavia sin arrancar tambien sirve: ahi no tiene a quien frenar.
+static void hacer_borrado(void *nada) {
+    (void)nada;
     flash_range_erase(SECTOR_OFF, FLASH_SECTOR_SIZE);
-    restore_interrupts(irq);
+}
+
+static void hacer_grabado(void *nada) {
+    (void)nada;
+    flash_range_program(SECTOR_OFF, pagina, FLASH_PAGE_SIZE);
+}
+
+static void borrar(void) {
+    if (flash_safe_execute(hacer_borrado, NULL, 2000) != PICO_OK)
+        printf("arranques: no se pudo borrar el sector\n");
 }
 
 static void grabar_pagina(void) {
-    uint32_t irq = save_and_disable_interrupts();
-    flash_range_program(SECTOR_OFF, pagina, FLASH_PAGE_SIZE);
-    restore_interrupts(irq);
+    if (flash_safe_execute(hacer_grabado, NULL, 2000) != PICO_OK)
+        printf("arranques: no se pudo grabar la cuenta\n");
 }
 
 // Se llama al arrancar, ANTES de encender el video: aca es donde puede haber

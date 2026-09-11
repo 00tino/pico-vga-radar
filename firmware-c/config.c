@@ -1,0 +1,154 @@
+// Las pantallas del cliente, guardadas en la flash.
+//
+// Hasta ahora la lista se armaba en main.c y se perdia en cada arranque.
+// Aca se guarda, para que el dia que exista el portal no haya que tocar nada
+// de esto: la web va a llamar a config_guardar() y listo.
+//
+// Donde va: el ANTEULTIMO sector de la flash. El ultimo es de arranques.c y
+// se borra solo cuando el cliente hace el gesto de los tres cortes; si las
+// pantallas estuvieran ahi, ese gesto se las llevaria puestas.
+//
+// Como se sabe si lo que hay sirve: una firma al principio, la version del
+// formato, y una suma de todo lo demas al final. Flash sin escribir es todo
+// 0xFF, asi que sin la firma ya se sabe que no hay nada. La suma es para el
+// caso feo: que se corte la corriente en el medio de un guardado.
+#include "config.h"
+#include "instalacion.h"
+#include "hardware/flash.h"
+#include "pico/flash.h"
+#include <string.h>
+#include <stdio.h>
+
+// El de arranques.c es el ultimo; este es el de al lado.
+#define SECTOR_OFF  (PICO_FLASH_SIZE_BYTES - 2 * FLASH_SECTOR_SIZE)
+
+#define FIRMA    0x57535031u    // "WSP1", de Wingsplit pantallas
+#define VERSION  1
+
+typedef struct {
+    uint32_t   firma;
+    uint16_t   version;
+    uint16_t   n;                  // cuantas pantallas, 0 si solo hay wifi
+    char       ssid[33];
+    char       pass[64];
+    pantalla_t p[PANTALLAS_MAX];
+    uint32_t   suma;
+} guardado_t;
+
+char config_ssid[33];
+char config_pass[64];
+
+static const guardado_t *en_flash = (const guardado_t *)(XIP_BASE + SECTOR_OFF);
+
+// Se graban paginas enteras, asi que el buffer tiene que ser multiplo de
+// FLASH_PAGE_SIZE. Con ocho pantallas son unos 600 bytes: entran en tres.
+#define PAGINAS ((sizeof(guardado_t) + FLASH_PAGE_SIZE - 1) / FLASH_PAGE_SIZE)
+static uint8_t buffer[PAGINAS * FLASH_PAGE_SIZE];
+
+// Suma simple de todo menos el campo de la suma. No es criptografia: lo unico
+// que tiene que detectar es un guardado a medio hacer.
+static uint32_t sumar(const guardado_t *g) {
+    const uint8_t *b = (const uint8_t *)g;
+    const int hasta = (int)(sizeof *g - sizeof g->suma);
+    uint32_t s = 2166136261u;
+    for (int i = 0; i < hasta; i++) { s ^= b[i]; s *= 16777619u; }
+    return s;
+}
+
+static void hacer_guardado(void *nada) {
+    (void)nada;
+    flash_range_erase(SECTOR_OFF, FLASH_SECTOR_SIZE);
+    flash_range_program(SECTOR_OFF, buffer, sizeof buffer);
+}
+
+// Deja en config_ssid y config_pass la red que corresponda usar. La del
+// portal le gana a la de instalacion.h: si el cliente cargo una, es la que
+// quiere, aunque el equipo haya salido de fabrica con otra.
+static void elegir_wifi(const char *ssid, const char *pass) {
+    const bool hay_guardada = ssid && ssid[0];
+    snprintf(config_ssid, sizeof config_ssid, "%s",
+             hay_guardada ? ssid : INSTALACION_WIFI_SSID);
+    snprintf(config_pass, sizeof config_pass, "%s",
+             hay_guardada ? (pass ? pass : "") : INSTALACION_WIFI_PASS);
+}
+
+bool config_hay_wifi(void) { return config_ssid[0] != 0; }
+
+bool config_leer(void) {
+    elegir_wifi(0, 0);              // por si no hay nada guardado
+    if (en_flash->firma != FIRMA) return false;
+    if (en_flash->version != VERSION) {
+        printf("config: hay pantallas guardadas en otro formato (v%d), se ignoran\n",
+               en_flash->version);
+        return false;
+    }
+    if (en_flash->n > PANTALLAS_MAX) return false;
+    if (sumar(en_flash) != en_flash->suma) {
+        printf("config: lo guardado quedo a medias, se ignora\n");
+        return false;
+    }
+    // El wifi sirve aunque todavia no haya ni una pantalla armada: el cliente
+    // carga primero la red y recien despues configura lo que quiere ver.
+    elegir_wifi(en_flash->ssid, en_flash->pass);
+    if (en_flash->n == 0) {
+        printf("config: hay wifi guardado pero ninguna pantalla\n");
+        return false;
+    }
+    memcpy(pantallas, en_flash->p, sizeof(pantalla_t) * en_flash->n);
+    pantallas_n = en_flash->n;
+    printf("config: %d pantallas leidas de la flash\n", pantallas_n);
+    return true;
+}
+
+// Arma el bloque con lo que haya que guardar. Las pantallas y el wifi viven
+// en el mismo sector, asi que guardar una cosa no puede borrar la otra: se
+// escriben siempre las dos.
+static void armar(int cuantas) {
+    guardado_t *g = (guardado_t *)buffer;
+    memset(buffer, 0xFF, sizeof buffer);
+    memset(g, 0, sizeof *g);
+    g->firma = FIRMA;
+    g->version = VERSION;
+    g->n = (uint16_t)cuantas;
+    snprintf(g->ssid, sizeof g->ssid, "%s", config_ssid);
+    snprintf(g->pass, sizeof g->pass, "%s", config_pass);
+    if (cuantas > 0) memcpy(g->p, pantallas, sizeof(pantalla_t) * cuantas);
+    g->suma = sumar(g);
+}
+
+bool config_guardar_wifi(const char *ssid, const char *pass) {
+    if (!ssid || !ssid[0]) return false;
+    snprintf(config_ssid, sizeof config_ssid, "%s", ssid);
+    snprintf(config_pass, sizeof config_pass, "%s", pass ? pass : "");
+    // Se conservan las pantallas que ya estuvieran armadas.
+    armar(pantallas_n > 0 && pantallas_n <= PANTALLAS_MAX ? pantallas_n : 0);
+    if (flash_safe_execute(hacer_guardado, NULL, 3000) != PICO_OK) {
+        printf("config: no se pudo guardar la red\n");
+        return false;
+    }
+    printf("config: red \"%s\" guardada\n", config_ssid);
+    return true;
+}
+
+bool config_guardar(void) {
+    if (pantallas_n <= 0 || pantallas_n > PANTALLAS_MAX) return false;
+    armar(pantallas_n);
+
+    // Borrar un sector son decenas de milisegundos con el video parado: sale
+    // una franja. Es a proposito que esto no se llame solo, sino cuando el
+    // cliente guarda desde el portal, que es un momento en el que ya esta
+    // mirando otra cosa.
+    if (flash_safe_execute(hacer_guardado, NULL, 3000) != PICO_OK) {
+        printf("config: no se pudieron guardar las pantallas\n");
+        return false;
+    }
+    printf("config: %d pantallas guardadas\n", pantallas_n);
+    return true;
+}
+
+bool config_borrar(void) {
+    memset(buffer, 0xFF, sizeof buffer);
+    if (flash_safe_execute(hacer_guardado, NULL, 3000) != PICO_OK) return false;
+    printf("config: pantallas borradas, vuelven las de fabrica\n");
+    return true;
+}

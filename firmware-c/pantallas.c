@@ -19,6 +19,8 @@
 #include <string.h>
 
 void demo_aeropuerto(const char *iata);
+#include "vivo.h"
+#include "sky.h"
 void radar_viaje_rehacer(void);
 void logos_pantalla_rehacer(void);
 
@@ -46,12 +48,17 @@ static void aplicar(int i) {
     const pantalla_t *p = &pantallas[i];
     if (strncmp(apt_puesto, p->apt, 3)) {
         snprintf(apt_puesto, sizeof apt_puesto, "%s", p->apt);
-        demo_aeropuerto(apt_puesto);
+        // Con trafico real el aeropuerto solo se corre; con el simulado hay
+        // que volver a repartir los aviones alrededor.
+        if (vivo_hay_datos()) vivo_aeropuerto(apt_puesto);
+        else                  demo_aeropuerto(apt_puesto);
     }
     radar_vista = p->vista;
     radar_lista = p->lista;
     radar_tarjetas = p->tarjetas;
     radar_apt.radio_km = p->radio_km;
+    // El nucleo 1 se entera aca de para donde mirar en el proximo pedido.
+    sky_mirar(radar_apt.lat, radar_apt.lon, radar_apt.radio_km);
     radar_tema_poner(p->tema);
     snprintf(radar_seguir, sizeof radar_seguir, "%s", p->seguir);
     radar_marcar_sucio();

@@ -16,6 +16,10 @@
 #include "instalacion.h"
 #include "monitor.h"
 #include "arranques.h"
+#include "sky.h"
+#include "config.h"
+#include "qr.h"
+#include "vivo.h"
 #include "pantallas.h"
 #include "pico/stdlib.h"
 #include <stdio.h>
@@ -124,22 +128,65 @@ static void dibujar_patron(void) {
     gfx_texto(X + AN - 16 - gfx_ancho_texto("824 logos", 1), ry + 2, "824 logos", apagado, 1);
 }
 
-// Lo que se ve cuando el cliente pide configurar cortando la corriente tres
-// veces. Por ahora es el cartel: el QR va a ir aca cuando este el wifi.
+// Lo que se ve mientras el equipo esta esperando que lo configuren: el QR
+// grande en el medio, y abajo el nombre del wifi propio y la clave, por si el
+// telefono no lee el codigo.
+//
+// El QR se dibuja con modulos bien gordos a proposito. La camara de un
+// telefono lo lee de lejos y a traves de un monitor que puede estar sucio o
+// mal enfocado, asi que conviene que sobre tamano: seis pixeles por modulo
+// dan un codigo de 222 px de lado, que en 640x480 entra comodo y deja lugar
+// abajo para el nombre de la red y la clave.
 static void pantalla_configuracion(void) {
     const int X = area.x, Y = area.y, AN = area.an, AL = area.al;
     const uint8_t fondo = vga_rgb(0x0a, 0x08, 0x05);
     const uint8_t ambar = vga_rgb(0xe8, 0xb8, 0x6d);
     const uint8_t tenue = vga_rgb(0x7a, 0x60, 0x38);
+    const uint8_t blanco = vga_color(7, 7, 3);
+
     vga_limpiar(fondo);
     gfx_rect(X, Y, AN, AL, tenue);
-    gfx_texto_centrado(X + AN / 2, Y + AL / 2 - 60, "MODO CONFIGURACION", ambar, 3);
-    gfx_texto_centrado(X + AN / 2, Y + AL / 2 + 10,
-                       "Aca va a ir el codigo QR para configurar el radar", tenue, 1);
-    gfx_texto_centrado(X + AN / 2, Y + AL / 2 + 34,
-                       "desde el celular. Falta el wifi.", tenue, 1);
-    gfx_texto_centrado(X + AN / 2, Y + AL - 40,
-                       "Para volver al radar, cortar la corriente una vez", tenue, 1);
+    gfx_texto_centrado(X + AN / 2, Y + 26, "CONFIGURAR EL RADAR", ambar, 2);
+
+    uint8_t m[QR_LADO][QR_LADO];
+    const char *url = sky_portal_url();
+    if (url[0] && qr_armar(url, m)) {
+        // Sobre blanco y con margen alrededor: un QR sin borde claro no lo
+        // lee ninguna camara.
+        const int lado = 6;
+        const int borde = 4 * lado;
+        const int caja = QR_LADO * lado + 2 * borde;
+        const int qx = X + (AN - caja) / 2, qy = Y + 58;
+        gfx_rect_lleno(qx, qy, caja, caja, blanco);
+        for (int j = 0; j < QR_LADO; j++)
+            for (int i = 0; i < QR_LADO; i++)
+                if (m[j][i])
+                    gfx_rect_lleno(qx + borde + i * lado, qy + borde + j * lado,
+                                   lado, lado, fondo);
+
+        const int abajo = qy + caja + 22;
+        char linea[64];
+        if (sky_en_portal()) {
+            gfx_texto_centrado(X + AN / 2, abajo,
+                "1. Entra con el celular a la red:", tenue, 1);
+            snprintf(linea, sizeof linea, "%s", sky_ap_nombre());
+            gfx_texto_centrado(X + AN / 2, abajo + 20, linea, ambar, 2);
+            snprintf(linea, sizeof linea, "clave: %s", sky_ap_clave());
+            gfx_texto_centrado(X + AN / 2, abajo + 48, linea, tenue, 1);
+            gfx_texto_centrado(X + AN / 2, abajo + 70,
+                "2. Apunta la camara al codigo de arriba.", tenue, 1);
+        } else {
+            gfx_texto_centrado(X + AN / 2, abajo,
+                "Apunta la camara al codigo para configurar el radar.", tenue, 1);
+            snprintf(linea, sizeof linea, "o entra a %s", url);
+            gfx_texto_centrado(X + AN / 2, abajo + 22, linea, tenue, 1);
+        }
+    } else {
+        gfx_texto_centrado(X + AN / 2, Y + AL / 2, "PREPARANDO EL CODIGO...", tenue, 1);
+    }
+
+    gfx_texto_centrado(X + AN / 2, Y + AL - 26,
+        "Para volver al radar, cortar la corriente una vez", tenue, 1);
 }
 
 // Las pantallas del cliente. Hasta que este el portal se arman aca; despues
@@ -200,11 +247,12 @@ int main(void) {
              INSTALACION_MARGEN_IZQUIERDA, INSTALACION_MARGEN_DERECHA);
     printf("area util: %dx%d en %d,%d\n", area.an, area.al, area.x, area.y);
 
-    if (pedir_config) {
-        pantalla_configuracion();
-        printf("en modo configuracion: esperando\n");
-        for (;;) tight_loop_contents();
-    }
+    // La radio arranca aca: conectarse y pedir el primer lote tarda unos
+    // segundos, y mientras tanto se termina de armar el radar y se ve el
+    // trafico de prueba en vez de una pantalla negra.
+    //
+    // Si el cliente hizo el gesto de los tres cortes, va derecho al portal.
+    sky_init(pedir_config);
 
     radar_init();
     demo_init();
@@ -213,20 +261,55 @@ int main(void) {
 
     // Modo normal: rota entre las pantallas del cliente. El recorrido de las
     // 18 escenas de prueba sigue disponible con la tecla 'e'.
-    pantallas_de_ejemplo();
+    // Manda lo que haya guardado el cliente; si no guardo nada todavia, las
+    // de fabrica.
+    if (!config_leer()) {
+        printf("no hay pantallas guardadas: se usan las de fabrica\n");
+        pantallas_de_ejemplo();
+    }
     pantallas_init();
 
     uint32_t cuadros = 0, us_total = 0, us_peor = 0;
     const uint32_t encendido = time_us_32();
     bool marcado_largo = false;
     uint32_t desde_informe = time_us_32();
+    char portal_puesto[32] = "";
     for (;;) {
+        // Mientras el equipo espera que lo configuren no hay radar que
+        // dibujar: esta la pantalla del QR y nada mas. Se redibuja solo
+        // cuando cambia la direccion, que es una vez, al terminar de
+        // levantar el wifi propio.
+        if (sky_en_portal()) {
+            if (strcmp(portal_puesto, sky_portal_url())) {
+                snprintf(portal_puesto, sizeof portal_puesto, "%s", sky_portal_url());
+                pantalla_configuracion();
+            }
+            vga_esperar_cuadro();
+            continue;
+        }
+        if (portal_puesto[0]) {
+            portal_puesto[0] = 0;
+            radar_marcar_sucio();
+        }
+
+        // La web mando pantallas nuevas: el nucleo 1 ya las guardo, aca solo
+        // hay que empezar a mostrarlas.
+        if (pantallas_rehacer_pedido) {
+            pantallas_rehacer_pedido = false;
+            printf("pantallas nuevas desde la web: %d\n", pantallas_n);
+            pantallas_init();
+        }
+
         int c = getchar_timeout_us(0);
         if (c == 'v') volcado_fb();
         else if (c == 'm') monitor_informe();
         else if (c == 'M') monitor_diagnostico();
         else if (c == 'W') monitor_vigilar(180);
         else if (c == 'n') pantallas_forzar_siguiente();
+        // Sin portal todavia, estas dos son la unica forma de probar que las
+        // pantallas sobreviven al apagado.
+        else if (c == 'g') config_guardar();
+        else if (c == 'G') config_borrar();
         else if (c == 'd') {
             dibujar_patron();
             while (getchar_timeout_us(0) != 'd') tight_loop_contents();
@@ -248,7 +331,10 @@ int main(void) {
 
         vga_esperar_cuadro();
         uint32_t t0 = time_us_32();
-        demo_avanzar();
+        // Si el nucleo 1 dejo un lote nuevo, entra aca. Mientras no haya
+        // llegado ninguno, los que se mueven son los inventados.
+        vivo_avanzar();
+        if (!vivo_hay_datos()) demo_avanzar();
         radar_avanzar();
         pantallas_avanzar();
         radar_cuadro();

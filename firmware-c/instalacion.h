@@ -42,4 +42,23 @@
 #define INSTALACION_CASA_NOMBRE "CASA"
 #define INSTALACION_CASA_KM     3
 
+// --- WiFi ---
+// Hasta que este el portal, la red se define aca, igual que la casa. Cuando
+// el cliente pueda cargarla desde el celular, esto queda como valor de
+// fabrica: si en la flash hay una red guardada, gana la de la flash.
+//
+// Si INSTALACION_WIFI_SSID queda vacio, el equipo ni prende la radio y
+// muestra el trafico simulado de siempre.
+#define INSTALACION_WIFI_SSID  ""
+#define INSTALACION_WIFI_PASS  ""
+
+// Pais de la radio, para que los canales permitidos sean los que
+// corresponden. Argentina no esta en la lista del driver; WORLDWIDE anda en
+// todos lados y es lo que usa el propio SDK por defecto.
+#define INSTALACION_WIFI_PAIS  CYW43_COUNTRY_WORLDWIDE
+
+// Minutos de diferencia con UTC, para la hora local de las tarjetas.
+// Argentina es UTC-3, o sea -180.
+#define INSTALACION_TZ_MINUTOS (-180)
+
 #endif
