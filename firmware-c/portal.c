@@ -212,6 +212,16 @@ static void guardar_pantallas(struct tcp_pcb *pcb, const char *consulta) {
         }
     }
 
+    // El huso de los horarios. Cero es hora Zulu y es un valor valido, asi
+    // que se pregunta si vino, no si es distinto de cero.
+    {
+        char crudo[12];
+        if (portal_parametro(consulta, "tz", crudo, sizeof crudo) && crudo[0]) {
+            const int tz = (int)strtol(crudo, NULL, 10);
+            if (tz >= -720 && tz <= 840) config_tz_min = tz;
+        }
+    }
+
     const int tope = portal_numero(consulta, "max", config_max_puntos);
     if (tope >= 1 && tope <= RADAR_MAX_AVIONES) {
         config_max_puntos = tope;      // para que se guarde en la flash

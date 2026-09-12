@@ -26,6 +26,7 @@ AGREGADOS = {
     "JAT": "JA",   # JetSmart Chile
     "SKX": "H2",   # Sky Airline Peru; el archivo lo daba como Skyways Express
     "SKU": "H2",   # Sky Airline Chile
+    "ANS": "OY",   # Andes Lineas Aereas; el logo ya estaba en docs/logos
 }
 
 RAIZ = pathlib.Path(__file__).resolve().parent.parent

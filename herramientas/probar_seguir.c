@@ -59,14 +59,21 @@ int main(void) {
     probar("1885",    "ARG1885", false);   // solo numeros no alcanza
     probar("AR1885",  "LVS100",  false);   // una avioneta con su matricula
 
-    printf("\n== una aerolinea que no esta en la tabla ==\n");
-    // Andes no figura en docs/airlines.json, asi que de su indicativo no se
-    // saca ningun codigo de dos letras. Por OACI tiene que andar igual: eso
-    // es lo que hace que seguir un vuelo no dependa de que la tabla este
-    // completa.
-    probar("ANS5500", "ANS5500", true);
-    probar("ANS",     "ANS5500", true);
-    probar("OY5500",  "ANS5500", false);   // por IATA no puede: no esta
+    printf("\n== Andes, que vuela y no estaba en la base publica ==\n");
+    // docs/airlines.json no la tiene, asi que su codigo de dos letras sale de
+    // la tabla de correcciones de aerolineas_a_c.py. Las tres formas tienen
+    // que encontrarla.
+    probar("ANS5500", "ANS5500", true);    // por OACI
+    probar("OY5500",  "ANS5500", true);    // por IATA, gracias a la correccion
+    probar("ANS",     "ANS5500", true);    // toda la aerolinea
+    probar("OY",      "ANS5500", true);
+
+    printf("\n== una aerolinea que no este en ninguna tabla ==\n");
+    // Por OACI tiene que andar igual, sin depender de que la tabla este
+    // completa: es lo que hace que seguir un vuelo no se rompa con cada
+    // aerolinea nueva.
+    probar("XXX123", "XXX123", true);
+    probar("XXX",    "XXX123", true);
 
     printf("\n%s\n", fallos ? "HAY FALLAS" : "todo bien");
     return fallos ? 1 : 0;

@@ -56,6 +56,7 @@ const aerolinea_t aerolineas[AEROLINEAS_CANT] = {
     {"ANG", "PX"},
     {"ANK", "EL"},
     {"ANO", "TL"},
+    {"ANS", "OY"},
     {"ANT", "4N"},
     {"ANZ", "NZ"},
     {"APW", "JW"},

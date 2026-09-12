@@ -34,7 +34,9 @@ typedef struct {
     uint8_t    casa_on;
     int32_t    casa_lat, casa_lon;
     uint16_t   casa_km;
-    uint16_t   reservado;          // para que lo que sigue quede alineado
+    int16_t    tz_min;             // minutos contra UTC; cero es hora Zulu
+    uint8_t    tz_puesto;          // si no, no se distingue de un cero sin usar
+    uint8_t    reservado;
     char       ssid[33];
     char       pass[64];
     pantalla_t p[PANTALLAS_MAX];
@@ -49,6 +51,7 @@ char config_pass[64];
 // tienen radar: quien se lo pasa al dibujo es main.c.
 int config_max_puntos = CONFIG_MAX_PUNTOS_DEF;
 bool config_solo_aerolineas = true;
+int config_tz_min = INSTALACION_TZ_MINUTOS;
 bool    config_casa_on;
 int32_t config_casa_lat, config_casa_lon;
 int     config_casa_km = 3;
@@ -111,6 +114,7 @@ bool config_leer(void) {
     config_casa_lat = en_flash->casa_lat;
     config_casa_lon = en_flash->casa_lon;
     if (en_flash->casa_km >= 1) config_casa_km = en_flash->casa_km;
+    if (en_flash->tz_puesto) config_tz_min = en_flash->tz_min;
     if (en_flash->n == 0) {
         printf("config: hay wifi guardado pero ninguna pantalla\n");
         return false;
@@ -137,6 +141,8 @@ static void armar(int cuantas) {
     g->casa_lat = config_casa_lat;
     g->casa_lon = config_casa_lon;
     g->casa_km  = (uint16_t)config_casa_km;
+    g->tz_min    = (int16_t)config_tz_min;
+    g->tz_puesto = 1;
     snprintf(g->ssid, sizeof g->ssid, "%s", config_ssid);
     snprintf(g->pass, sizeof g->pass, "%s", config_pass);
     if (cuantas > 0) memcpy(g->p, pantallas, sizeof(pantalla_t) * cuantas);

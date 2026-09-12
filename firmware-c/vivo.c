@@ -30,6 +30,12 @@
 // que parpadeen.
 #define OLVIDO_LOTES 3
 
+// Velocidad de crucero de un avion de linea, en km/h. Se usa para estimar
+// cuanto dura el vuelo entero cuando el avion ya no va a esa velocidad,
+// porque esta subiendo o bajando. No es la de ninguno en particular: es la
+// que hace que la cuenta no diga cualquier cosa.
+#define VELOCIDAD_CRUCERO 800
+
 static uint8_t faltazos[RADAR_MAX_AVIONES];   // lotes seguidos sin aparecer
 static char    hexes[RADAR_MAX_AVIONES][8];   // quien es cada lugar
 
@@ -56,9 +62,14 @@ static void ciudad_de(const char *iata, char *destino, int tam) {
 // de mas de unas horas: Roma, Miami, Madrid, ninguno mostraba a que hora
 // habia salido.
 static void reloj(int minutos, char *destino, int tam) {
-    minutos %= 1440;
-    if (minutos < 0) minutos += 1440;
-    snprintf(destino, tam, "%02d:%02d", minutos / 60, minutos % 60);
+    // De que dia es esa hora, contra hoy. Un vuelo que salio anoche da -1 y
+    // uno que llega pasada la medianoche da +1: sin eso, "salio 22:10 y llega
+    // 09:15" no se entiende, porque parecen el mismo dia.
+    int dia = 0;
+    while (minutos < 0)     { minutos += 1440; dia--; }
+    while (minutos >= 1440) { minutos -= 1440; dia++; }
+    if (dia == 0) snprintf(destino, tam, "%02d:%02d", minutos / 60, minutos % 60);
+    else          snprintf(destino, tam, "%02d:%02d%+d", minutos / 60, minutos % 60, dia);
 }
 
 // Busca en que lugar del radar esta ese avion, o consigue uno libre.
@@ -127,8 +138,15 @@ static void componer(avion_t *a, const sky_avion_t *s, bool es_nuevo) {
     // Velocidad en km/h. Abajo de cien nudos esta rodando o parado, y
     // dividir por eso da horas de vuelo que no significan nada.
     const int kmh = s->gs > 100 ? s->gs * 1852 / 1000 : 0;
+
+    // Lo que falta se mide con la velocidad de AHORA, que es la que va a
+    // llevar el rato que queda. Pero el vuelo entero no: un avion
+    // aproximando va a un tercio de lo que volo, y con esa velocidad
+    // Roma-Buenos Aires daba treinta y nueve horas, o sea que "habia salido"
+    // dos dias antes. Para el vuelo entero se usa una de crucero.
+    const int kmh_crucero = kmh > VELOCIDAD_CRUCERO ? kmh : VELOCIDAD_CRUCERO;
     a->falta_min = (int16_t)(kmh && falta_km ? falta_km * 60 / kmh : 0);
-    a->vuelo_min = (int16_t)(kmh && total_km ? total_km * 60 / kmh : 0);
+    a->vuelo_min = (int16_t)(total_km ? total_km * 60 / kmh_crucero : 0);
 
     // --- horarios ---
     // Los dos salen de la hora de llegada estimada: no son los que publica la

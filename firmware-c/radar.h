@@ -30,7 +30,7 @@ typedef struct {
     char tipo[8];          // modelo, por ejemplo A333
     char origen[4], destino[4];
     char ciudad_o[26], ciudad_d[26];
-    char dep[6], arr[6];   // horarios hh:mm
+    char dep[9], arr[9];   // horarios hh:mm, con -1 o +1 si cambia el dia
     uint8_t pct;           // avance del vuelo, 0-100
     char estado[12];       // EN VUELO, APROXIMANDO, EN TIERRA
     int16_t demora;        // minutos de atraso; 0 o menos es a tiempo

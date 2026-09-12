@@ -101,6 +101,13 @@
             son avionetas, aviones de instrucción y vuelos militares: no tienen ruta ni
             horario, y sus fichas salen casi vacías. Con esto no aparecen, ni en el radar
             ni en la lista. Se reconocen por el indicativo y por tener una ruta conocida.</p>
+
+          <label style="display:flex;gap:8px;align-items:center;margin-top:18px">
+            <input id="zulu" type="checkbox" style="width:auto;margin:0">
+            Horarios en hora Zulu (UTC)</label>
+          <p class="resumen">Los horarios salen en la hora de acá. Tildando esto salen
+            todos en Zulu, que es como los mira un piloto. Un vuelo que cruza la
+            medianoche lo dice: <b>22:10</b> y <b>09:15+1</b> es que llega al día siguiente.</p>
         </div>
 
         <div class="card">
@@ -187,6 +194,7 @@
     casa: { on: false, lat: "", lon: "", km: 3 },
     max_puntos: 16,
     solo_lineas: true,
+    zulu: false,
     pantallas: [
       { nombre: "Vuelos de Ezeiza", vista: "hybrid", apt: "EZE", km: 220,
         lista: "fa", vuelos: 4, seguir: "", segundos: 15 },
@@ -347,6 +355,7 @@
     cfg.casa.km = Number($("casa_km").value) || 3;
     cfg.max_puntos = Number($("max_aircraft").value) || 16;
     cfg.solo_lineas = $("solo_lineas").checked;
+    cfg.zulu = $("zulu").checked;
   }
 
   function escribirGenerales() {
@@ -356,6 +365,7 @@
     $("casa_km").value = cfg.casa.km;
     $("max_aircraft").value = cfg.max_puntos;
     $("solo_lineas").checked = cfg.solo_lineas !== false;
+    $("zulu").checked = !!cfg.zulu;
   }
 
   // Lo que se le manda al equipo. Las duraciones salen ya acotadas, para que
@@ -425,6 +435,10 @@
     // Uno solo para todo el equipo, no por pantalla.
     q.set("max", Math.min(32, Math.max(1, Number(c.max_puntos) || 16)));
     q.set("com", c.solo_lineas === false ? 0 : 1);
+    // El huso de los horarios, en minutos contra UTC. Sale del propio
+    // telefono, asi que el equipo queda en hora de donde esta sin que nadie
+    // configure nada; en Zulu va cero.
+    q.set("tz", c.zulu ? 0 : -new Date().getTimezoneOffset());
     // La casa, en un solo parametro: prendida, latitud, longitud y radio. Las
     // coordenadas van en grados por 10000 y enteras, como las espera la placa.
     const gr = (v) => Math.round((Number(v) || 0) * 10000);

@@ -25,6 +25,11 @@ extern bool config_solo_aerolineas;
 // La casa del cliente: una ubicacion propia, aparte del aeropuerto. Cuando
 // pasa un avion cerca se lo marca en el scope y sale su ficha abajo. En
 // grados por 10000, igual que todo lo demas.
+// Minutos de diferencia con UTC para los horarios de las fichas. Cero es
+// hora Zulu, que es como la mira un piloto. Lo manda la pagina, que sabe en
+// que huso esta el telefono, y hasta entonces vale lo de instalacion.h.
+extern int config_tz_min;
+
 extern bool    config_casa_on;
 extern int32_t config_casa_lat, config_casa_lon;
 extern int     config_casa_km;
