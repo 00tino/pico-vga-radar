@@ -22,6 +22,9 @@ void portal_atender(void);
 bool portal_barriendo(void);
 bool portal_vio(const char *ssid);   // si esa red aparecio en el ultimo barrido
 
+// Pasa la casa que guardo el cliente al radar.
+void aplicar_casa(void);
+
 portal_pasa_t portal_paso(void);
 void          portal_paso_limpiar(void);
 

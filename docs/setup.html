@@ -425,6 +425,13 @@
     // Uno solo para todo el equipo, no por pantalla.
     q.set("max", Math.min(32, Math.max(1, Number(c.max_puntos) || 16)));
     q.set("com", c.solo_lineas === false ? 0 : 1);
+    // La casa, en un solo parametro: prendida, latitud, longitud y radio. Las
+    // coordenadas van en grados por 10000 y enteras, como las espera la placa.
+    const gr = (v) => Math.round((Number(v) || 0) * 10000);
+    const casaLat = gr(c.casa && c.casa.lat), casaLon = gr(c.casa && c.casa.lon);
+    const casaHay = c.casa && c.casa.on && (casaLat || casaLon);
+    q.set("casa", [casaHay ? 1 : 0, casaLat, casaLon,
+                   Math.min(50, Math.max(1, Number(c.casa && c.casa.km) || 3))].join("~"));
     q.set("n", c.pantallas.length);
     c.pantallas.forEach((p, i) => q.set("p" + i, campos(p)));
     return q.toString();

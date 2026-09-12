@@ -1,9 +1,9 @@
 // Aerolineas, generado por herramientas/aerolineas_a_c.py. NO EDITAR.
-// 793 codigos OACI con su equivalente IATA.
+// 796 codigos OACI con su equivalente IATA.
 #ifndef AEROLINEAS_H
 #define AEROLINEAS_H
 
-#define AEROLINEAS_CANT 793
+#define AEROLINEAS_CANT 796
 
 typedef struct {
     char icao[4];   // el que viene en el indicativo de ADS-B

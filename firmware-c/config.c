@@ -31,7 +31,10 @@ typedef struct {
     uint16_t   n;                  // cuantas pantallas, 0 si solo hay wifi
     uint16_t   max_puntos;         // cuantos aviones se dibujan en el circulo
     uint8_t    solo_aerolineas;
-    uint8_t    reservado;          // para que lo que sigue quede alineado
+    uint8_t    casa_on;
+    int32_t    casa_lat, casa_lon;
+    uint16_t   casa_km;
+    uint16_t   reservado;          // para que lo que sigue quede alineado
     char       ssid[33];
     char       pass[64];
     pantalla_t p[PANTALLAS_MAX];
@@ -46,6 +49,9 @@ char config_pass[64];
 // tienen radar: quien se lo pasa al dibujo es main.c.
 int config_max_puntos = CONFIG_MAX_PUNTOS_DEF;
 bool config_solo_aerolineas = true;
+bool    config_casa_on;
+int32_t config_casa_lat, config_casa_lon;
+int     config_casa_km = 3;
 
 static const guardado_t *en_flash = (const guardado_t *)(XIP_BASE + SECTOR_OFF);
 
@@ -101,6 +107,10 @@ bool config_leer(void) {
     elegir_wifi(en_flash->ssid, en_flash->pass);
     if (en_flash->max_puntos >= 1) config_max_puntos = en_flash->max_puntos;
     config_solo_aerolineas = en_flash->solo_aerolineas != 0;
+    config_casa_on  = en_flash->casa_on != 0;
+    config_casa_lat = en_flash->casa_lat;
+    config_casa_lon = en_flash->casa_lon;
+    if (en_flash->casa_km >= 1) config_casa_km = en_flash->casa_km;
     if (en_flash->n == 0) {
         printf("config: hay wifi guardado pero ninguna pantalla\n");
         return false;
@@ -123,6 +133,10 @@ static void armar(int cuantas) {
     g->n = (uint16_t)cuantas;
     g->max_puntos = (uint16_t)config_max_puntos;
     g->solo_aerolineas = config_solo_aerolineas ? 1 : 0;
+    g->casa_on  = config_casa_on ? 1 : 0;
+    g->casa_lat = config_casa_lat;
+    g->casa_lon = config_casa_lon;
+    g->casa_km  = (uint16_t)config_casa_km;
     snprintf(g->ssid, sizeof g->ssid, "%s", config_ssid);
     snprintf(g->pass, sizeof g->pass, "%s", config_pass);
     if (cuantas > 0) memcpy(g->p, pantallas, sizeof(pantalla_t) * cuantas);

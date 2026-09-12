@@ -26,6 +26,7 @@ const codigo = html.slice(desde, hasta);
 
 const cfg = {
   tema: "crt_amber",
+  casa: { on: true, lat: "-34.5586", lon: "-58.4134", km: 5 },
   pantallas: [
     { nombre: "Vuelos de Ezeiza", vista: "hybrid", apt: "EZE", km: 220,
       lista: "fa", vuelos: 4, seguir: "", segundos: 15 },

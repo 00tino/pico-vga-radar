@@ -13,6 +13,21 @@ Se genera igual que aeropuertos.c: ordenada, para buscar por mitades.
 import json
 import pathlib
 
+# docs/airlines.json viene de una base publica que quedo vieja: le faltan las
+# aerolineas que nacieron despues y tiene codigos que cambiaron de dueno. Lo
+# que se corrige aca gana sobre lo que diga el archivo.
+#
+# Para agregar una: mirar en la consola del equipo el indicativo que llega
+# (son las tres letras del principio, ITY680 -> ITY) y poner al lado el codigo
+# de dos letras cuyo logo esta en docs/logos.
+AGREGADOS = {
+    "ITY": "AZ",   # ITA Airways, que heredo el codigo de Alitalia
+    "JES": "JA",   # JetSmart
+    "JAT": "JA",   # JetSmart Chile
+    "SKX": "H2",   # Sky Airline Peru; el archivo lo daba como Skyways Express
+    "SKU": "H2",   # Sky Airline Chile
+}
+
 RAIZ = pathlib.Path(__file__).resolve().parent.parent
 ENTRADA = RAIZ / "docs" / "airlines.json"
 SALIDA_C = RAIZ / "firmware-c" / "aerolineas.c"
@@ -35,6 +50,9 @@ def main():
         if not icao.isalpha() or not iata.isalnum():
             continue
         vistos.setdefault(icao, iata)
+
+    # Los agregados pisan lo que haya: son correcciones, no alternativas.
+    vistos.update(AGREGADOS)
 
     filas = sorted(vistos.items())
 

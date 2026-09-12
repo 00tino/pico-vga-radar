@@ -49,11 +49,13 @@ static void ciudad_de(const char *iata, char *destino, int tam) {
     snprintf(destino, tam, "%s", p ? p->ciudad : "");
 }
 
-// Minutos desde medianoche a "hh:mm". Si todavia no se sabe la hora, deja el
-// campo vacio y la tarjeta no muestra horario: mejor un hueco que un numero
-// inventado.
+// Minutos desde medianoche a "hh:mm". Da la vuelta al dia sola: la hora de
+// salida de un vuelo largo cae ANTES de medianoche, o sea en negativo, y un
+// vuelo que llega despues de las doce se pasa de 1440. Tratar el negativo
+// como "no se sabe" era lo que dejaba sin hora de salida a todos los vuelos
+// de mas de unas horas: Roma, Miami, Madrid, ninguno mostraba a que hora
+// habia salido.
 static void reloj(int minutos, char *destino, int tam) {
-    if (minutos < 0) { destino[0] = 0; return; }
     minutos %= 1440;
     if (minutos < 0) minutos += 1440;
     snprintf(destino, tam, "%02d:%02d", minutos / 60, minutos % 60);
@@ -132,12 +134,15 @@ static void componer(avion_t *a, const sky_avion_t *s, bool es_nuevo) {
     // Los dos salen de la hora de llegada estimada: no son los que publica la
     // aerolinea, son los que se deducen de donde esta el avion ahora.
     const int ahora = sky_hora_local();
+    a->arr[0] = 0;
+    a->dep[0] = 0;
     if (ahora >= 0 && a->falta_min > 0) {
         reloj(ahora + a->falta_min, a->arr, sizeof a->arr);
-        reloj(ahora + a->falta_min - a->vuelo_min, a->dep, sizeof a->dep);
-    } else {
-        a->arr[0] = 0;
-        a->dep[0] = 0;
+        // La salida solo si se sabe cuanto dura el vuelo entero, que sale de
+        // la distancia entre los dos aeropuertos. Sin ruta conocida, poner la
+        // misma hora que la llegada seria mentir.
+        if (a->vuelo_min > 0)
+            reloj(ahora + a->falta_min - a->vuelo_min, a->dep, sizeof a->dep);
     }
     a->demora = 0;   // ver el comentario de arriba de todo
 

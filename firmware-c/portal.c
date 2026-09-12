@@ -170,6 +170,14 @@ static void aviso(struct tcp_pcb *pcb, const char *titulo, const char *detalle) 
 // se compila igual fuera de la placa: asi el contrato con docs/setup.html se
 // prueba sin cargar el firmware.
 
+// Pasa la casa guardada al radar. Se llama al recibirla y al arrancar.
+void aplicar_casa(void) {
+    radar_casa_on  = config_casa_on;
+    radar_casa_lat = config_casa_lat;
+    radar_casa_lon = config_casa_lon;
+    radar_casa_km  = config_casa_km;
+}
+
 static void guardar_pantallas(struct tcp_pcb *pcb, const char *consulta) {
     pantalla_t nuevas[PANTALLAS_MAX];
     const int puestas = portal_leer_pantallas(consulta, nuevas, PANTALLAS_MAX);
@@ -181,6 +189,28 @@ static void guardar_pantallas(struct tcp_pcb *pcb, const char *consulta) {
     // Cuantos puntos van en el circulo. Es uno solo para todo el equipo, no
     // por pantalla, asi que viaja suelto y no adentro de cada una.
     config_solo_aerolineas = portal_numero(consulta, "com", config_solo_aerolineas ? 1 : 0) != 0;
+
+    // La casa, en un solo parametro: "prendida~lat~lon~radio". Las
+    // coordenadas vienen en grados por 10000, como en todo el firmware.
+    {
+        char crudo[64];
+        if (portal_parametro(consulta, "casa", crudo, sizeof crudo) && crudo[0]) {
+            int32_t v[4] = {0, 0, 0, 3};
+            char *t = crudo;
+            for (int i = 0; i < 4 && t; i++) {
+                v[i] = (int32_t)strtol(t, NULL, 10);
+                t = strchr(t, '~');
+                if (t) t++;
+            }
+            config_casa_on  = v[0] != 0;
+            config_casa_lat = v[1];
+            config_casa_lon = v[2];
+            config_casa_km  = (v[3] >= 1 && v[3] <= 50) ? (int)v[3] : 3;
+            // Sin coordenadas no hay casa que marcar, por mas que este tildada.
+            if (!config_casa_lat && !config_casa_lon) config_casa_on = false;
+            aplicar_casa();
+        }
+    }
 
     const int tope = portal_numero(consulta, "max", config_max_puntos);
     if (tope >= 1 && tope <= RADAR_MAX_AVIONES) {

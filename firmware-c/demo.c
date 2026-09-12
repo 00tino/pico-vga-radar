@@ -2,6 +2,7 @@
 // WiFi. Los aviones se mueven de verdad: cada cuadro avanzan segun su rumbo
 // y su velocidad, igual que van a hacer con los datos reales del proxy.
 #include "radar.h"
+#include "config.h"
 #include "trig.h"
 #include "aeropuertos.h"
 #include <stdio.h>
@@ -37,6 +38,10 @@ void demo_init(void);
 // La casa de prueba: a unos 12 km al noreste de Ezeiza, para que se vea que
 // no tiene por que estar pegada al aeropuerto.
 void demo_casa(void) {
+    // Si el cliente cargo la suya, esta no existe: demo_aeropuerto() llama
+    // aca cada vez que cambia de aeropuerto, y sin esto le pisaba la casa
+    // configurada en cada rotacion de pantallas.
+    if (config_casa_on) return;
     radar_casa_on = true;
     radar_casa_lat = radar_apt.lat + 800;
     radar_casa_lon = radar_apt.lon + 900;

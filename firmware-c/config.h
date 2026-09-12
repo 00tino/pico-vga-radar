@@ -22,6 +22,13 @@ extern int config_max_puntos;
 // que los 32 lugares se llenen con vuelos que sirvan.
 extern bool config_solo_aerolineas;
 
+// La casa del cliente: una ubicacion propia, aparte del aeropuerto. Cuando
+// pasa un avion cerca se lo marca en el scope y sale su ficha abajo. En
+// grados por 10000, igual que todo lo demas.
+extern bool    config_casa_on;
+extern int32_t config_casa_lat, config_casa_lon;
+extern int     config_casa_km;
+
 extern char config_ssid[33];
 extern char config_pass[64];
 

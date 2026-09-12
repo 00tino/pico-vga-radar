@@ -18,6 +18,7 @@
 #include "arranques.h"
 #include "sky.h"
 #include "config.h"
+#include "portal.h"
 #include "qr.h"
 #include "vivo.h"
 #include "pantallas.h"
