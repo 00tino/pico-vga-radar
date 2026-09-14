@@ -802,6 +802,18 @@ const aerolinea_t aerolineas[AEROLINEAS_CANT] = {
     {"ZZZ", "ZP"},
 };
 
+// Del codigo de dos letras al de tres. Va al reves que la tabla, asi que se
+// recorre entera: son 797 y se hace una vez cada veinte segundos, cuando hay
+// que pedirle al proxy un vuelo puntual. El cliente escribe el numero que
+// conoce (CM364) y por el aire ese vuelo se llama CMP364.
+const char *aerolinea_icao_de_iata(const char *iata) {
+    if (!iata || !iata[0] || !iata[1]) return 0;
+    for (int i = 0; i < AEROLINEAS_CANT; i++)
+        if (aerolineas[i].iata[0] == iata[0] && aerolineas[i].iata[1] == iata[1])
+            return aerolineas[i].icao;
+    return 0;
+}
+
 const char *aerolinea_de_indicativo(const char *indicativo) {
     if (!indicativo) return 0;
     // Las tres primeras letras, si es que las hay. Una matricula (LVS100) va

@@ -45,6 +45,8 @@ int main(void) {
     probar("AR-1885", "ARG1885", true);    // con un guion
     probar("ar1885",  "ARG1885", true);    // en minuscula
     probar("AR1886",  "ARG1885", false);   // otro numero de la misma linea
+    probar("LA8193",  "LAN8193", true);    // LATAM: codigo del pasaje y ADS-B
+    probar("LA8193",  "TAM8193", false);   // mismo numero no significa mismo vuelo
     probar("LA1885",  "ARG1885", false);   // mismo numero, otra linea
 
     printf("\n== solo la aerolinea: sigue al primero que aparezca ==\n");

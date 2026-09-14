@@ -21,6 +21,7 @@
 #include "geo.h"
 #include "aeropuertos.h"
 #include "aerolineas.h"
+#include "pantallas.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -220,7 +221,10 @@ void vivo_avanzar(void) {
     memcpy(faltazos, copia_faltazos, usados);
     radar_cantidad = usados;
     vivo_andando = true;
-    radar_marcar_sucio();
+    // La cantidad de paginas de la lista depende de cuantos aviones haya, y
+    // eso cambia con cada lote.
+    pantallas_ajustar_rotacion();
+    radar_marcar_datos_sucios();
 }
 
 // Cambia el aeropuerto del radar. Es lo mismo que demo_aeropuerto pero sin

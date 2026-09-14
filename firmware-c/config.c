@@ -37,6 +37,14 @@ typedef struct {
     int16_t    tz_min;             // minutos contra UTC; cero es hora Zulu
     uint8_t    tz_puesto;          // si no, no se distingue de un cero sin usar
     uint8_t    reservado;
+
+    // Lugar de sobra para lo que venga. Cada vez que este bloque cambia de
+    // tamano, lo que el cliente tenia guardado deja de coincidir y se
+    // descarta: tiene que volver a cargar la red y a armar sus pantallas. Ya
+    // paso tres veces. Los campos nuevos se sacan de aca adentro, poniendolos
+    // ANTES de la reserva y bajandole el tamano en la misma cantidad de
+    // bytes, y asi el bloque entero mide siempre lo mismo.
+    uint8_t    reserva[128];
     char       ssid[33];
     char       pass[64];
     pantalla_t p[PANTALLAS_MAX];
@@ -51,6 +59,7 @@ char config_pass[64];
 // tienen radar: quien se lo pasa al dibujo es main.c.
 int config_max_puntos = CONFIG_MAX_PUNTOS_DEF;
 bool config_solo_aerolineas = true;
+bool config_hay_guardado;
 int config_tz_min = INSTALACION_TZ_MINUTOS;
 bool    config_casa_on;
 int32_t config_casa_lat, config_casa_lon;
@@ -107,6 +116,7 @@ bool config_leer(void) {
     }
     // El wifi sirve aunque todavia no haya ni una pantalla armada: el cliente
     // carga primero la red y recien despues configura lo que quiere ver.
+    config_hay_guardado = true;
     elegir_wifi(en_flash->ssid, en_flash->pass);
     if (en_flash->max_puntos >= 1) config_max_puntos = en_flash->max_puntos;
     config_solo_aerolineas = en_flash->solo_aerolineas != 0;
@@ -189,6 +199,14 @@ bool config_guardar(void) {
         return false;
     }
     printf("config: %d pantallas guardadas\n", pantallas_n);
+    return true;
+}
+
+bool config_borrar_pantallas(void) {
+    if (!config_hay_wifi()) return false;
+    armar(0);
+    if (flash_safe_execute(hacer_guardado, NULL, 3000) != PICO_OK) return false;
+    printf("config: pantallas borradas; red conservada\n");
     return true;
 }
 

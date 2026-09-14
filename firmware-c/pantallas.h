@@ -31,6 +31,10 @@ extern int        pantallas_n;
 void pantallas_init(void);      // deja puesta la primera
 void pantallas_avanzar(void);   // una vez por cuadro
 int  pantallas_actual(void);
+
+// Acomoda cada cuanto pasa de pagina la lista para que las paginas entren
+// justas en lo que dura la pantalla. Ver pantallas.c.
+void pantallas_ajustar_rotacion(void);
 void pantallas_forzar_siguiente(void);
 
 #endif

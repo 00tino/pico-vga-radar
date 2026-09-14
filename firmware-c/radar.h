@@ -65,6 +65,7 @@ extern int radar_cantidad;
 
 void radar_init(void);
 void radar_marcar_sucio(void);   // pide que se redibujen las tarjetas
+void radar_marcar_datos_sucios(void); // lote nuevo, sin borrar la pantalla entera
 
 // Estado del carrusel de la lista, para que cada pantalla siga donde iba.
 void radar_carrusel_guardar(int *pag, uint32_t *cuadros);

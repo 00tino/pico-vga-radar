@@ -218,6 +218,24 @@ void gfx_rect_dither(int x, int y, int an, int al, uint8_t r, uint8_t g, uint8_t
             gfx_punto(x + i, y + j, gfx_rgb_dither(x + i, y + j, r, g, b));
 }
 
+// Igual que gfx_blit, pero saltea los pixeles que la mascara marca como
+// fondo. Es lo que hace que un logo no se dibuje como un cuadrado blanco
+// encima del radar: donde el logo no tiene nada, se ve el fondo del tema.
+void gfx_blit_mascara(int x, int y, int an, int al,
+                      const uint8_t *datos, const uint8_t *mascara) {
+    if (!mascara) { gfx_blit(x, y, an, al, datos); return; }
+    for (int j = 0; j < al; j++) {
+        const int fy = y + j;
+        if (fy < gfx_banda_y0 || fy > gfx_banda_y1) continue;
+        for (int i = 0; i < an; i++) {
+            const int n = j * an + i;
+            if (!(mascara[n >> 3] & (1 << (n & 7)))) continue;   // fondo
+            const int fx = x + i;
+            if ((unsigned)fx < VGA_ANCHO) vga_fb[fy * VGA_ANCHO + fx] = datos[n];
+        }
+    }
+}
+
 void gfx_blit(int x, int y, int an, int al, const uint8_t *datos) {
     for (int j = 0; j < al; j++) {
         int fy = y + j;

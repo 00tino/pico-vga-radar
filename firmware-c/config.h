@@ -28,6 +28,11 @@ extern bool config_solo_aerolineas;
 // Minutos de diferencia con UTC para los horarios de las fichas. Cero es
 // hora Zulu, que es como la mira un piloto. Lo manda la pagina, que sabe en
 // que huso esta el telefono, y hasta entonces vale lo de instalacion.h.
+// Si en la flash hay una configuracion del cliente. No es lo mismo que "la
+// casa esta prendida": un equipo configurado con la casa APAGADA tiene que
+// quedarse sin casa, y antes le aparecia la de prueba encima.
+extern bool config_hay_guardado;
+
 extern int config_tz_min;
 
 extern bool    config_casa_on;
@@ -46,6 +51,8 @@ bool config_hay_wifi(void);
 
 // Guarda lo que hay ahora en pantallas[]. Va a ser lo que llame el portal.
 bool config_guardar(void);
+// Conserva la red y las preferencias, pero vuelve a pedir las pantallas.
+bool config_borrar_pantallas(void);
 
 // Deja la flash como salida de fabrica.
 bool config_borrar(void);

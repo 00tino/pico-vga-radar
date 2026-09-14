@@ -84,8 +84,9 @@ void radar_pintar_viaje(void) {
         if (radar_sigue_a(&radar_aviones[i]))
             { ac = &radar_aviones[i]; break; }
     if (!ac) {
-        gfx_texto_centrado(X + AN / 2, Y + AL / 2 - 8, "Buscando el vuelo...", radar_tono(200), 2);
-        gfx_texto_centrado(X + AN / 2, Y + AL / 2 + 24, radar_seguir, radar_tono(255), 1);
+        gfx_texto_centrado(X + AN / 2, Y + AL / 2 - 16, "Sin posicion en vivo", radar_tono(200), 2);
+        gfx_texto_centrado(X + AN / 2, Y + AL / 2 + 18, radar_seguir, radar_tono(255), 1);
+        gfx_texto_centrado(X + AN / 2, Y + AL / 2 + 40, "Se actualiza automaticamente", radar_tono(140), 1);
         return;
     }
 

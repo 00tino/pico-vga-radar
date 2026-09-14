@@ -16,4 +16,8 @@ extern const aerolinea_t aerolineas[AEROLINEAS_CANT];
 // NULL si esa aerolinea no esta en la tabla.
 const char *aerolinea_de_indicativo(const char *indicativo);
 
+// Del codigo de dos letras al de tres, para pedirle al proxy un vuelo por el
+// nombre con el que viaja por el aire. NULL si no esta.
+const char *aerolinea_icao_de_iata(const char *iata);
+
 #endif

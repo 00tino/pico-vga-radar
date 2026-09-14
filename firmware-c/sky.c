@@ -29,6 +29,9 @@
 #include "portal.h"
 #include "ap.h"
 #include "config.h"
+#include "radar.h"
+#include "aerolineas.h"
+#include <ctype.h>
 #include "hardware/watchdog.h"
 #include "pico/cyw43_arch.h"
 #include "pico/multicore.h"
@@ -192,9 +195,28 @@ static err_t al_conectar(void *arg, struct altcp_pcb *tpcb, err_t err) {
     (void)arg;
     if (err != ERR_OK) { pedido = P_FALLO; return err; }
 
+    // El vuelo que se sigue, con el nombre que usa por el aire. El cliente
+    // escribe el del pasaje (CM364) y ADS-B lo llama CMP364: sin traducirlo,
+    // el proxy no lo encuentra.
+    char sigo[24] = "";
+    if (radar_seguir[0]) {
+        char letras[8]; int n = 0;
+        while (radar_seguir[n] && isalpha((unsigned char)radar_seguir[n]) && n < 7) {
+            letras[n] = (char)toupper((unsigned char)radar_seguir[n]);
+            n++;
+        }
+        letras[n] = 0;
+        const char *numero = radar_seguir + n;
+        const char *icao = (n == 2) ? aerolinea_icao_de_iata(letras) : 0;
+        // Sin numero no hay vuelo que pedir: se sigue al primero de la
+        // aerolinea que aparezca por el circulo, y para eso no hace falta.
+        if (*numero)
+            snprintf(sigo, sizeof sigo, "&sigo=%s%s", icao ? icao : letras, numero);
+    }
+
     char get[320];
     int n = snprintf(get, sizeof get,
-        "GET %s?lat=%ld.%04ld&lon=%ld.%04ld&dist=%d&n=%d&tz=%d%s HTTP/1.1\r\n"
+        "GET %s?lat=%ld.%04ld&lon=%ld.%04ld&dist=%d&n=%d&tz=%d%s%s HTTP/1.1\r\n"
         "Host: " PROXY_HOST "\r\n"
         "User-Agent: pico-radar/1.0\r\n"
         "Connection: close\r\n\r\n",
@@ -207,7 +229,7 @@ static err_t al_conectar(void *arg, struct altcp_pcb *tpcb, err_t err) {
         // km pedia un circulo de 11 millas y no venia casi ningun avion.
         (int)((long)mirar_km * 1000 / 1852), SKY_MAX, config_tz_min,
         // Que el proxy mande solo vuelos de aerolinea, si es lo que se pidio.
-        config_solo_aerolineas ? "&com=1" : "");
+        config_solo_aerolineas ? "&com=1" : "", sigo);
 
     if (altcp_write(tpcb, get, n, TCP_WRITE_FLAG_COPY) != ERR_OK) {
         pedido = P_FALLO;
@@ -342,8 +364,7 @@ static void nucleo1(void) {
     uint32_t proximo = 0;
     int fallos = 0;
 
-    // El gesto de los tres cortes, o directamente no tener red cargada,
-    // mandan al portal sin siquiera intentar conectarse.
+    // Solo se abre el portal si se pidio expresamente o no hay red guardada.
     if (portal_pedido || !config_hay_wifi()) {
         cyw43_arch_enable_sta_mode();      // hace falta para leer el MAC
         entrar_al_portal();

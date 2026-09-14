@@ -20,6 +20,10 @@ aeropuerto_t radar_apt;
 avion_t      radar_aviones[RADAR_MAX_AVIONES];
 int          radar_cantidad;
 void radar_marcar_sucio(void) {}
+void radar_marcar_datos_sucios(void) {}
+// vivo.c lo llama al llegar un lote, para acomodar el paso de pagina de la
+// lista. Aca no hay pantallas que acomodar.
+void pantallas_ajustar_rotacion(void) {}
 
 // --- lo que en la placa pone sky.c ----------------------------------------
 static int hora_de_prueba = -1;

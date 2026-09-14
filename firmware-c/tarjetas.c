@@ -92,7 +92,10 @@ static void pastilla(int x, int y, const char *txt, uint8_t c) {
 // que es lo que hace la web cuando no encuentra la imagen.
 static void cuadro_logo(int x, int y, int lado, const avion_t *a, uint8_t c) {
     const uint8_t *logo = logo_buscar(a->aerolinea);
-    if (logo && lado == LOGO_LADO) { gfx_blit(x, y, LOGO_LADO, LOGO_LADO, logo); return; }
+    if (logo && lado == LOGO_LADO) {
+        gfx_blit_mascara(x, y, LOGO_LADO, LOGO_LADO, logo, logo_mascara(a->aerolinea));
+        return;
+    }
     gfx_rect(x, y, lado, lado, c);
     char cod[4] = {0};
     strncpy(cod, a->aerolinea, 2);
@@ -273,10 +276,11 @@ void tarjeta_dibujar(int x, int y, int an, int al, const avion_t *a, int grande)
 // La tabla de llegadas, como listStyle "fids" en la web: una fila por vuelo
 // con logo, indicativo, ruta, horarios y estado. Es lo que se ve en las
 // pantallas de un aeropuerto de verdad.
-// paso y pasos reparten el dibujo en varios cuadros: la tabla entera de una
-// vez se iba a diecinueve milisegundos y el haz la alcanzaba.
+// La banda de dibujo reparte la tabla en varios cuadros: entera de una vez
+// se iba a diecinueve milisegundos y el haz la alcanzaba.
 void fids_dibujar(int x, int y, int an, int al, const avion_t **vuelos, int n,
                   int paso, int pasos) {
+    (void)pasos;
     const uint8_t borde  = radar_tono(60);
     const uint8_t fuerte = radar_tono(255);
     const uint8_t medio  = radar_tono(190);
@@ -299,6 +303,7 @@ void fids_dibujar(int x, int y, int an, int al, const avion_t **vuelos, int n,
     const int c_pun2  = compacto ? 0 : c_pun + 64;   // 56 dejaba "ESTIMADAPUNTUAL" pegado
 
     if (paso == 0) {
+        vga_limpiar_rect(x, y, an, y + 17, radar_tono(0));
         gfx_texto(c_vuelo, y, "VUELO", suave, 1);
         gfx_texto(c_ruta,  y, "RUTA",  suave, 1);
         if (!compacto) gfx_texto(c_dep, y, "SALE", suave, 1);
@@ -317,10 +322,9 @@ void fids_dibujar(int x, int y, int an, int al, const avion_t **vuelos, int n,
 
     char buf[48];
     for (int i = 0; i < n; i++) {
-        if (pasos > 1 && (i % pasos) != paso) continue;
         const avion_t *a = vuelos[i];
         const int fy = y + 22 + i * alto_fila;
-        if (fy + fila < gfx_banda_y0 || fy > gfx_banda_y1) continue;
+        if (fy + alto_fila - 1 < gfx_banda_y0 || fy > gfx_banda_y1) continue;
         const int ty = fy + (fila - GFX_FUENTE_ALTO) / 2;
 
         // El logo esta guardado a 36 y aca se muestra achicado salteando

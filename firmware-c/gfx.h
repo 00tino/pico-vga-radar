@@ -65,6 +65,11 @@ void gfx_rect_dither(int x, int y, int an, int al, uint8_t r, uint8_t g, uint8_t
 // Copia una imagen ya en formato de pantalla (un byte por pixel).
 void gfx_blit(int x, int y, int an, int al, const uint8_t *datos);
 
+// Dibuja solo donde la mascara dice que hay logo: el fondo de la caja queda
+// como estaba, asi el logo no mete un cuadrado blanco sobre el radar.
+void gfx_blit_mascara(int x, int y, int an, int al,
+                      const uint8_t *datos, const uint8_t *mascara);
+
 // Mezcla un color con el fondo, como el globalAlpha del canvas de la web.
 // a va de 0 (todo fondo) a 255 (todo el color de adelante).
 uint8_t gfx_mezcla(uint8_t r, uint8_t g, uint8_t b,

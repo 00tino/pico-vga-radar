@@ -96,7 +96,8 @@ static void dibujar_patron(void) {
     const int tx = p2 + 8, ty = py + 24, tan = pan - 16;
     gfx_rect(tx, ty, tan, 86, tenue);
     const uint8_t *logo = logo_buscar("AR");
-    if (logo) gfx_blit(tx + 8, ty + 6, LOGO_LADO, LOGO_LADO, logo);
+    if (logo) gfx_blit_mascara(tx + 8, ty + 6, LOGO_LADO, LOGO_LADO,
+                               logo, logo_mascara("AR"));
     gfx_texto(tx + 8 + LOGO_LADO + 8, ty + 10, "AR1301", ambar, 1);
     gfx_texto(tx + 8 + LOGO_LADO + 8, ty + 26, "EZE > MAD", tenue, 1);
     gfx_rect(tx + 8, ty + 52, tan - 16, 8, apagado);
@@ -115,7 +116,8 @@ static void dibujar_patron(void) {
     const int lx0 = X + 66, paso = (AN - 82) / 12;
     for (int i = 0; i < 12; i++) {
         const uint8_t *l = logo_buscar(muestra[i]);
-        if (l) gfx_blit(lx0 + i * paso, ly2, LOGO_LADO, LOGO_LADO, l);
+        if (l) gfx_blit_mascara(lx0 + i * paso, ly2, LOGO_LADO, LOGO_LADO,
+                                l, logo_mascara(muestra[i]));
     }
 
     // --- RAMPA: el degradado con dither, el que se ve parejo ---
@@ -188,7 +190,8 @@ static void pantalla_configuracion(void) {
     }
 
     gfx_texto_centrado(X + AN / 2, Y + AL - 26,
-        "Para volver al radar, cortar la corriente una vez", tenue, 1);
+        sky_en_portal() ? "Guarda la red para seguir configurando" :
+                          "Al guardar las pantallas vuelve al radar", tenue, 1);
 }
 
 // Las pantallas del cliente. Hasta que este el portal se arman aca; despues
@@ -242,13 +245,10 @@ int main(void) {
     // pedir una red que en realidad ya tenia.
     bool hay_pantallas = config_leer();
 
-    // El gesto de los tres cortes borra lo guardado: la red y las pantallas.
-    // Es la unica forma que tiene el cliente de empezar de cero si cambio de
-    // router o le regalo el equipo a otro.
+    // El gesto pide volver a elegir pantallas sin cargar otra vez el WiFi.
     if (pedir_config) {
-        printf("tres cortes seguidos: se olvida la red y las pantallas\n");
-        config_borrar();
-        hay_pantallas = false;
+        if (config_borrar_pantallas()) hay_pantallas = false;
+        else printf("tres cortes seguidos: no se pudieron borrar las pantallas\n");
     }
 
     // Y esto antes tambien: cuando el otro nucleo escriba la flash (al
@@ -257,8 +257,8 @@ int main(void) {
     // reves ya estaba contemplado del otro lado, en sky.c.
     multicore_lockout_victim_init();
 
-    // Si el cliente hizo el gesto de los tres cortes, va derecho al portal.
-    sky_init(pedir_config);
+    // Con la red conservada se conecta y el QR apunta a la web de pantallas.
+    sky_init(false);
 
     // Y se le da tiempo a la radio ANTES de encender el video.
     //
@@ -312,6 +312,7 @@ int main(void) {
     pantallas_init();
 
     uint32_t cuadros = 0, us_total = 0, us_peor = 0;
+    uint32_t cuadros_saltados = 0;
     const uint32_t encendido = time_us_32();
     bool marcado_largo = false;
     uint32_t desde_informe = time_us_32();
@@ -386,13 +387,16 @@ int main(void) {
 
         vga_esperar_cuadro();
         uint32_t t0 = time_us_32();
+        // Pintar apenas llega el sincronismo. El calculo de vuelos y paginas
+        // queda para despues, listo para el cuadro siguiente.
+        if (time_us_32() - vga_us_vsync < 1300) radar_cuadro();
+        else cuadros_saltados++;
         // Si el nucleo 1 dejo un lote nuevo, entra aca. Mientras no haya
         // llegado ninguno, los que se mueven son los inventados.
         vivo_avanzar();
         if (!vivo_hay_datos()) demo_avanzar();
         radar_avanzar();
         pantallas_avanzar();
-        radar_cuadro();
         uint32_t d = time_us_32() - t0;
         us_total += d;
         if (d > us_peor) us_peor = d;
@@ -405,6 +409,19 @@ int main(void) {
                    (unsigned long)cuadros, (unsigned long)(cuadros / 15),
                    (unsigned long)(cuadros ? us_total / cuadros : 0), (unsigned long)us_peor,
                    us_peor > 15200 ? "  <-- SE PASA" : "");
+            printf("    cuadros conservados por dibujo tardio: %lu\n", (unsigned long)cuadros_saltados);
+            cuadros_saltados = 0;
+            {
+                extern int32_t radar_us_antes;
+                extern uint32_t radar_us_banda[10];
+                printf("    antes %ld us | bandas:", (long)radar_us_antes);
+                for (int b = 0; b < 10; b++) {
+                    printf(" %lu", (unsigned long)radar_us_banda[b]);
+                    radar_us_banda[b] = 0;
+                }
+                printf("\n");
+                radar_us_antes = 0;
+            }
             {
                 extern int32_t radar_margen_banda[];
                 printf("    margen contra el haz (us):");
@@ -416,8 +433,23 @@ int main(void) {
                 }
                 printf("%s\n", roto ? "   <-- EL HAZ ALCANZA AL DIBUJO" : "");
             }
+            // En que se va el dibujo, por partes. Los promedios son por
+            // cuadro: sirven para saber a que apuntarle antes de tocar nada.
+            {
+                extern uint32_t radar_us_encabezado, radar_us_scope,
+                                radar_us_pistas, radar_us_aviones, radar_us_resto;
+                const unsigned long c = cuadros ? cuadros : 1;
+                printf("    por cuadro: encabezado %lu | scope %lu | pistas %lu | "
+                       "aviones %lu | todo junto %lu us\n",
+                       (unsigned long)(radar_us_encabezado / c),
+                       (unsigned long)(radar_us_scope / c),
+                       (unsigned long)(radar_us_pistas / c),
+                       (unsigned long)(radar_us_aviones / c),
+                       (unsigned long)(radar_us_resto / c));
+                radar_us_encabezado = radar_us_scope = radar_us_pistas =
+                    radar_us_aviones = radar_us_resto = 0;
+            }
             cuadros = us_total = us_peor = 0;
         }
     }
 }
-

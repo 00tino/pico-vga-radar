@@ -61,7 +61,9 @@ void logos_pantalla_pintar(void) {
         // Marco fino: hay logos de fondo blanco con el dibujo muy tenue, y
         // sin borde sobre fondo oscuro parecen un hueco.
         gfx_rect(cx - 1, cy - 1, LOGO_LADO + 2, LOGO_LADO + 2, radar_tono(70));
-        gfx_blit(cx, cy, LOGO_LADO, LOGO_LADO, &logos_datos[logos_indice[k].offset]);
+        gfx_blit_mascara(cx, cy, LOGO_LADO, LOGO_LADO,
+                         &logos_datos[logos_indice[k].offset],
+                         logo_mascara(logos_indice[k].codigo));
         char cod[4] = { logos_indice[k].codigo[0], logos_indice[k].codigo[1], 0, 0 };
         gfx_texto_centrado(cx + LOGO_LADO / 2, cy + LOGO_LADO + 2, cod, radar_tono(150), 1);
     }

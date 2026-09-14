@@ -6,6 +6,7 @@
 #include "geo.h"
 #include "pistas.h"
 #include "logos.h"
+#include "seguir.h"
 #include <stdio.h>
 #include <string.h>
 #include "pico/stdlib.h"
@@ -87,6 +88,7 @@ static int tarjetas_sucias = 99;
 static int tarjeta_en_curso = 0;
 
 static int limpiar_todo = 1;
+void radar_viaje_rehacer(void);
 
 void radar_marcar_sucio(void) {
     tarjetas_sucias = 99;
@@ -96,6 +98,29 @@ void radar_marcar_sucio(void) {
     // tarjetas y al costado del scope.
     limpiar_todo = 1;
     encabezado_sucio = 1;
+}
+
+void radar_marcar_datos_sucios(void) {
+    tarjetas_sucias = 1;
+    tarjeta_en_curso = 0;
+    encabezado_sucio = 1;
+    // El fondo de la vista de seguimiento es fijo. Rehacerlo por cada lote
+    // borraba la pantalla durante decenas de ms, incluso sin avion seguido.
+    static bool tenia_vuelo;
+    static char origen[4], destino[4];
+    const avion_t *seguido = NULL;
+    for (int i = 0; i < radar_cantidad; i++)
+        if (radar_sigue_a(&radar_aviones[i])) { seguido = &radar_aviones[i]; break; }
+    const bool hay_vuelo = seguido != NULL;
+    if (hay_vuelo != tenia_vuelo ||
+        (seguido && (strncmp(origen, seguido->origen, sizeof origen) ||
+                     strncmp(destino, seguido->destino, sizeof destino))))
+        radar_viaje_rehacer();
+    tenia_vuelo = hay_vuelo;
+    if (seguido) {
+        snprintf(origen, sizeof origen, "%s", seguido->origen);
+        snprintf(destino, sizeof destino, "%s", seguido->destino);
+    }
 }
 
 uint8_t radar_tono(int alpha255);
@@ -142,6 +167,7 @@ static void marcar_los_del_scope(void) {
 }
 static uint8_t lista[RADAR_MAX_AVIONES];   // la que ven las tarjetas, congelada
 static int lista_n = 0;
+static bool lista_iniciada;
 
 // El carrusel de la lista se guarda y se repone al cambiar de pantalla: si se
 // reiniciara, volviendo a la lista de vuelos siempre se verian los mismos
@@ -163,8 +189,10 @@ void radar_carrusel_poner(int pag, uint32_t cuadros) {
     // el reloj y no incrementa la pagina, y entonces cada visita mostraba los
     // mismos cuatro vuelos.
     lista_n = radar_cantidad;
+    lista_iniciada = true;
     for (int i = 0; i < radar_cantidad; i++) lista[i] = orden[i];
-    const int por_pagina = radar_tarjetas < 1 ? 1 : radar_tarjetas;
+    const int por_pagina = radar_lista == LISTA_FIDS ? 12 :
+                           (radar_tarjetas < 1 ? 1 : radar_tarjetas);
     const int paginas = (radar_cantidad + por_pagina - 1) / por_pagina;
     if (paginas > 0) pagina %= paginas;    // el aeropuerto pudo cambiar
     tarjetas_sucias = 1;
@@ -181,6 +209,7 @@ uint8_t radar_tono(int alpha255) {
 void radar_init(void) {
     trig_init();
     beam = 0;
+    lista_iniciada = false;
     // El orden por cercania recien se calcula en el primer radar_avanzar, y
     // hasta entonces quedaba en ceros: si se aplicaba una pantalla antes de
     // eso, la lista se armaba con el avion 0 repetido y las cuatro tarjetas
@@ -300,7 +329,10 @@ void radar_avanzar(void) {
     anotar_rastro();
     ordenar_por_cercania();
     marcar_los_del_scope();
-    elegir_senda();
+    // Los datos de vuelo llegan cada veinte segundos; recalcular la cabecera
+    // con distancias y rumbos sesenta veces por segundo le roba tiempo al VGA.
+    static unsigned cuadros_senda = 0;
+    if (++cuadros_senda >= 60) { cuadros_senda = 0; elegir_senda(); }
 
     // Quien esta pasando sobre la casa. Se elige el mas cercano dentro del
     // radio, y se sostiene hasta que se va: el aviso de abajo a la izquierda
@@ -319,14 +351,18 @@ void radar_avanzar(void) {
     // El carrusel cambia de pagina cada tantos segundos, no cada cuadro, y la
     // lista se congela mientras la pagina esta a la vista: si se reordenara
     // en vivo las tarjetas se irian cambiando de a una, que es lo que pasaba.
-    if (lista_n == 0 || ++cuadros_pagina >= (uint32_t)(radar_rotacion_s * 60)) {
+    const int por_pagina = radar_lista == LISTA_FIDS ? 12 :
+                           (radar_tarjetas < 1 ? 1 : radar_tarjetas);
+    const int paginas = (radar_cantidad + por_pagina - 1) / por_pagina;
+    if (paginas > 0 && pagina >= paginas) { pagina = 0; tarjetas_sucias = 1; }
+    if (!lista_iniciada || ++cuadros_pagina >= (uint32_t)(radar_rotacion_s * 60)) {
         cuadros_pagina = 0;
-        const int por_pagina = radar_tarjetas < 1 ? 1 : radar_tarjetas;
-        const int paginas = (radar_cantidad + por_pagina - 1) / por_pagina;
         if (paginas > 0 && lista_n) pagina = (pagina + 1) % paginas;
+        const bool cambio = !lista_iniciada || lista_n != radar_cantidad || paginas > 1;
         lista_n = radar_cantidad;
+        lista_iniciada = true;
         for (int i = 0; i < radar_cantidad; i++) lista[i] = orden[i];
-        tarjetas_sucias = 1;
+        if (cambio) tarjetas_sucias = 1;
     }
     // El barrido avanza 0,012 radianes por cuadro = 1,96 unidades de 1024.
     beam = (beam + 2) % TRIG_VUELTA;
@@ -352,7 +388,15 @@ void radar_pintar_tarjetas(int x, int y, int an, int al, int grande);
 void radar_pintar_viaje(void);
 void radar_viaje_avion(void);
 
+// En que se va el tiempo de cada cuadro, en microsegundos acumulados. Con
+// trafico de prueba el dibujo tardaba 1500 us y con vuelos de verdad 8500, y
+// sin medir por partes no hay forma de saber que fue lo que se puso caro.
+uint32_t radar_us_encabezado, radar_us_scope, radar_us_pistas,
+         radar_us_aviones, radar_us_resto;
+
 static void radar_pintar(void) {
+    const uint32_t t_inicio = time_us_32();
+    uint32_t t_marca = t_inicio;
     const int X = area.x, Y = area.y, AN = area.an, AL = area.al;
     const uint8_t fondo = radar_tono(0);
 
@@ -402,6 +446,9 @@ static void radar_pintar(void) {
                       senda_cartel, radar_tono(245), 1);
     }
 
+    radar_us_encabezado += time_us_32() - t_marca;
+    t_marca = time_us_32();
+
     // Cuna del barrido: 0,28 radianes = 46 unidades. Va primero para que los
     // anillos y los aviones queden por encima, como en la web.
     gfx_sector(cx, cy, R, beam - 46, beam, radar_tono(36));     // alpha 0,14
@@ -432,6 +479,9 @@ static void radar_pintar(void) {
 
     #define PROY_X(la, lo) (cx + (int)((int64_t)((lo) - radar_apt.lon) * coslat / TRIG_UNO * R / span))
     #define PROY_Y(la, lo) (cy - (int)((int64_t)((la) - radar_apt.lat) * R / span))
+
+    radar_us_scope += time_us_32() - t_marca;
+    t_marca = time_us_32();
 
     // Pistas del aeropuerto. Las cortas se estiran a un largo minimo, si no
     // a este alcance no se ven; es lo mismo que hace minLen en la web.
@@ -529,6 +579,9 @@ static void radar_pintar(void) {
         }
     }
 
+    radar_us_pistas += time_us_32() - t_marca;
+    t_marca = time_us_32();
+
     for (int i = 0; i < radar_cantidad; i++) {
         // Los que no entran en el tope de puntos no se dibujan, pero siguen
         // estando en la lista de abajo.
@@ -608,7 +661,8 @@ static void radar_pintar(void) {
             gfx_rect(tx3, ty3, tw, th, c2);
             gfx_texto(tx3 + 8, ty3 + 6, aviso, c2, 1);
             const uint8_t *logo = logo_buscar(a->aerolinea);
-            if (logo) gfx_blit(tx3 + 8, ty3 + 22, LOGO_LADO, LOGO_LADO, logo);
+            if (logo) gfx_blit_mascara(tx3 + 8, ty3 + 22, LOGO_LADO, LOGO_LADO,
+                                       logo, logo_mascara(a->aerolinea));
             gfx_texto(tx3 + 8 + LOGO_LADO + 8, ty3 + 24, a->vuelo, c2, 1);
             char linea[40];
             snprintf(linea, sizeof linea, "%s > %s", a->origen, a->destino);
@@ -619,6 +673,9 @@ static void radar_pintar(void) {
             gfx_texto(tx3 + 8, ty3 + 66, linea, radar_tono(190), 1);
         }
     }
+
+    radar_us_aviones += time_us_32() - t_marca;
+    radar_us_resto += time_us_32() - t_inicio;
 
     // Las tarjetas NO se dibujan aca: ver radar_cuadro. Estan arriba, y
     // dibujarlas mientras el haz esta llegando arriba lo hacia alcanzar al
@@ -636,12 +693,21 @@ void radar_pintar_tarjetas(int x, int y, int an, int al, int grande) {
         void fids_dibujar(int x, int y, int an, int al, const avion_t **v, int n,
                           int paso, int pasos);
         const avion_t *v[RADAR_MAX_AVIONES];
-        int n = radar_cantidad < 12 ? radar_cantidad : 12;
-        for (int i = 0; i < n; i++) v[i] = &radar_aviones[lista_n ? lista[i] : i];
-        // Cuatro pasadas, una por cuadro, para no hacer toda la tabla junta.
-        if (tarjeta_en_curso == 0)
-            vga_limpiar_rect(x - 4, gfx_banda_y0, an + 8, gfx_banda_y1, radar_tono(0));
-        fids_dibujar(x, y, an, al, v, n, tarjeta_en_curso % 8, 8);
+        const int desde = pagina * 12;
+        int n = radar_cantidad - desde;
+        if (n > 12) n = 12;
+        if (n < 0) n = 0;
+        for (int i = 0; i < n; i++) v[i] = &radar_aviones[lista_n ? lista[desde + i] : desde + i];
+        // Refrescar una franja por cuadro borra tambien filas que desaparecieron
+        // cuando cambio la cantidad de vuelos, sin vaciar toda la tabla junta.
+        const int paso = tarjeta_en_curso % 8;
+        const int by0 = y + al * paso / 8;
+        const int by1 = y + al * (paso + 1) / 8 - 1;
+        const int banda0 = gfx_banda_y0, banda1 = gfx_banda_y1;
+        vga_limpiar_rect(x - 4, by0, an + 8, by1, radar_tono(0));
+        gfx_banda(by0, by1);
+        fids_dibujar(x, y, an, al, v, n, paso, 8);
+        gfx_banda(banda0, banda1);
         return;
     }
     const int sep = 6;
@@ -668,17 +734,23 @@ void radar_pintar_tarjetas(int x, int y, int an, int al, int grande) {
 
 static void pintar_pared(void) {
     if (!tarjetas_sucias) return;
-    // Solo en la primera pasada: el dibujo se reparte en varios cuadros y
-    // limpiar en todos borraba lo que habian dibujado los anteriores.
-    if (tarjeta_en_curso == 0)
-        vga_limpiar_filas(gfx_banda_y0, gfx_banda_y1, radar_tono(0));
     {
         char meta[72];
-        const int por_pagina = radar_tarjetas < 1 ? 1 : radar_tarjetas;
+        const int por_pagina = radar_lista == LISTA_FIDS ? 12 :
+                               (radar_tarjetas < 1 ? 1 : radar_tarjetas);
         const int paginas = (radar_cantidad + por_pagina - 1) / por_pagina;
-        snprintf(meta, sizeof meta, "%d vuelos - pagina %d de %d",
-                 radar_cantidad, pagina + 1, paginas > 0 ? paginas : 1);
+        if (paginas > 1)
+            snprintf(meta, sizeof meta, "%d vuelos - pagina %d de %d",
+                     radar_cantidad, pagina + 1, paginas);
+        else
+            snprintf(meta, sizeof meta, "%d vuelos", radar_cantidad);
         encabezado_ancho(meta);
+    }
+    if (radar_cantidad == 0 && tarjeta_en_curso == 0) {
+        vga_limpiar_filas(area.y + 36, area.y + area.al - 1, radar_tono(0));
+        gfx_texto_centrado(area.x + area.an / 2, area.y + area.al / 2,
+                           "Sin vuelos en este aeropuerto", radar_tono(170), 1);
+        return;
     }
     radar_pintar_tarjetas(area.x + 8, area.y + 36, area.an - 16, area.al - 44, 1);
 }
@@ -738,12 +810,11 @@ static void cuadro_viaje(void) {
 
 void radar_cuadro(void) {
     if (limpiar_todo) {
-        // La limpieza se lleva un cuadro entero para ella sola: sumada al
-        // dibujo se pasaba del tiempo que tarda el haz en bajar.
+        // Dibujar la vista nueva en este mismo cuadro evita mostrar un
+        // cuadro completamente negro en cada cambio de pantalla.
         gfx_banda(0, VGA_ALTO - 1);
         vga_limpiar(radar_tono(0));
         limpiar_todo = 0;
-        return;
     }
 
     if (radar_vista == VISTA_SEGUIR || radar_vista == VISTA_SEGUIR_HIBRIDA) {
@@ -769,7 +840,8 @@ void radar_cuadro(void) {
             case VISTA_SEGUIR_HIBRIDA: break;   // se dibuja aparte, ver abajo
             default:           radar_pintar(); break;
         }
-        radar_us_banda[b] = time_us_32() - tb;
+        uint32_t banda_us = time_us_32() - tb;
+        if (banda_us > radar_us_banda[b]) radar_us_banda[b] = banda_us;
         if (y1 >= VGA_ALTO - 1) encabezado_sucio = 0;
         // Margen contra el haz: cuanto falta para que llegue al final de esta
         // banda, en el momento en que se termino de dibujar. Si da negativo,

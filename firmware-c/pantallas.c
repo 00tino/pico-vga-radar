@@ -44,6 +44,35 @@ static int segundos_de(int i) {
     return s;
 }
 
+// Cada cuantos segundos pasa de pagina la lista, para que las paginas entren
+// JUSTAS en lo que dura la pantalla.
+//
+// El problema que arregla: con una pantalla de veinte segundos y una lista de
+// varias paginas, la lista pasaba de pagina a los quince y cinco segundos
+// despues la pantalla cambiaba. La ultima pagina se veia un ratito y se iba:
+// quedaba a mitad de camino.
+//
+// Se elige la mayor cantidad de paginas que divida exacto los segundos de la
+// pantalla y que deje al menos cinco segundos por pagina, que es lo minimo
+// para alcanzar a leerla.
+static int rotacion_para(int segundos, int paginas) {
+    if (paginas < 2) return segundos;      // una sola pagina no rota
+    for (int veces = paginas; veces >= 2; veces--)
+        if (segundos % veces == 0 && segundos / veces >= 5) return segundos / veces;
+    return segundos;
+}
+
+// Se llama al poner una pantalla y cada vez que llega tráfico nuevo: la
+// cantidad de paginas depende de cuantos aviones haya en el aire.
+void pantallas_ajustar_rotacion(void) {
+    const int i = pantallas_actual();
+    if (i < 0 || i >= pantallas_n) return;
+    const int por_pagina = radar_lista == LISTA_FIDS ? 12 :
+                           (radar_tarjetas < 1 ? 1 : radar_tarjetas);
+    const int paginas = (radar_cantidad + por_pagina - 1) / por_pagina;
+    radar_rotacion_s = rotacion_para(segundos_de(i), paginas);
+}
+
 static void aplicar(int i) {
     const pantalla_t *p = &pantallas[i];
     if (strncmp(apt_puesto, p->apt, 3)) {
@@ -64,6 +93,7 @@ static void aplicar(int i) {
     radar_marcar_sucio();
     radar_viaje_rehacer();
     logos_pantalla_rehacer();
+    pantallas_ajustar_rotacion();
     // Repone el carrusel donde lo habia dejado esta pantalla.
     radar_carrusel_poner(pag_de[i], cuadros_de[i]);
     printf("pantalla %d: %s (%d s) | grupo %d de la lista\n",

@@ -38,10 +38,11 @@ void demo_init(void);
 // La casa de prueba: a unos 12 km al noreste de Ezeiza, para que se vea que
 // no tiene por que estar pegada al aeropuerto.
 void demo_casa(void) {
-    // Si el cliente cargo la suya, esta no existe: demo_aeropuerto() llama
-    // aca cada vez que cambia de aeropuerto, y sin esto le pisaba la casa
-    // configurada en cada rotacion de pantallas.
-    if (config_casa_on) return;
+    // La casa de prueba es SOLO para un equipo sin configurar. Si el cliente
+    // ya guardo lo suyo, manda lo que haya dicho, incluso si dijo que no
+    // quiere casa: preguntar por config_casa_on en vez de por esto hacia que
+    // desmarcarla la hiciera aparecer, que es justo al reves.
+    if (config_hay_guardado) return;
     radar_casa_on = true;
     radar_casa_lat = radar_apt.lat + 800;
     radar_casa_lon = radar_apt.lon + 900;
