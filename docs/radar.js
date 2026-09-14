@@ -622,7 +622,7 @@ function routeLookupKeys(flight) {
   const slim = String(Number(num));
   if (slim !== num) keys.push(prefix + slim);
   const al = ALINES.find((x) => x[0] === prefix || (x[1] && x[1] === prefix));
-  if (al) {
+  if (al && prefix !== "TAM") {
     if (al[0] && al[0].length === 3 && al[0] !== prefix) keys.push(al[0] + num);
     if (al[1] && al[1].length === 2 && al[1] !== prefix) keys.push(al[1] + num);
   }
@@ -641,10 +641,8 @@ function matchesFollowFlight(ac, needle) {
     if (nNum[1].length === 2 && csNum[1].startsWith(nNum[1])) return true;
     if (csNum[1].length === 2 && nNum[1].startsWith(csNum[1])) return true;
   }
-  const keys = routeLookupKeys(ac.flight);
   const nKeys = routeLookupKeys(needle);
-  if (keys.some((k) => k.includes(n) || n.includes(k))) return true;
-  if (nKeys.some((k) => k === cs || cs.includes(k))) return true;
+  if (nKeys.some((k) => k === cs)) return true;
   return false;
 }
 function followAcOf() {
@@ -1057,11 +1055,10 @@ async function fetchSky(lat, lon, nm) {
 async function pullCallsign(cs) {
   const n = compactId(cs);
   if (!n) return [];
-  const keys = [n];
-  const slim = n.replace(/^([A-Z]{2,3})0+(\d)/, "$1$2");
-  if (slim !== n) keys.push(slim);
+  const keys = routeLookupKeys(n);
+  if (!keys.length) keys.push(n);
   const byHex = {};
-  for (let k = 0; k < keys.length && k < 3; k++) {
+  for (let k = 0; k < keys.length; k++) {
     const key = keys[k];
     const urls = [
       "https://opendata.adsb.fi/api/v2/callsign/" + encodeURIComponent(key),

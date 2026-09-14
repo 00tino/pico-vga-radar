@@ -28,6 +28,10 @@ label, .hint { display: block; font-size: 13px; color: var(--muted); margin-bott
 input, select {
   width: 100%;
   padding: 12px;
+  /* Nunca menos de 16px: Safari en iPhone le hace zoom a la pagina entera
+     cuando enfocas un campo con la letra mas chica que eso, y despues queda
+     asi. Es la causa de que la pagina "se agrande sola" al tocar un campo. */
+  font-size: 16px;
   margin: 0 0 12px;
   border-radius: 10px;
   border: 1px solid var(--line);

@@ -61,6 +61,7 @@
 
     <datalist id="lista-aeropuertos"></datalist>
     <datalist id="lista-aerolineas"></datalist>
+    <datalist id="lista-vuelos"></datalist>
 
     <div class="layout">
       <div>
@@ -155,8 +156,8 @@
     rose:      ["Rosa",       "#ff8fab", "#14080c"],
   };
 
-  // Las seis vistas que hace el equipo. El simulador de la web todavía no
-  // dibuja las dos de seguimiento ni la de logos, así que para esas la vista
+  // Las cinco vistas que se le ofrecen al cliente. El simulador de la web
+  // todavía no dibuja las dos de seguimiento, así que para esas la vista
   // previa avisa en vez de mostrar cualquier cosa.
   const VISTAS = {
     hybrid:       ["Radar + lista", true],
@@ -164,8 +165,11 @@
     wall:         ["Sólo lista", true],
     follow:       ["Seguir un vuelo (mapa)", false],
     follow_hybrid:["Seguir un vuelo (mapa + ficha)", false],
-    logos:        ["Logos de aerolíneas", false],
   };
+  // "Logos de aerolineas" era una pantalla de prueba, para ver que los 824
+  // logos se dibujaran bien. No es algo que un cliente quiera poner en su
+  // radar, asi que no se ofrece. El firmware la sigue teniendo: se llega con
+  // la tecla 'e' por la consola.
 
   const LISTAS = { fa: "Tarjetas", fids: "Pantalla de aeropuerto" };
 
@@ -259,8 +263,10 @@
           ${sigue ? `
           <div class="ancho"><label>Vuelo a seguir</label>
             <input data-c="seguir" data-i="${i}" value="${p.seguir}" placeholder="AR1301"
-                   list="lista-aerolineas" autocomplete="off">
-            <p class="resumen">Un indicativo (AR1301) o una aerolínea (AR): con la aerolínea sigue al primero que aparezca.</p></div>` : ""}
+                   list="lista-vuelos" autocomplete="off">
+            <p class="resumen">El número del vuelo, como sale en el pasaje: <b>AR1301</b>, <b>CM364</b>.
+              O sólo la aerolínea (<b>AR</b>), y sigue al primero que aparezca.
+              Si el vuelo está lejos del aeropuerto, el equipo lo va a buscar igual.</p></div>` : ""}
         </div>
         <p class="aviso" data-aviso="${i}" ${p.segundos >= SEG_MIN ? "hidden" : ""}>Menos de ${SEG_MIN} segundos hace que se note el parpadeo al cambiar de pantalla. El equipo lo va a subir a ${SEG_MIN}.</p>
       </div>`;
@@ -286,6 +292,14 @@
         const i = Number(el.dataset.i), c = el.dataset.c;
         let v = el.value;
         if (c === "segundos" || c === "km" || c === "vuelos") v = Number(v) || 0;
+        if (c === "seguir") {
+          // El autocompletado devuelve "CM — Copa Airlines": al equipo va
+          // solo el codigo, pero se deja escribir tambien un numero de vuelo
+          // entero a mano.
+          const guion = v.indexOf("—");
+          if (guion > 0) v = v.slice(0, guion).trim();
+          v = v.toUpperCase().replace(/[^A-Z0-9]/g, "");
+        }
         if (c === "apt") {
           // El datalist devuelve el codigo IATA; si escribio una ciudad, se
           // toma el primer aeropuerto que coincida.
@@ -302,7 +316,7 @@
         if (av) av.hidden = Number(cfg.pantallas[i].segundos) >= SEG_MIN;
         const tit = cont.querySelector(`.pantalla[data-i="${i}"] .n`);
         if (tit && c === "nombre") tit.textContent = (i + 1) + ". " + (v || "Sin nombre");
-        if (c === "apt") pintarNombresApt();
+        if (c === "apt") { pintarNombresApt(); vuelosPedidos = ""; cargarVuelos(); }
         volcarJson();
         if (i === sel) previa();
       };
@@ -531,12 +545,57 @@
       if (al) {
         const pares = Array.isArray(al) ? al : Object.entries(al);
         AEROLINEAS = pares.map((x) => Array.isArray(x) ? x : [x[0], x[1]]);
-        $("lista-aerolineas").innerHTML = AEROLINEAS.slice(0, 900).map((x) =>
-          `<option value="${x[0]}">${x[0]} — ${typeof x[1] === "string" ? x[1] : ""}</option>`).join("");
+        // Lo que se ve tiene que ser el codigo que hay que poner y el NOMBRE
+        // de la aerolinea. Antes decia "CMP — CM", los dos codigos y ningun
+        // nombre: buscar "Copa" no encontraba nada. Y se cortaba en 900 de
+        // las 1083, sin motivo.
+        const pares2 = Array.isArray(al) ? al : [];
+        $("lista-aerolineas").innerHTML = pares2
+          .filter((x) => Array.isArray(x) && (x[1] || x[0]) && x[2])
+          .map((x) => {
+            const cod = (x[1] || x[0]).toUpperCase();
+            return `<option value="${cod} — ${String(x[2]).replace(/"/g, "")}"></option>`;
+          }).join("");
       }
       pintarNombresApt();
+      cargarVuelos();
     } catch (e) {}
   })();
+
+  // --- Los vuelos que hay ahora mismo, para el campo de seguir uno ---
+  //
+  // El equipo sigue un vuelo por su indicativo, y nadie se acuerda de un
+  // indicativo. Asi que se le pregunta al proxy que hay volando alrededor del
+  // aeropuerto de la pantalla y se ofrecen esos, con su ruta al lado: poniendo
+  // "CM" aparecen los de Copa que estan en el aire en este momento.
+  const PROXY = "https://pico-vga-radar-sky.vercel.app/api/pico";
+  let vuelosPedidos = "";
+
+  async function cargarVuelos() {
+    const p = cfg.pantallas[sel] || cfg.pantallas[0];
+    const cod = (p && p.apt || "").toUpperCase();
+    const a = AEROPUERTOS.find((x) => x[0] === cod);
+    if (!a) return;
+    // Un pedido por aeropuerto y no uno por tecla.
+    if (vuelosPedidos === cod) return;
+    vuelosPedidos = cod;
+    try {
+      const nm = Math.round(Math.min(250, Math.max(15, (Number(p.km) || 150) / 1.852)));
+      const r = await fetch(`${PROXY}?lat=${a[2]}&lon=${a[3]}&dist=${nm}&n=48&com=1&tz=0`);
+      const texto = await r.text();
+      const vuelos = texto.trim().split("\n").slice(1).map((l) => {
+        const f = l.split("|");
+        return { id: (f[1] || "").trim(), ori: f[9] || "", des: f[10] || "" };
+      }).filter((v) => v.id);
+      if (!vuelos.length) return;
+      $("lista-vuelos").innerHTML = vuelos.map((v) => {
+        const ruta = v.ori && v.des ? ` — ${v.ori} a ${v.des}` : "";
+        return `<option value="${v.id}${ruta}"></option>`;
+      }).join("");
+    } catch (e) {
+      /* sin lista de vuelos se puede escribir el indicativo igual */
+    }
+  }
 
   // --- Mi ubicación ---
   function ponerCasa(lat, lon, texto) {
