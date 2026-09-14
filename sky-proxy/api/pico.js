@@ -106,6 +106,12 @@ export default async function handler(req, res) {
   // mitad de lo que vuela son avionetas y aviones de instruccion: ocupan
   // lugar, no tienen ruta ni horario, y sus tarjetas salen casi vacias.
   const soloAerolineas = req.query.com === "1";
+  // Un vuelo que el cliente pidio seguir. Se lo busca por su indicativo y se
+  // lo agrega al lote aunque este fuera del circulo o aunque el filtro lo
+  // hubiera dejado afuera: si alguien pide seguir un vuelo a Panama, a los
+  // diez minutos ya salio del alcance del radar y es justo cuando lo quiere
+  // ver.
+  const sigo = String(req.query.sigo || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
   // Minutos que hay que sumarle al UTC para la hora local del equipo.
   const tz = Math.min(840, Math.max(-720, Math.round(Number(req.query.tz) || 0)));
 
@@ -156,16 +162,57 @@ export default async function handler(req, res) {
     claves.map(async (cs) => { rutas.set(cs, await buscarRuta(cs)); })
   );
 
+  // El que se sigue, aunque no este en el circulo.
+  let seguido = null;
+  let aliasSeguido = false;
+  if (sigo) {
+    seguido = candidatos.find((a) => limpiar(a.flight).toUpperCase() === sigo);
+    if (!seguido) {
+      for (const origen of ["https://opendata.adsb.fi/api/v2/callsign/", "https://api.adsb.lol/v2/callsign/"]) {
+        try {
+          const d = await pedirJson(origen + encodeURIComponent(sigo), 5000);
+          const l = (d && (d.ac || d.aircraft)) || [];
+          const hallado = l.find((a) => a && a.lat != null && a.lon != null &&
+            limpiar(a.flight).toUpperCase() === sigo);
+          if (hallado) {
+            seguido = hallado;
+            const cs = claveDeRuta(limpiar(hallado.flight));
+            if (cs && !rutas.has(cs)) rutas.set(cs, await buscarRuta(cs));
+            break;
+          }
+        } catch (e) {
+          /* probar la otra fuente */
+        }
+      }
+    }
+    // LA8193 de AEP a GRU puede transmitir TAM8193 por ADS-B. Verificar la
+    // ruta antes de asociarlos: el numero solo no identifica un vuelo.
+    if (!seguido && sigo === "LAN8193" && await buscarRuta("TAM8193") === "AEP|GRU") {
+      for (const origen of ["https://opendata.adsb.fi/api/v2/callsign/", "https://api.adsb.lol/v2/callsign/"]) {
+        try {
+          const d = await pedirJson(origen + "TAM8193", 5000);
+          seguido = ((d && (d.ac || d.aircraft)) || []).find((a) => a && a.lat != null && a.lon != null &&
+            limpiar(a.flight).toUpperCase() === "TAM8193") || null;
+          if (seguido) { aliasSeguido = true; rutas.set("TAM8193", "AEP|GRU"); break; }
+        } catch (e) { /* probar la otra fuente */ }
+      }
+    }
+  }
+
   // El filtro fino: sin ruta conocida no es un vuelo de linea. Es lo que saca
   // a los militares y a los de trabajo aereo, que tienen indicativo con forma
   // de aerolinea (FAG532) pero no salen ni llegan a ningun lado publicado, y
   // cuya tarjeta quedaria vacia.
-  const utiles = (soloAerolineas
+  let utiles = (soloAerolineas
     ? candidatos.filter((a) => {
         const cs = claveDeRuta(limpiar(a.flight));
         return cs && (rutas.get(cs) || "|") !== "|";
       })
     : candidatos).slice(0, tope);
+
+  // El vuelo seguido no depende de que la base de rutas conozca su itinerario.
+  // El seguido va primero y desplaza al ultimo si el lote esta lleno.
+  if (seguido) utiles = [seguido, ...utiles.filter((a) => limpiar(a.hex) !== limpiar(seguido.hex))].slice(0, tope);
 
   const lineas = utiles.map((a) => {
     const vuelo = limpiar(a.flight);
@@ -174,7 +221,7 @@ export default async function handler(req, res) {
     const ruta = (cs && rutas.get(cs)) || "|";
     return [
       limpiar(a.hex),
-      vuelo || matricula || limpiar(a.hex),
+      (aliasSeguido && a === seguido ? sigo : vuelo) || matricula || limpiar(a.hex),
       matricula,
       limpiar(a.t),
       entero(a.lat, 10000),
